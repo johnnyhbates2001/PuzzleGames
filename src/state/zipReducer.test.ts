@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createInitialState, zipReducer, type ZipGameState } from './zipReducer'
+import { createInitialState, getWrongCells, zipReducer, type ZipGameState } from './zipReducer'
 import type { ZipLevelRecord } from '../engine/zip/types'
 
 // 2x2 grid, single valid path once (0,0)-(1,0) is walled off (see engine/zip/solver.test.ts).
@@ -120,5 +120,35 @@ describe('LOAD', () => {
     const loaded = zipReducer(fresh(), { type: 'LOAD', level: LEVEL, snapshot })
     expect(loaded.path).toEqual([{ row: 0, col: 0 }])
     expect(loaded.elapsedMs).toBe(4242)
+  })
+})
+
+describe('HINT_REVEAL_NEXT', () => {
+  it('appends the first solution step to an empty path', () => {
+    const state = zipReducer(fresh(), { type: 'HINT_REVEAL_NEXT', now: 0 })
+    expect(state.hintsUsed).toBe(1)
+    expect(state.path).toEqual([LEVEL.solution[0]])
+  })
+
+  it('appends the next step after a valid partial path', () => {
+    let state = enter(fresh(), 0, 0)
+    state = zipReducer(state, { type: 'HINT_REVEAL_NEXT', now: 0 })
+    expect(state.path).toEqual(LEVEL.solution.slice(0, 2))
+  })
+
+  it('wins once the full solution path is revealed', () => {
+    let state = fresh()
+    for (let i = 0; i < LEVEL.solution.length; i++) {
+      state = zipReducer(state, { type: 'HINT_REVEAL_NEXT', now: 0 })
+    }
+    expect(state.status).toBe('won')
+    expect(state.hintsUsed).toBe(LEVEL.solution.length)
+  })
+})
+
+describe('getWrongCells', () => {
+  it('is empty while the path is a valid solution prefix', () => {
+    const state = enter(fresh(), 0, 0)
+    expect(getWrongCells(state).size).toBe(0)
   })
 })

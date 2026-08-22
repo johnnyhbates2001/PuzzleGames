@@ -112,14 +112,16 @@ export default function PatchesGamePage() {
   useEffect(() => {
     if (state.status !== 'won' || !validDifficulty) return
     let cancelled = false
-    recordPatchesCompletion(validDifficulty as Difficulty, state.elapsedMs).then((progress) => {
+    recordPatchesCompletion(validDifficulty as Difficulty, state.elapsedMs, state.hintsUsed > 0).then((result) => {
       if (!cancelled) {
         navigate(`/patches/${validDifficulty}/complete`, {
           state: {
             timeMs: state.elapsedMs,
-            levelNumber: progress.completedCount,
+            levelNumber: result.progress.completedCount,
             level: state.level,
             placed: state.placed,
+            coinsAwarded: result.coinsAwarded,
+            isPersonalBest: result.isPersonalBest,
           },
           replace: true,
         })
@@ -154,7 +156,10 @@ export default function PatchesGamePage() {
   }
 
   return (
-    <main className="mx-auto flex min-h-svh max-w-lg flex-col items-center gap-6 bg-bg px-4 py-[max(1.5rem,env(safe-area-inset-top))] text-ink">
+    <main
+      data-game="patches"
+      className="mx-auto flex min-h-svh max-w-lg flex-col items-center gap-6 bg-bg px-4 py-[max(1.5rem,env(safe-area-inset-top))] text-ink"
+    >
       <div className="flex w-full items-center justify-between">
         <button
           type="button"

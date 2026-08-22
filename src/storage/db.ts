@@ -8,10 +8,13 @@ import type { CellState } from '../state/types'
 import type { SudokuCellState } from '../state/sudokuTypes'
 
 const DB_NAME = 'queens-pwa'
-const DB_VERSION = 4
+const DB_VERSION = 5
 
 export interface Settings {
   autoPlaceX: boolean
+  coins: number
+  ownedSkins: string[]
+  equippedSkin: string
 }
 
 export interface DifficultyProgress {
@@ -87,9 +90,12 @@ interface QueensDB extends DBSchema {
   zipInProgress: { key: Difficulty; value: ZipInProgressLevel }
   patchesProgress: { key: Difficulty; value: DifficultyProgress }
   patchesInProgress: { key: Difficulty; value: PatchesInProgressLevel }
+  /** Key = local date string ('YYYY-MM-DD'). Value = number of levels completed that day,
+   *  across every game — feeds the home-screen streak and the stats-page heatmap. */
+  dailyActivity: { key: string; value: number }
 }
 
-const DEFAULT_SETTINGS: Settings = { autoPlaceX: true }
+const DEFAULT_SETTINGS: Settings = { autoPlaceX: true, coins: 0, ownedSkins: ['candy'], equippedSkin: 'candy' }
 
 function defaultProgress(difficulty: Difficulty): DifficultyProgress {
   return { difficulty, completedCount: 0, totalTimeMs: 0, currentLevelIndex: 0, bestTimeMs: null }
@@ -118,20 +124,104 @@ function getDB(): Promise<IDBPDatabase<QueensDB>> {
           db.createObjectStore('patchesProgress')
           db.createObjectStore('patchesInProgress')
         }
+        if (oldVersion < 5) {
+          db.createObjectStore('dailyActivity')
+        }
       },
     })
   }
   return dbPromise
 }
 
+/** Merges with DEFAULT_SETTINGS rather than falling back wholesale, so a settings row
+ *  written before a field existed (e.g. `coins`) doesn't come back `undefined` at runtime
+ *  — IndexedDB values are schemaless and don't retroactively gain new fields. */
 export async function getSettings(): Promise<Settings> {
   const db = await getDB()
-  return (await db.get('settings', 'global')) ?? DEFAULT_SETTINGS
+  const stored = await db.get('settings', 'global')
+  return { ...DEFAULT_SETTINGS, ...stored }
 }
 
 export async function setAutoPlaceX(autoPlaceX: boolean): Promise<void> {
   const db = await getDB()
-  await db.put('settings', { autoPlaceX }, 'global')
+  const current = await getSettings()
+  await db.put('settings', { ...current, autoPlaceX }, 'global')
+}
+
+export async function addCoins(delta: number): Promise<number> {
+  const db = await getDB()
+  const current = await getSettings()
+  const coins = Math.max(0, current.coins + delta)
+  await db.put('settings', { ...current, coins }, 'global')
+  return coins
+}
+
+/** Atomic check-then-deduct. Returns false (no state change) if the balance is insufficient. */
+export async function spendCoins(amount: number): Promise<boolean> {
+  const db = await getDB()
+  const current = await getSettings()
+  if (current.coins < amount) return false
+  await db.put('settings', { ...current, coins: current.coins - amount }, 'global')
+  return true
+}
+
+/** Buys and equips are separate: buying is a no-op (returns true) if already owned. */
+export async function buySkin(skinId: string, price: number): Promise<boolean> {
+  const db = await getDB()
+  const current = await getSettings()
+  if (current.ownedSkins.includes(skinId)) return true
+  if (current.coins < price) return false
+  await db.put(
+    'settings',
+    { ...current, coins: current.coins - price, ownedSkins: [...current.ownedSkins, skinId] },
+    'global',
+  )
+  return true
+}
+
+export async function equipSkin(skinId: string): Promise<void> {
+  const db = await getDB()
+  const current = await getSettings()
+  await db.put('settings', { ...current, equippedSkin: skinId }, 'global')
+}
+
+/** Local (not UTC) date key, so a streak day lines up with the player's own calendar day. */
+function dateKey(date: Date): string {
+  const y = date.getFullYear()
+  const m = String(date.getMonth() + 1).padStart(2, '0')
+  const d = String(date.getDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
+}
+
+/** Consecutive-day streak ending today or, if today has no completion yet, ending
+ *  yesterday — so the streak doesn't read as broken before the player has had a chance
+ *  to solve anything today. */
+export async function getStreak(now: number = Date.now()): Promise<number> {
+  const db = await getDB()
+  const cursor = new Date(now)
+  const todayCount = (await db.get('dailyActivity', dateKey(cursor))) ?? 0
+  if (todayCount === 0) cursor.setDate(cursor.getDate() - 1)
+  let streak = 0
+  while (((await db.get('dailyActivity', dateKey(cursor))) ?? 0) > 0) {
+    streak++
+    cursor.setDate(cursor.getDate() - 1)
+  }
+  return streak
+}
+
+/** Daily completion counts for the last `weeks` weeks, oldest first (`weeks * 7` entries,
+ *  today last) — the stats page buckets these into heatmap levels for display. */
+export async function getHeatmap(weeks = 5, now: number = Date.now()): Promise<number[]> {
+  const db = await getDB()
+  const days = weeks * 7
+  const cursor = new Date(now)
+  cursor.setDate(cursor.getDate() - (days - 1))
+  const counts: number[] = []
+  for (let i = 0; i < days; i++) {
+    counts.push((await db.get('dailyActivity', dateKey(cursor))) ?? 0)
+    cursor.setDate(cursor.getDate() + 1)
+  }
+  return counts
 }
 
 export async function getProgress(difficulty: Difficulty): Promise<DifficultyProgress> {
@@ -139,26 +229,77 @@ export async function getProgress(difficulty: Difficulty): Promise<DifficultyPro
   return (await db.get('progress', difficulty)) ?? defaultProgress(difficulty)
 }
 
-/** Increments completion stats and advances the bank pointer, in one transaction. Clears any in-progress save. */
-export async function recordCompletion(difficulty: Difficulty, elapsedMs: number): Promise<DifficultyProgress> {
+export interface CompletionResult {
+  progress: DifficultyProgress
+  coinsAwarded: number
+  isPersonalBest: boolean
+}
+
+const COIN_BASE: Record<Difficulty, number> = { easy: 15, medium: 25, hard: 35 }
+const PERSONAL_BEST_BONUS = 15
+
+/** Assisted solves (a hint was used) earn the base amount only — no personal-best bonus,
+ *  since they also never update bestTimeMs (see finishCompletion). */
+export function computeCoinAward(difficulty: Difficulty, isPersonalBest: boolean, assisted: boolean): number {
+  const base = COIN_BASE[difficulty]
+  return !assisted && isPersonalBest ? base + PERSONAL_BEST_BONUS : base
+}
+
+type ProgressStoreName = 'progress' | 'sudokuProgress' | 'zipProgress' | 'patchesProgress'
+type InProgressStoreName = 'inProgress' | 'sudokuInProgress' | 'zipInProgress' | 'patchesInProgress'
+
+/** Shared by the four record*Completion functions below, which differ only in which
+ *  pair of stores they touch. In one transaction: advances the bank pointer, clears the
+ *  in-progress save, awards coins, and logs today's completion for the streak/heatmap. */
+async function finishCompletion(
+  progressStoreName: ProgressStoreName,
+  inProgressStoreName: InProgressStoreName,
+  difficulty: Difficulty,
+  elapsedMs: number,
+  assisted: boolean,
+): Promise<CompletionResult> {
   const db = await getDB()
-  const tx = db.transaction(['progress', 'inProgress'], 'readwrite')
-  const progressStore = tx.objectStore('progress')
+  const tx = db.transaction([progressStoreName, inProgressStoreName, 'settings', 'dailyActivity'], 'readwrite')
+
+  const progressStore = tx.objectStore(progressStoreName)
   const current = (await progressStore.get(difficulty)) ?? defaultProgress(difficulty)
+  // Records written before bestTimeMs existed have it === undefined at runtime
+  // (IndexedDB values are schemaless), so this must check == null rather than === null.
+  const isPersonalBest = !assisted && (current.bestTimeMs == null || elapsedMs < current.bestTimeMs)
   const next: DifficultyProgress = {
     difficulty,
     completedCount: current.completedCount + 1,
     totalTimeMs: current.totalTimeMs + elapsedMs,
     currentLevelIndex: current.currentLevelIndex + 1,
-    // Records written before this field existed have bestTimeMs === undefined at
-    // runtime (IndexedDB values are schemaless — old stored objects don't retroactively
-    // gain new fields), so this must check == null rather than === null.
-    bestTimeMs: current.bestTimeMs == null ? elapsedMs : Math.min(current.bestTimeMs, elapsedMs),
+    bestTimeMs: isPersonalBest ? elapsedMs : (current.bestTimeMs ?? null),
   }
   await progressStore.put(next, difficulty)
-  await tx.objectStore('inProgress').delete(difficulty)
+  await tx.objectStore(inProgressStoreName).delete(difficulty)
+
+  const coinsAwarded = computeCoinAward(difficulty, isPersonalBest, assisted)
+  const settingsStore = tx.objectStore('settings')
+  const currentSettings = { ...DEFAULT_SETTINGS, ...(await settingsStore.get('global')) }
+  await settingsStore.put({ ...currentSettings, coins: currentSettings.coins + coinsAwarded }, 'global')
+
+  const activityStore = tx.objectStore('dailyActivity')
+  const key = dateKey(new Date())
+  const activityCount = (await activityStore.get(key)) ?? 0
+  await activityStore.put(activityCount + 1, key)
+
   await tx.done
-  return next
+  return { progress: next, coinsAwarded, isPersonalBest }
+}
+
+/** Increments completion stats and advances the bank pointer. Clears any in-progress
+ *  save, awards coins, and logs the completion for the streak/heatmap. Pass
+ *  `assisted: true` if a hint was used this level — it still counts toward
+ *  completedCount but never sets a new personal best. */
+export async function recordCompletion(
+  difficulty: Difficulty,
+  elapsedMs: number,
+  assisted = false,
+): Promise<CompletionResult> {
+  return finishCompletion('progress', 'inProgress', difficulty, elapsedMs, assisted)
 }
 
 export function averageTimeMs(progress: DifficultyProgress): number | null {
@@ -186,23 +327,13 @@ export async function getSudokuProgress(difficulty: Difficulty): Promise<Difficu
   return (await db.get('sudokuProgress', difficulty)) ?? defaultProgress(difficulty)
 }
 
-/** Increments completion stats and advances the bank pointer, in one transaction. Clears any in-progress save. */
-export async function recordSudokuCompletion(difficulty: Difficulty, elapsedMs: number): Promise<DifficultyProgress> {
-  const db = await getDB()
-  const tx = db.transaction(['sudokuProgress', 'sudokuInProgress'], 'readwrite')
-  const progressStore = tx.objectStore('sudokuProgress')
-  const current = (await progressStore.get(difficulty)) ?? defaultProgress(difficulty)
-  const next: DifficultyProgress = {
-    difficulty,
-    completedCount: current.completedCount + 1,
-    totalTimeMs: current.totalTimeMs + elapsedMs,
-    currentLevelIndex: current.currentLevelIndex + 1,
-    bestTimeMs: current.bestTimeMs == null ? elapsedMs : Math.min(current.bestTimeMs, elapsedMs),
-  }
-  await progressStore.put(next, difficulty)
-  await tx.objectStore('sudokuInProgress').delete(difficulty)
-  await tx.done
-  return next
+/** See recordCompletion — same shape, Sudoku's stores. */
+export async function recordSudokuCompletion(
+  difficulty: Difficulty,
+  elapsedMs: number,
+  assisted = false,
+): Promise<CompletionResult> {
+  return finishCompletion('sudokuProgress', 'sudokuInProgress', difficulty, elapsedMs, assisted)
 }
 
 export async function getSudokuInProgress(difficulty: Difficulty): Promise<SudokuInProgressLevel | undefined> {
@@ -225,23 +356,13 @@ export async function getZipProgress(difficulty: Difficulty): Promise<Difficulty
   return (await db.get('zipProgress', difficulty)) ?? defaultProgress(difficulty)
 }
 
-/** Increments completion stats and advances the bank pointer, in one transaction. Clears any in-progress save. */
-export async function recordZipCompletion(difficulty: Difficulty, elapsedMs: number): Promise<DifficultyProgress> {
-  const db = await getDB()
-  const tx = db.transaction(['zipProgress', 'zipInProgress'], 'readwrite')
-  const progressStore = tx.objectStore('zipProgress')
-  const current = (await progressStore.get(difficulty)) ?? defaultProgress(difficulty)
-  const next: DifficultyProgress = {
-    difficulty,
-    completedCount: current.completedCount + 1,
-    totalTimeMs: current.totalTimeMs + elapsedMs,
-    currentLevelIndex: current.currentLevelIndex + 1,
-    bestTimeMs: current.bestTimeMs == null ? elapsedMs : Math.min(current.bestTimeMs, elapsedMs),
-  }
-  await progressStore.put(next, difficulty)
-  await tx.objectStore('zipInProgress').delete(difficulty)
-  await tx.done
-  return next
+/** See recordCompletion — same shape, Zip's stores. */
+export async function recordZipCompletion(
+  difficulty: Difficulty,
+  elapsedMs: number,
+  assisted = false,
+): Promise<CompletionResult> {
+  return finishCompletion('zipProgress', 'zipInProgress', difficulty, elapsedMs, assisted)
 }
 
 export async function getZipInProgress(difficulty: Difficulty): Promise<ZipInProgressLevel | undefined> {
@@ -264,23 +385,13 @@ export async function getPatchesProgress(difficulty: Difficulty): Promise<Diffic
   return (await db.get('patchesProgress', difficulty)) ?? defaultProgress(difficulty)
 }
 
-/** Increments completion stats and advances the bank pointer, in one transaction. Clears any in-progress save. */
-export async function recordPatchesCompletion(difficulty: Difficulty, elapsedMs: number): Promise<DifficultyProgress> {
-  const db = await getDB()
-  const tx = db.transaction(['patchesProgress', 'patchesInProgress'], 'readwrite')
-  const progressStore = tx.objectStore('patchesProgress')
-  const current = (await progressStore.get(difficulty)) ?? defaultProgress(difficulty)
-  const next: DifficultyProgress = {
-    difficulty,
-    completedCount: current.completedCount + 1,
-    totalTimeMs: current.totalTimeMs + elapsedMs,
-    currentLevelIndex: current.currentLevelIndex + 1,
-    bestTimeMs: current.bestTimeMs == null ? elapsedMs : Math.min(current.bestTimeMs, elapsedMs),
-  }
-  await progressStore.put(next, difficulty)
-  await tx.objectStore('patchesInProgress').delete(difficulty)
-  await tx.done
-  return next
+/** See recordCompletion — same shape, Patches' stores. */
+export async function recordPatchesCompletion(
+  difficulty: Difficulty,
+  elapsedMs: number,
+  assisted = false,
+): Promise<CompletionResult> {
+  return finishCompletion('patchesProgress', 'patchesInProgress', difficulty, elapsedMs, assisted)
 }
 
 export async function getPatchesInProgress(difficulty: Difficulty): Promise<PatchesInProgressLevel | undefined> {

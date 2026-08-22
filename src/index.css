@@ -85,6 +85,50 @@
   --grid-line-strong: oklch(55% 0.02 260);
 }
 
+/* Per-game accent identity — one CSS variable pair per game, set on each game's route
+   wrapper (not :root), so every existing bg-accent/text-accent class recolors itself
+   with no component changes. Home and Queens keep the default violet tokens above. */
+[data-game='sudoku'] {
+  --accent: oklch(52% 0.17 250);
+  --accent-tint: oklch(93% 0.04 250);
+}
+[data-game='zip'] {
+  --accent: oklch(48% 0.12 175);
+  --accent-tint: oklch(93% 0.045 175);
+}
+[data-game='patches'] {
+  --accent: oklch(53% 0.15 45);
+  --accent-tint: oklch(94% 0.04 45);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) [data-game='sudoku'] {
+    --accent: oklch(64% 0.15 250);
+    --accent-tint: oklch(29% 0.05 250);
+  }
+  :root:not([data-theme='light']) [data-game='zip'] {
+    --accent: oklch(62% 0.11 175);
+    --accent-tint: oklch(29% 0.04 175);
+  }
+  :root:not([data-theme='light']) [data-game='patches'] {
+    --accent: oklch(66% 0.14 45);
+    --accent-tint: oklch(30% 0.045 45);
+  }
+}
+
+:root[data-theme='dark'] [data-game='sudoku'] {
+  --accent: oklch(64% 0.15 250);
+  --accent-tint: oklch(29% 0.05 250);
+}
+:root[data-theme='dark'] [data-game='zip'] {
+  --accent: oklch(62% 0.11 175);
+  --accent-tint: oklch(29% 0.04 175);
+}
+:root[data-theme='dark'] [data-game='patches'] {
+  --accent: oklch(66% 0.14 45);
+  --accent-tint: oklch(30% 0.045 45);
+}
+
 body {
   margin: 0;
   padding-left: env(safe-area-inset-left);

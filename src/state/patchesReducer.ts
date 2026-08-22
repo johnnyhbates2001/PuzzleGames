@@ -1,5 +1,5 @@
-import type { Coord, PatchesLevelRecord, Rect } from '../engine/patches/types'
-import { isRectFree, isSolved, placedRectAt, type PlacedRect } from '../engine/patches/validator'
+import { rectCells, type Coord, type PatchesLevelRecord, type Rect } from '../engine/patches/types'
+import { isMismatched, isRectFree, isSolved, placedRectAt, type PlacedRect } from '../engine/patches/validator'
 
 export interface PatchesGameState {
   level: PatchesLevelRecord
@@ -8,6 +8,9 @@ export interface PatchesGameState {
   elapsedMs: number
   runStartedAt: number | null
   status: 'playing' | 'won'
+  /** Hints used this level — a nonzero count marks the eventual completion "assisted",
+   *  which skips the personal-best update (see recordPatchesCompletion in storage/db.ts). */
+  hintsUsed: number
 }
 
 export interface PersistedPatchesSnapshot {
@@ -25,6 +28,7 @@ export type PatchesAction =
   | { type: 'PAUSE'; now: number }
   | { type: 'RESUME'; now: number }
   | { type: 'LOAD'; level: PatchesLevelRecord; snapshot?: PersistedPatchesSnapshot }
+  | { type: 'HINT_REVEAL_CLUE'; now: number }
 
 export function createInitialState(level: PatchesLevelRecord): PatchesGameState {
   return {
@@ -34,11 +38,28 @@ export function createInitialState(level: PatchesLevelRecord): PatchesGameState 
     elapsedMs: 0,
     runStartedAt: null,
     status: 'playing',
+    hintsUsed: 0,
   }
+}
+
+function coordKey(c: Coord): string {
+  return `${c.row},${c.col}`
 }
 
 function clueIndexAt(level: PatchesLevelRecord, cell: Coord): number {
   return level.clues.findIndex((c) => c.cell.row === cell.row && c.cell.col === cell.col)
+}
+
+/** Non-mutating "check my work": coordKeys of every cell in a placed rectangle whose
+ *  size/shape doesn't match its clue (COMMIT_DRAG allows this — only isSolved rejects it). */
+export function getWrongCells(state: PatchesGameState): Set<string> {
+  const wrong = new Set<string>()
+  for (const p of state.placed) {
+    if (isMismatched(p.rect, state.level.clues[p.clueIndex])) {
+      for (const cell of rectCells(p.rect)) wrong.add(coordKey(cell))
+    }
+  }
+  return wrong
 }
 
 function isCovered(placed: PlacedRect[], cell: Coord): boolean {
@@ -109,6 +130,15 @@ export function patchesReducer(state: PatchesGameState, action: PatchesAction): 
     case 'RESUME': {
       if (state.status === 'won' || state.runStartedAt !== null) return state
       return { ...state, runStartedAt: action.now }
+    }
+
+    case 'HINT_REVEAL_CLUE': {
+      if (state.status === 'won') return state
+      const placedClueIndices = new Set(state.placed.map((p) => p.clueIndex))
+      const clueIndex = state.level.clues.findIndex((_, i) => !placedClueIndices.has(i))
+      if (clueIndex === -1) return state
+      const placed = [...state.placed, { rect: state.level.solution[clueIndex], clueIndex }]
+      return withWinCheck({ ...state, placed, hintsUsed: state.hintsUsed + 1 }, action.now)
     }
 
     case 'LOAD': {

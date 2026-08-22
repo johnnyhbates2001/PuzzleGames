@@ -45,7 +45,10 @@ export default function CompletePage() {
 
   if (!validDifficulty || !completion) {
     return (
-      <main className="mx-auto flex min-h-svh max-w-lg flex-col items-center justify-center gap-4 bg-bg px-4 text-center text-ink">
+      <main
+        data-game="queens"
+        className="mx-auto flex min-h-svh max-w-lg flex-col items-center justify-center gap-4 bg-bg px-4 text-center text-ink"
+      >
         <p>No completion to show.</p>
         <Link to="/queens" className="rounded-full bg-accent px-4 py-2 text-sm font-medium text-white">
           Back to difficulties
@@ -57,7 +60,7 @@ export default function CompletePage() {
   const { timeMs, levelNumber, level, board } = completion
 
   return (
-    <main className="fixed inset-0 overflow-hidden bg-bg">
+    <main data-game="queens" className="fixed inset-0 overflow-hidden bg-bg">
       <Board
         level={level}
         board={board}

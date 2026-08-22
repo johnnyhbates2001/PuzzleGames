@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createInitialState, patchesReducer, type PatchesGameState } from './patchesReducer'
+import { createInitialState, getWrongCells, patchesReducer, type PatchesGameState } from './patchesReducer'
 import type { PatchesLevelRecord } from '../engine/patches/types'
 
 // Same 2x2 two-wide-dominoes puzzle used throughout engine/patches tests.
@@ -116,5 +116,38 @@ describe('LOAD', () => {
     const loaded = patchesReducer(fresh(), { type: 'LOAD', level: LEVEL, snapshot })
     expect(loaded.placed).toEqual(state.placed)
     expect(loaded.elapsedMs).toBe(4242)
+  })
+})
+
+describe('HINT_REVEAL_CLUE', () => {
+  it("places the first unplaced clue's solution rectangle and increments hintsUsed", () => {
+    const state = patchesReducer(fresh(), { type: 'HINT_REVEAL_CLUE', now: 0 })
+    expect(state.hintsUsed).toBe(1)
+    expect(state.placed).toEqual([{ rect: LEVEL.solution[0], clueIndex: 0 }])
+  })
+
+  it('skips clues that are already placed', () => {
+    let state = drag(fresh(), [0, 0], [0, 1]) // clue 0 already placed
+    state = patchesReducer(state, { type: 'HINT_REVEAL_CLUE', now: 0 })
+    expect(state.placed).toEqual([
+      { rect: { row: 0, col: 0, width: 2, height: 1 }, clueIndex: 0 },
+      { rect: LEVEL.solution[1], clueIndex: 1 },
+    ])
+  })
+
+  it('wins once every clue is revealed', () => {
+    let state = fresh()
+    for (let i = 0; i < LEVEL.clues.length; i++) {
+      state = patchesReducer(state, { type: 'HINT_REVEAL_CLUE', now: 0 })
+    }
+    expect(state.status).toBe('won')
+    expect(state.hintsUsed).toBe(LEVEL.clues.length)
+  })
+})
+
+describe('getWrongCells', () => {
+  it('is empty once revealed by hint, since revealed rects always match their clue', () => {
+    const state = patchesReducer(fresh(), { type: 'HINT_REVEAL_CLUE', now: 0 })
+    expect(getWrongCells(state).size).toBe(0)
   })
 })

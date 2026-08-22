@@ -14,6 +14,9 @@ export interface GameState {
   elapsedMs: number
   runStartedAt: number | null
   status: 'playing' | 'won'
+  /** Hints used this level — a nonzero count marks the eventual completion "assisted",
+   *  which skips the personal-best update (see recordCompletion in storage/db.ts). */
+  hintsUsed: number
 }
 
 export interface PersistedGameSnapshot {
@@ -31,6 +34,8 @@ export type GameAction =
   | { type: 'LOAD'; level: LevelRecord; autoPlaceX: boolean; snapshot?: PersistedGameSnapshot }
   | { type: 'BEGIN_DRAG_MARK' }
   | { type: 'DRAG_MARK_CELL'; row: number; col: number; mode: 'add' | 'erase' }
+  | { type: 'HINT_REVEAL_CELL'; now: number }
+  | { type: 'HINT_SOLVE_REGION'; now: number }
 
 const MAX_HISTORY = 200
 
@@ -43,6 +48,7 @@ export function createInitialState(level: LevelRecord, autoPlaceX: boolean): Gam
     elapsedMs: 0,
     runStartedAt: null,
     status: 'playing',
+    hintsUsed: 0,
   }
 }
 
@@ -105,9 +111,35 @@ function withWinCheck(state: GameState, now: number): GameState {
   return { ...state, status: 'won', elapsedMs, runStartedAt: null }
 }
 
+/** Places the solution queen at `target`, first clearing any (wrong) queen already in
+ *  that row — every row holds exactly one queen in a solved puzzle. */
+function revealQueen(board: CellState[][], target: Coord, level: LevelRecord, autoPlaceX: boolean): void {
+  for (let c = 0; c < level.size; c++) {
+    if (board[target.row][c].queen) {
+      board[target.row][c] = emptyCell()
+      removeAutoX(board, target.row, c)
+    }
+  }
+  board[target.row][target.col] = { queen: true, manualX: false, autoXSources: new Set() }
+  if (autoPlaceX) applyAutoX(board, target.row, target.col, level)
+}
+
 function pushHistory(state: GameState): CellState[][][] {
   const next = [...state.history, cloneBoard(state.board)]
   return next.length > MAX_HISTORY ? next.slice(next.length - MAX_HISTORY) : next
+}
+
+/** Non-mutating "check my work": coordKeys of placed queens that don't match the solution. */
+export function getWrongQueens(state: GameState): Set<string> {
+  const solutionKeys = new Set(state.level.solution.map(coordKey))
+  const wrong = new Set<string>()
+  for (let r = 0; r < state.level.size; r++) {
+    for (let c = 0; c < state.level.size; c++) {
+      const coord = { row: r, col: c }
+      if (state.board[r][c].queen && !solutionKeys.has(coordKey(coord))) wrong.add(coordKey(coord))
+    }
+  }
+  return wrong
 }
 
 export function gameReducer(state: GameState, action: GameAction): GameState {
@@ -200,6 +232,37 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       const board = state.board.slice()
       board[action.row] = newRow
       return { ...state, board }
+    }
+
+    case 'HINT_REVEAL_CELL': {
+      if (state.status === 'won') return state
+      const target = state.level.solution.find((coord) => !state.board[coord.row][coord.col].queen)
+      if (!target) return state
+      const board = cloneBoard(state.board)
+      revealQueen(board, target, state.level, state.autoPlaceX)
+      return withWinCheck(
+        { ...state, board, history: pushHistory(state), hintsUsed: state.hintsUsed + 1 },
+        action.now,
+      )
+    }
+
+    case 'HINT_SOLVE_REGION': {
+      if (state.status === 'won') return state
+      const solvedRegions = new Set(
+        state.level.solution
+          .filter((coord) => state.board[coord.row][coord.col].queen)
+          .map((coord) => state.level.regions[coord.row][coord.col]),
+      )
+      const target = state.level.solution.find(
+        (coord) => !solvedRegions.has(state.level.regions[coord.row][coord.col]),
+      )
+      if (!target) return state
+      const board = cloneBoard(state.board)
+      revealQueen(board, target, state.level, state.autoPlaceX)
+      return withWinCheck(
+        { ...state, board, history: pushHistory(state), hintsUsed: state.hintsUsed + 1 },
+        action.now,
+      )
     }
 
     case 'LOAD': {

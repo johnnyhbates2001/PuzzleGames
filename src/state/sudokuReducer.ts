@@ -1,4 +1,4 @@
-import type { Coord, SudokuLevelRecord } from '../engine/sudoku/types'
+import { boxIndex, coordKey, SUDOKU_SIZE, type Coord, type SudokuLevelRecord } from '../engine/sudoku/types'
 import { isSolved } from '../engine/sudoku/validator'
 import { boardFromPuzzle, boardValues, cloneBoard, type SudokuCellState } from './sudokuTypes'
 
@@ -13,6 +13,9 @@ export interface SudokuGameState {
   elapsedMs: number
   runStartedAt: number | null
   status: 'playing' | 'won'
+  /** Hints used this level — a nonzero count marks the eventual completion "assisted",
+   *  which skips the personal-best update (see recordSudokuCompletion in storage/db.ts). */
+  hintsUsed: number
 }
 
 export interface PersistedSudokuSnapshot {
@@ -30,6 +33,8 @@ export type SudokuAction =
   | { type: 'PAUSE'; now: number }
   | { type: 'RESUME'; now: number }
   | { type: 'LOAD'; level: SudokuLevelRecord; snapshot?: PersistedSudokuSnapshot }
+  | { type: 'HINT_REVEAL_CELL'; now: number }
+  | { type: 'HINT_SOLVE_BOX'; now: number }
 
 const MAX_HISTORY = 200
 
@@ -43,7 +48,44 @@ export function createInitialState(level: SudokuLevelRecord): SudokuGameState {
     elapsedMs: 0,
     runStartedAt: null,
     status: 'playing',
+    hintsUsed: 0,
   }
+}
+
+/** First non-given cell whose value doesn't match the solution (0 counts as a mismatch). */
+function firstWrongCell(state: SudokuGameState): Coord | null {
+  for (let r = 0; r < SUDOKU_SIZE; r++) {
+    for (let c = 0; c < SUDOKU_SIZE; c++) {
+      const cell = state.board[r][c]
+      if (!cell.given && cell.value !== state.level.solution[r][c]) return { row: r, col: c }
+    }
+  }
+  return null
+}
+
+/** First 3x3 box index (0-8) containing a non-given cell that doesn't match the solution. */
+function firstIncompleteBox(state: SudokuGameState): number | null {
+  for (let r = 0; r < SUDOKU_SIZE; r++) {
+    for (let c = 0; c < SUDOKU_SIZE; c++) {
+      const cell = state.board[r][c]
+      if (!cell.given && cell.value !== state.level.solution[r][c]) return boxIndex(r, c)
+    }
+  }
+  return null
+}
+
+/** Non-mutating "check my work": coordKeys of filled cells that don't match the solution. */
+export function getWrongCells(state: SudokuGameState): Set<string> {
+  const wrong = new Set<string>()
+  for (let r = 0; r < SUDOKU_SIZE; r++) {
+    for (let c = 0; c < SUDOKU_SIZE; c++) {
+      const cell = state.board[r][c]
+      if (!cell.given && cell.value !== 0 && cell.value !== state.level.solution[r][c]) {
+        wrong.add(coordKey({ row: r, col: c }))
+      }
+    }
+  }
+  return wrong
 }
 
 function withWinCheck(state: SudokuGameState, now: number): SudokuGameState {
@@ -124,6 +166,31 @@ export function sudokuReducer(state: SudokuGameState, action: SudokuAction): Sud
     case 'RESUME': {
       if (state.status === 'won' || state.runStartedAt !== null) return state
       return { ...state, runStartedAt: action.now }
+    }
+
+    case 'HINT_REVEAL_CELL': {
+      if (state.status === 'won') return state
+      const target = firstWrongCell(state)
+      if (!target) return state
+      const board = cloneBoard(state.board)
+      const cell = board[target.row][target.col]
+      board[target.row][target.col] = { ...cell, value: state.level.solution[target.row][target.col], notes: new Set() }
+      return withWinCheck({ ...state, board, history: pushHistory(state), hintsUsed: state.hintsUsed + 1 }, action.now)
+    }
+
+    case 'HINT_SOLVE_BOX': {
+      if (state.status === 'won') return state
+      const box = firstIncompleteBox(state)
+      if (box === null) return state
+      const board = cloneBoard(state.board)
+      for (let r = 0; r < SUDOKU_SIZE; r++) {
+        for (let c = 0; c < SUDOKU_SIZE; c++) {
+          if (boxIndex(r, c) !== box) continue
+          const cell = board[r][c]
+          if (!cell.given) board[r][c] = { ...cell, value: state.level.solution[r][c], notes: new Set() }
+        }
+      }
+      return withWinCheck({ ...state, board, history: pushHistory(state), hintsUsed: state.hintsUsed + 1 }, action.now)
     }
 
     case 'LOAD': {

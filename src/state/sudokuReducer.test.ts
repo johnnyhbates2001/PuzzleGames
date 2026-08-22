@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createInitialState, sudokuReducer, type SudokuGameState } from './sudokuReducer'
+import { createInitialState, getWrongCells, sudokuReducer, type SudokuGameState } from './sudokuReducer'
 import type { SudokuLevelRecord } from '../engine/sudoku/types'
 
 // A minimal 1-cell-missing 9x9 puzzle so a single INPUT_DIGIT completes the solve —
@@ -218,5 +218,45 @@ describe('LOAD', () => {
     const loaded = sudokuReducer(fresh(), { type: 'LOAD', level: LEVEL, snapshot })
     expect(loaded.board[0][0].value).toBe(5)
     expect(loaded.elapsedMs).toBe(4242)
+  })
+})
+
+describe('HINT_REVEAL_CELL', () => {
+  it('fills the wrong/empty cell with the solution value and increments hintsUsed', () => {
+    const state = sudokuReducer(fresh(), { type: 'HINT_REVEAL_CELL', now: 0 })
+    expect(state.hintsUsed).toBe(1)
+    expect(state.board[0][0].value).toBe(SOLUTION[0][0])
+  })
+
+  it('corrects a wrong value already entered, not just an empty cell', () => {
+    let state = sudokuReducer(fresh(), { type: 'SELECT_CELL', row: 0, col: 0 })
+    state = sudokuReducer(state, { type: 'INPUT_DIGIT', digit: (SOLUTION[0][0] % 9) + 1, now: 0 }) // deliberately wrong
+    state = sudokuReducer(state, { type: 'HINT_REVEAL_CELL', now: 0 })
+    expect(state.board[0][0].value).toBe(SOLUTION[0][0])
+  })
+
+  it('wins once the only missing cell is revealed', () => {
+    const state = sudokuReducer(fresh(), { type: 'HINT_REVEAL_CELL', now: 0 })
+    expect(state.status).toBe('won')
+  })
+})
+
+describe('HINT_SOLVE_BOX', () => {
+  it('fills every incomplete non-given cell in one box', () => {
+    const state = sudokuReducer(fresh(), { type: 'HINT_SOLVE_BOX', now: 0 })
+    expect(state.hintsUsed).toBe(1)
+    expect(state.board[0][0].value).toBe(SOLUTION[0][0])
+  })
+})
+
+describe('getWrongCells', () => {
+  it('flags an entered value that does not match the solution', () => {
+    let state = sudokuReducer(fresh(), { type: 'SELECT_CELL', row: 0, col: 0 })
+    state = sudokuReducer(state, { type: 'INPUT_DIGIT', digit: (SOLUTION[0][0] % 9) + 1, now: 0 })
+    expect(getWrongCells(state)).toEqual(new Set(['0,0']))
+  })
+
+  it('is empty on a freshly loaded board', () => {
+    expect(getWrongCells(fresh()).size).toBe(0)
   })
 })

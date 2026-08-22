@@ -1,4 +1,4 @@
-import type { Coord, ZipLevelRecord } from '../engine/zip/types'
+import { coordKey, type Coord, type ZipLevelRecord } from '../engine/zip/types'
 import { applyCellEntry, isSolved } from '../engine/zip/validator'
 
 export interface ZipGameState {
@@ -8,6 +8,9 @@ export interface ZipGameState {
   elapsedMs: number
   runStartedAt: number | null
   status: 'playing' | 'won'
+  /** Hints used this level — a nonzero count marks the eventual completion "assisted",
+   *  which skips the personal-best update (see recordZipCompletion in storage/db.ts). */
+  hintsUsed: number
 }
 
 export interface PersistedZipSnapshot {
@@ -22,6 +25,7 @@ export type ZipAction =
   | { type: 'PAUSE'; now: number }
   | { type: 'RESUME'; now: number }
   | { type: 'LOAD'; level: ZipLevelRecord; snapshot?: PersistedZipSnapshot }
+  | { type: 'HINT_REVEAL_NEXT'; now: number }
 
 const MAX_HISTORY = 200
 
@@ -33,7 +37,27 @@ export function createInitialState(level: ZipLevelRecord): ZipGameState {
     elapsedMs: 0,
     runStartedAt: null,
     status: 'playing',
+    hintsUsed: 0,
   }
+}
+
+/** How much of `path` still matches `solution` step-for-step — the path is order-dependent
+ *  (a Hamiltonian path, verified unique), so anything past this point is a wrong turn. */
+function longestValidPrefixLength(path: Coord[], solution: Coord[]): number {
+  let i = 0
+  while (i < path.length && i < solution.length && path[i].row === solution[i].row && path[i].col === solution[i].col) {
+    i++
+  }
+  return i
+}
+
+/** Non-mutating "check my work": coordKeys of path cells placed after the point the path
+ *  stopped matching the solution. */
+export function getWrongCells(state: ZipGameState): Set<string> {
+  const validLen = longestValidPrefixLength(state.path, state.level.solution)
+  const wrong = new Set<string>()
+  for (let i = validLen; i < state.path.length; i++) wrong.add(coordKey(state.path[i]))
+  return wrong
 }
 
 function withWinCheck(state: ZipGameState, now: number): ZipGameState {
@@ -76,6 +100,14 @@ export function zipReducer(state: ZipGameState, action: ZipAction): ZipGameState
     case 'RESUME': {
       if (state.status === 'won' || state.runStartedAt !== null) return state
       return { ...state, runStartedAt: action.now }
+    }
+
+    case 'HINT_REVEAL_NEXT': {
+      if (state.status === 'won') return state
+      const validLen = longestValidPrefixLength(state.path, state.level.solution)
+      if (validLen >= state.level.solution.length) return state
+      const path = state.level.solution.slice(0, validLen + 1)
+      return withWinCheck({ ...state, path, history: pushHistory(state), hintsUsed: state.hintsUsed + 1 }, action.now)
     }
 
     case 'LOAD': {

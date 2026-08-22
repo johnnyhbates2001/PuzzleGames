@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createInitialState, gameReducer, type GameState } from './gameReducer'
+import { createInitialState, gameReducer, getWrongQueens, type GameState } from './gameReducer'
 import type { LevelRecord } from '../engine/types'
 
 // Same 4x4 fixture used in the engine tests: unique solution (0,1) (1,3) (2,0) (3,2).
@@ -291,5 +291,63 @@ describe('LOAD', () => {
     const loaded = gameReducer(fresh(), { type: 'LOAD', level: LEVEL, autoPlaceX: true, snapshot })
     expect(loaded.board[0][0].manualX).toBe(true)
     expect(loaded.elapsedMs).toBe(4242)
+  })
+})
+
+describe('HINT_REVEAL_CELL', () => {
+  it('places one correct queen and increments hintsUsed', () => {
+    const state = gameReducer(fresh(), { type: 'HINT_REVEAL_CELL', now: 0 })
+    expect(state.hintsUsed).toBe(1)
+    const placed = LEVEL.solution.filter((c) => state.board[c.row][c.col].queen)
+    expect(placed).toHaveLength(1)
+  })
+
+  it('replaces a wrong queen already in that row rather than adding a second one', () => {
+    let state = click(click(fresh(), 0, 0), 0, 0) // two clicks: empty -> X -> queen (wrong; solution wants col 1)
+    state = gameReducer(state, { type: 'HINT_REVEAL_CELL', now: 0 })
+    expect(state.board[0][0].queen).toBe(false)
+    expect(state.board[0][1].queen).toBe(true)
+  })
+
+  it('wins the game once every row is revealed', () => {
+    let state = fresh()
+    for (let i = 0; i < LEVEL.solution.length; i++) {
+      state = gameReducer(state, { type: 'HINT_REVEAL_CELL', now: 0 })
+    }
+    expect(state.status).toBe('won')
+    expect(state.hintsUsed).toBe(4)
+  })
+
+  it('is a no-op once the board is already solved', () => {
+    let state = fresh()
+    for (let i = 0; i < LEVEL.solution.length; i++) {
+      state = gameReducer(state, { type: 'HINT_REVEAL_CELL', now: 0 })
+    }
+    const after = gameReducer(state, { type: 'HINT_REVEAL_CELL', now: 0 })
+    expect(after).toBe(state)
+  })
+})
+
+describe('HINT_SOLVE_REGION', () => {
+  it('places every solution queen for one still-incomplete region', () => {
+    const state = gameReducer(fresh(), { type: 'HINT_SOLVE_REGION', now: 0 })
+    expect(state.hintsUsed).toBe(1)
+    const placed = LEVEL.solution.filter((c) => state.board[c.row][c.col].queen)
+    expect(placed).toHaveLength(1) // this fixture's regions are 1 queen each
+  })
+})
+
+describe('getWrongQueens', () => {
+  it('flags a queen placed off the solution', () => {
+    const state = click(click(fresh(), 0, 0), 0, 0) // two clicks: empty -> X -> queen; solution wants (0,1)
+    expect(getWrongQueens(state)).toEqual(new Set(['0,0']))
+  })
+
+  it('is empty once every placed queen matches the solution', () => {
+    let state = fresh()
+    for (let i = 0; i < LEVEL.solution.length; i++) {
+      state = gameReducer(state, { type: 'HINT_REVEAL_CELL', now: 0 })
+    }
+    expect(getWrongQueens(state).size).toBe(0)
   })
 })

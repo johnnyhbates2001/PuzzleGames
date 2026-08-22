@@ -37,7 +37,10 @@ export default function DifficultyPage() {
   }, [])
 
   return (
-    <main className="mx-auto flex min-h-svh max-w-lg flex-col justify-center gap-6 bg-bg px-4 py-[max(2rem,env(safe-area-inset-top))] text-ink">
+    <main
+      data-game="queens"
+      className="mx-auto flex min-h-svh max-w-lg flex-col justify-center gap-6 bg-bg px-4 py-[max(2rem,env(safe-area-inset-top))] text-ink"
+    >
       <Link
         to="/"
         className="inline-flex size-9 items-center justify-center rounded-full bg-accent-tint text-accent"
