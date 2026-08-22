@@ -1,14 +1,13 @@
 import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { GAMES } from '../games/registry'
-import { GridPreview } from '../components/GridPreview'
-import { REGION_COLORS } from '../components/Cell'
 import { SudokuGridPreview } from '../components/SudokuGridPreview'
 import { ZipGridPreview } from '../components/ZipGridPreview'
 import { PatchesGridPreview } from '../components/PatchesGridPreview'
+import { SettingsButton } from '../components/SettingsButton'
 
 const PREVIEW_BY_ID: Record<string, ReactNode> = {
-  queens: <GridPreview colors={REGION_COLORS.slice(0, 9)} />,
+  queens: <img src="/icons/source.svg" alt="" className="size-full rounded-xl" />,
   sudoku: <SudokuGridPreview />,
   zip: <ZipGridPreview />,
   patches: <PatchesGridPreview />,
@@ -17,9 +16,12 @@ const PREVIEW_BY_ID: Record<string, ReactNode> = {
 export default function HomePage() {
   return (
     <main className="mx-auto flex min-h-svh max-w-lg flex-col justify-center gap-6 bg-bg px-4 py-[max(2rem,env(safe-area-inset-top))] text-ink">
-      <div>
-        <h1 className="font-display text-[34px] font-extrabold tracking-tight">Puzzles</h1>
-        <p className="mt-1 text-[15px] text-ink-muted">Offline puzzles, just for us.</p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="font-display text-[34px] font-extrabold tracking-tight">Puzzles</h1>
+          <p className="mt-1 text-[15px] text-ink-muted">Offline puzzles, just for us.</p>
+        </div>
+        <SettingsButton />
       </div>
       <div className="flex flex-col gap-3">
         {GAMES.map((game) => (

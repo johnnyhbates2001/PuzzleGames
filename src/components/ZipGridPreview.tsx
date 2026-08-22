@@ -4,7 +4,7 @@ const PATH_CELLS = [0, 1, 4, 7, 8]
 
 export function ZipGridPreview() {
   return (
-    <div className="grid grid-cols-3 grid-rows-3 gap-0.5">
+    <div className="grid size-full grid-cols-3 grid-rows-3 gap-0.5">
       {Array.from({ length: 9 }, (_, i) => {
         const inPath = PATH_CELLS.includes(i)
         const isStart = i === PATH_CELLS[0]

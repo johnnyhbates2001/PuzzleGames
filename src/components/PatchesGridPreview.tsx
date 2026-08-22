@@ -6,7 +6,7 @@ const CELL_GROUP = [0, 0, 1, 0, 1, 1, 2, 2, 2]
 
 export function PatchesGridPreview() {
   return (
-    <div className="grid grid-cols-3 grid-rows-3 gap-0.5">
+    <div className="grid size-full grid-cols-3 grid-rows-3 gap-0.5">
       {CELL_GROUP.map((group, i) => (
         <div key={i} className="aspect-square rounded-[3px]" style={{ backgroundColor: REGION_COLORS[group] }} />
       ))}

@@ -54,8 +54,11 @@
   --grid-line-strong: oklch(62% 0.02 260);
 }
 
+/* Dark palette applies when the system prefers dark (and the user hasn't explicitly
+   forced light), or whenever the user has explicitly forced dark — see useTheme.ts,
+   which sets data-theme on <html> from the in-app Settings toggle. */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme='light']) {
     --bg: oklch(18% 0.012 260);
     --surface: oklch(24% 0.014 260);
     --ink: oklch(96% 0.01 260);
@@ -67,6 +70,19 @@
     --grid-gap: oklch(32% 0.014 260);
     --grid-line-strong: oklch(55% 0.02 260);
   }
+}
+
+:root[data-theme='dark'] {
+  --bg: oklch(18% 0.012 260);
+  --surface: oklch(24% 0.014 260);
+  --ink: oklch(96% 0.01 260);
+  --ink-muted: oklch(72% 0.02 260);
+  --accent: oklch(66% 0.17 300);
+  --accent-tint: oklch(30% 0.05 300);
+  --danger: oklch(58% 0.2 25);
+  --border-dashed: oklch(60% 0.02 260 / 0.4);
+  --grid-gap: oklch(32% 0.014 260);
+  --grid-line-strong: oklch(55% 0.02 260);
 }
 
 body {

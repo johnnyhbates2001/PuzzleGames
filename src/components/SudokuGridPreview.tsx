@@ -3,7 +3,7 @@ const SAMPLE_DIGITS = [5, 0, 2, 0, 8, 0, 0, 3, 0]
 
 export function SudokuGridPreview() {
   return (
-    <div className="grid grid-cols-3 gap-0.5">
+    <div className="grid size-full grid-cols-3 gap-0.5">
       {SAMPLE_DIGITS.map((d, i) => (
         <div
           key={i}
