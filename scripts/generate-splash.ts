@@ -4,9 +4,9 @@
  * (fitTo:{mode:'width'} scales proportionally, it can't independently set width/height
  * or letterbox a square source into a rectangle). Instead each target gets its own
  * wrapper SVG — a solid rect at the exact device pixel size, with source.svg embedded
- * as a smaller centered <image>. source.svg's own background rect is already exactly
- * #4338CA (matches the manifest's theme_color/background_color in vite.config.ts), so
- * embedding it unmodified leaves no visible seam against the wrapper's own background.
+ * as a smaller centered <image>. The wrapper's background is the manifest's
+ * background_color (vite.config.ts), matching the app's actual light background so
+ * there's no color flash between the splash screen and the app finishing its load.
  *
  * Sizes are exact device-pixel dimensions (CSS pt x -webkit-device-pixel-ratio) for the
  * portrait media queries iOS Safari matches an apple-touch-startup-image against — it
@@ -25,7 +25,7 @@ const ICONS_DIR = join(__dirname, '..', 'public', 'icons')
 const sourceSvg = readFileSync(join(ICONS_DIR, 'source.svg'), 'utf-8')
 const sourceSvgBase64 = Buffer.from(sourceSvg, 'utf-8').toString('base64')
 
-const BACKGROUND = '#4338CA' // matches vite.config.ts manifest theme_color/background_color
+const BACKGROUND = '#F7F7F8' // matches vite.config.ts manifest background_color
 
 export interface SplashTarget {
   name: string

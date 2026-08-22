@@ -47,8 +47,8 @@ export default defineConfig({
         description: 'An offline-first colored-region Queens puzzle.',
         display: 'standalone',
         start_url: '/',
-        theme_color: '#8E57D8',
-        background_color: '#8E57D8',
+        theme_color: '#7C4DD6',
+        background_color: '#F7F7F8',
         icons: [
           { src: 'icons/icon-192.png', sizes: '192x192', type: 'image/png' },
           { src: 'icons/icon-512.png', sizes: '512x512', type: 'image/png' },

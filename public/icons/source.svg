@@ -1,8 +1,12 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <rect width="512" height="512" fill="#4338CA"/>
-  <polygon points="106,340 106,300 156,210 206,260 256,190 306,260 356,210 406,300 406,340" fill="#F8FAFC"/>
-  <rect x="106" y="340" width="300" height="26" fill="#F8FAFC"/>
-  <circle cx="156" cy="210" r="15" fill="#FACC15"/>
-  <circle cx="256" cy="190" r="16" fill="#FACC15"/>
-  <circle cx="356" cy="210" r="15" fill="#FACC15"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <rect width="1024" height="1024" rx="0" fill="#7C4DD6"></rect>
+  <rect x="204.80" y="204.80" width="182.27" height="182.27" rx="40.10" fill="#ffffff"></rect>
+  <rect x="420.86" y="204.80" width="182.27" height="182.27" rx="40.10" fill="#FCA5A5"></rect>
+  <rect x="636.93" y="204.80" width="182.27" height="182.27" rx="40.10" fill="#7DD3FC"></rect>
+  <rect x="204.80" y="420.86" width="182.27" height="182.27" rx="40.10" fill="#86EFAC"></rect>
+  <rect x="420.86" y="420.86" width="182.27" height="182.27" rx="40.10" fill="#ffffff"></rect>
+  <rect x="636.93" y="420.86" width="182.27" height="182.27" rx="40.10" fill="#FDE68A"></rect>
+  <rect x="204.80" y="636.93" width="182.27" height="182.27" rx="40.10" fill="#A5B4FC"></rect>
+  <rect x="420.86" y="636.93" width="182.27" height="182.27" rx="40.10" fill="#F9A8D4"></rect>
+  <rect x="636.93" y="636.93" width="182.27" height="182.27" rx="40.10" fill="#ffffff"></rect>
 </svg>

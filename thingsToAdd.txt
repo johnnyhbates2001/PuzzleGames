@@ -6,3 +6,4 @@ Add a coins system (earn by completing levels)
 Add a hint system (buy with coins)
 Add multiple styles/themes (buy with coins)
 Add app icons from claude design
+animations
