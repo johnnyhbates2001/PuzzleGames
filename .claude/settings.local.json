@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install *)",
+      "Bash(npx tsc *)",
+      "Bash(npm run *)",
+      "Bash(timeout 30 bash -c 'until curl -sf http://localhost:5173 >/dev/null; do sleep 1; done')",
+      "Bash(chromium-cli --help)",
+      "Bash(NODE_PATH=\"C:/Users/85212201/AppData/Local/npm-cache/_npx/db89d7302a373f10/node_modules\" node \"C:/Users/85212201/AppData/Local/Temp/1/claude/c--Users-85212201-Documents-Puzzle-Game/e650dc37-ff63-445f-8a48-ba94e722e819/scratchpad/screenshot.mjs\" \"C:/Users/85212201/AppData/Local/Temp/1/claude/c--Users-85212201-Documents-Puzzle-Game/e650dc37-ff63-445f-8a48-ba94e722e819/scratchpad\" light)",
+      "Bash(node \"C:/Users/85212201/AppData/Local/Temp/1/claude/c--Users-85212201-Documents-Puzzle-Game/e650dc37-ff63-445f-8a48-ba94e722e819/scratchpad/screenshot-full.cjs\" \"C:/Users/85212201/AppData/Local/Temp/1/claude/c--Users-85212201-Documents-Puzzle-Game/e650dc37-ff63-445f-8a48-ba94e722e819/scratchpad\" dark)"
+    ]
+  }
+}

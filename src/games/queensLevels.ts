@@ -1,0 +1,42 @@
+import type { Difficulty, LevelRecord } from '../engine/types'
+import { generateLevel } from '../engine/generator'
+import { getProgress } from '../storage/db'
+
+export interface NextLevelResult {
+  level: LevelRecord
+  source: 'bank' | 'generated'
+  bankIndex?: number
+}
+
+// Explicit per-difficulty static imports (rather than one dynamic template import) so
+// Vite can statically analyze and code-split each bank into its own chunk — that chunk
+// then lands in dist/ as an ordinary JS file, already covered by Workbox's default
+// precache globs, with no extra PWA config needed to make it available offline.
+async function loadBank(difficulty: Difficulty): Promise<LevelRecord[]> {
+  switch (difficulty) {
+    case 'easy':
+      return ((await import('../data/banks/easy.json')).default as unknown) as LevelRecord[]
+    case 'medium':
+      return ((await import('../data/banks/medium.json')).default as unknown) as LevelRecord[]
+    case 'hard':
+      return ((await import('../data/banks/hard.json')).default as unknown) as LevelRecord[]
+  }
+}
+
+const GENERATE_RETRIES = 5
+
+/** Picks the next level for a difficulty: the bank entry at the player's current index,
+ *  falling back to runtime generation (via the same engine) once the bank is exhausted. */
+export async function getNextLevel(difficulty: Difficulty): Promise<NextLevelResult> {
+  const [progress, bank] = await Promise.all([getProgress(difficulty), loadBank(difficulty)])
+
+  if (progress.currentLevelIndex < bank.length) {
+    return { level: bank[progress.currentLevelIndex], source: 'bank', bankIndex: progress.currentLevelIndex }
+  }
+
+  for (let attempt = 0; attempt < GENERATE_RETRIES; attempt++) {
+    const level = generateLevel(difficulty, Math.random)
+    if (level) return { level, source: 'generated' }
+  }
+  throw new Error(`Failed to generate a ${difficulty} level`)
+}

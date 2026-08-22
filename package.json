@@ -1,0 +1,40 @@
+{
+  "name": "queens-pwa",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "lint": "oxlint",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "gen:banks": "node --experimental-strip-types scripts/generate-banks.ts",
+    "gen:sudoku-banks": "node --experimental-strip-types scripts/generate-sudoku-banks.ts",
+    "gen:zip-banks": "node --experimental-strip-types scripts/generate-zip-banks.ts",
+    "gen:patches-banks": "node --experimental-strip-types scripts/generate-patches-banks.ts",
+    "gen:icons": "node --experimental-strip-types scripts/generate-icons.ts",
+    "gen:splash": "node --experimental-strip-types scripts/generate-splash.ts"
+  },
+  "dependencies": {
+    "idb": "^8.0.3",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "react-router-dom": "^7.18.2"
+  },
+  "devDependencies": {
+    "@resvg/resvg-js": "^2.6.2",
+    "@tailwindcss/vite": "^4.3.3",
+    "@types/node": "^24.13.3",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.4",
+    "oxlint": "^1.75.0",
+    "tailwindcss": "^4.3.3",
+    "typescript": "~6.0.2",
+    "vite": "^8.2.0",
+    "vite-plugin-pwa": "^1.3.0",
+    "vitest": "^4.1.11"
+  }
+}

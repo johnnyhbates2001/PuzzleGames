@@ -1,0 +1,90 @@
+@import "tailwindcss";
+
+@font-face {
+  font-family: 'Poppins';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 600;
+  src: url('/fonts/poppins-600.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Poppins';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 700;
+  src: url('/fonts/poppins-700.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Poppins';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 800;
+  src: url('/fonts/poppins-800.woff2') format('woff2');
+}
+
+@theme {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-ink: var(--ink);
+  --color-ink-muted: var(--ink-muted);
+  --color-accent: var(--accent);
+  --color-accent-tint: var(--accent-tint);
+  --color-danger: var(--danger);
+  --color-border-dashed: var(--border-dashed);
+  --color-grid-gap: var(--grid-gap);
+  --color-grid-line-strong: var(--grid-line-strong);
+  --color-diff-easy: oklch(76% 0.15 145);
+  --color-diff-medium: oklch(76% 0.15 95);
+  --color-diff-hard: oklch(76% 0.15 25);
+  --font-display: 'Poppins', ui-sans-serif, system-ui, sans-serif;
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.04), 0 8px 24px rgb(0 0 0 / 0.06);
+}
+
+:root {
+  color-scheme: light dark;
+  --bg: oklch(95% 0.004 260);
+  --surface: oklch(100% 0 0);
+  --ink: oklch(20% 0.02 260);
+  --ink-muted: oklch(46% 0.02 260);
+  --accent: oklch(58% 0.19 300);
+  --accent-tint: oklch(94% 0.035 300);
+  --danger: oklch(45% 0.18 25);
+  --border-dashed: oklch(70% 0.02 260 / 0.4);
+  --grid-gap: oklch(88% 0.01 260);
+  --grid-line-strong: oklch(62% 0.02 260);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: oklch(18% 0.012 260);
+    --surface: oklch(24% 0.014 260);
+    --ink: oklch(96% 0.01 260);
+    --ink-muted: oklch(72% 0.02 260);
+    --accent: oklch(66% 0.17 300);
+    --accent-tint: oklch(30% 0.05 300);
+    --danger: oklch(58% 0.2 25);
+    --border-dashed: oklch(60% 0.02 260 / 0.4);
+    --grid-gap: oklch(32% 0.014 260);
+    --grid-line-strong: oklch(55% 0.02 260);
+  }
+}
+
+body {
+  margin: 0;
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+  padding-bottom: env(safe-area-inset-bottom);
+  overscroll-behavior-y: contain;
+}
+
+/* Prevents double-tap-to-zoom on iOS Safari for ordinary tap targets. The board grid
+   uses the stronger touch-none instead (see Board.tsx), which also blocks page-scroll
+   hijacking during the drag-to-mark gesture. */
+button,
+a {
+  touch-action: manipulation;
+}
+
+#root {
+  min-height: 100svh;
+}
