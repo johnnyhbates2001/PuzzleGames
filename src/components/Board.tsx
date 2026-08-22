@@ -3,7 +3,8 @@ import type { LevelRecord } from '../engine/types'
 import { coordKey } from '../engine/types'
 import type { CellState } from '../state/types'
 import { hasX } from '../state/types'
-import { Cell, REGION_COLORS } from './Cell'
+import { Cell } from './Cell'
+import { useRegionColors } from '../hooks/useSkin'
 
 interface BoardProps {
   level: LevelRecord
@@ -32,6 +33,7 @@ function cellFromPoint(clientX: number, clientY: number): Coord | null {
 }
 
 export function Board({ level, board, conflicts, onCellClick, onDragStart, onCellDragEnter, className }: BoardProps) {
+  const regionColors = useRegionColors()
   // Gesture state lives in refs, not React state — pointermove fires far too often
   // (and far too latency-sensitively) to route through re-renders, and refs are stable
   // across StrictMode's dev double-invoke of render.
@@ -116,7 +118,7 @@ export function Board({ level, board, conflicts, onCellClick, onDragStart, onCel
             row={r}
             col={c}
             cell={cell}
-            regionColor={REGION_COLORS[level.regions[r][c] % REGION_COLORS.length]}
+            regionColor={regionColors[level.regions[r][c] % regionColors.length]}
             conflict={cell.queen && conflicts.has(coordKey({ row: r, col: c }))}
             onClick={onCellClick}
           />

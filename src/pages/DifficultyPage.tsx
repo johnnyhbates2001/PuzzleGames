@@ -4,7 +4,7 @@ import { DIFFICULTY_SIZE, type Difficulty } from '../engine/types'
 import { averageTimeMs, getProgress, type DifficultyProgress } from '../storage/db'
 import { formatElapsed } from '../components/Timer'
 import { GridPreview } from '../components/GridPreview'
-import { REGION_COLORS } from '../components/Cell'
+import { useRegionColors } from '../hooks/useSkin'
 
 const DIFFICULTIES: Difficulty[] = ['easy', 'medium', 'hard']
 const LABELS: Record<Difficulty, string> = { easy: 'Easy', medium: 'Medium', hard: 'Hard' }
@@ -19,6 +19,7 @@ const DOT_CLASS: Record<Difficulty, string> = {
 const PREVIEW_OFFSET: Record<Difficulty, number> = { easy: 0, medium: 3, hard: 6 }
 
 export default function DifficultyPage() {
+  const regionColors = useRegionColors()
   const [progress, setProgress] = useState<Partial<Record<Difficulty, DifficultyProgress>>>({})
 
   useEffect(() => {
@@ -64,8 +65,8 @@ export default function DifficultyPage() {
               <div className="size-[52px] shrink-0 overflow-hidden rounded-xl">
                 <GridPreview
                   colors={[
-                    ...REGION_COLORS.slice(PREVIEW_OFFSET[d]),
-                    ...REGION_COLORS.slice(0, PREVIEW_OFFSET[d]),
+                    ...regionColors.slice(PREVIEW_OFFSET[d] % regionColors.length),
+                    ...regionColors.slice(0, PREVIEW_OFFSET[d] % regionColors.length),
                   ]}
                 />
               </div>

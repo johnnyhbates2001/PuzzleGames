@@ -1,8 +1,8 @@
 import { useRef } from 'react'
 import type { PatchesLevelRecord } from '../engine/patches/types'
 import { isMismatched, placedRectAt, type PlacedRect } from '../engine/patches/validator'
-import { REGION_COLORS } from './Cell'
 import { PatchesCell } from './PatchesCell'
+import { useRegionColors } from '../hooks/useSkin'
 
 interface PatchesBoardProps {
   level: PatchesLevelRecord
@@ -22,6 +22,7 @@ function cellFromPoint(clientX: number, clientY: number): { row: number; col: nu
 }
 
 export function PatchesBoard({ level, placed, onStartDrag, onCommitDrag, onCancelDrag, onRemoveRect, className }: PatchesBoardProps) {
+  const regionColors = useRegionColors()
   const draggingRef = useRef(false)
   const pointerIdRef = useRef<number | null>(null)
 
@@ -83,7 +84,7 @@ export function PatchesBoard({ level, placed, onStartDrag, onCommitDrag, onCance
           col={c}
           clueArea={clue?.area ?? null}
           clueShape={clue?.shape ?? null}
-          fillColor={placedIdx === -1 ? null : REGION_COLORS[placed[placedIdx].clueIndex % REGION_COLORS.length]}
+          fillColor={placedIdx === -1 ? null : regionColors[placed[placedIdx].clueIndex % regionColors.length]}
           mismatched={placedIdx !== -1 && isMismatched(placed[placedIdx].rect, level.clues[placed[placedIdx].clueIndex])}
           borderRight={placedIdx !== rightIdx}
           borderBottom={placedIdx !== bottomIdx}
