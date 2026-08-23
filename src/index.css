@@ -85,48 +85,72 @@
   --grid-line-strong: oklch(55% 0.02 260);
 }
 
+/* Always-dark screens (Shop, Stats) — unlike [data-theme], which only takes effect on
+   :root, this is self-scoped so it works on any subtree regardless of the user's
+   light/dark preference elsewhere in the app.
+   NOTE: these set --color-* (the names Tailwind's @theme block maps utilities to)
+   directly, not --bg/--surface/etc. Custom-property var() indirection resolves once,
+   on the element where the *consuming* declaration lives — @theme's
+   `--color-bg: var(--bg)` is only ever written at :root, so it locks in :root's --bg
+   the moment it's computed there and simply inherits that fixed value down. A
+   descendant redeclaring --bg never gets seen by that already-resolved --color-bg.
+   Redeclaring --color-bg itself on the descendant is what actually overrides it. */
+[data-force-theme='dark'] {
+  --color-bg: oklch(18% 0.012 260);
+  --color-surface: oklch(24% 0.014 260);
+  --color-ink: oklch(96% 0.01 260);
+  --color-ink-muted: oklch(72% 0.02 260);
+  --color-accent: oklch(66% 0.17 300);
+  --color-accent-tint: oklch(30% 0.05 300);
+  --color-danger: oklch(58% 0.2 25);
+  --color-border-dashed: oklch(60% 0.02 260 / 0.4);
+  --color-grid-gap: oklch(32% 0.014 260);
+  --color-grid-line-strong: oklch(55% 0.02 260);
+}
+
 /* Per-game accent identity — one CSS variable pair per game, set on each game's route
    wrapper (not :root), so every existing bg-accent/text-accent class recolors itself
-   with no component changes. Home and Queens keep the default violet tokens above. */
+   with no component changes. Home and Queens keep the default violet tokens above.
+   See the --color-* note above — same reason these set --color-accent directly. */
 [data-game='sudoku'] {
-  --accent: oklch(52% 0.17 250);
-  --accent-tint: oklch(93% 0.04 250);
+  --color-accent: oklch(52% 0.17 250);
+  --color-accent-tint: oklch(93% 0.04 250);
 }
 [data-game='zip'] {
-  --accent: oklch(48% 0.12 175);
-  --accent-tint: oklch(93% 0.045 175);
+  --color-accent: oklch(48% 0.12 175);
+  --color-accent-tint: oklch(93% 0.045 175);
 }
 [data-game='patches'] {
-  --accent: oklch(53% 0.15 45);
-  --accent-tint: oklch(94% 0.04 45);
+  --color-accent: oklch(53% 0.15 45);
+  --color-accent-tint: oklch(94% 0.04 45);
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) [data-game='sudoku'] {
-    --accent: oklch(64% 0.15 250);
-    --accent-tint: oklch(29% 0.05 250);
+    --color-accent: oklch(64% 0.15 250);
+    --color-accent-tint: oklch(29% 0.05 250);
   }
   :root:not([data-theme='light']) [data-game='zip'] {
-    --accent: oklch(62% 0.11 175);
-    --accent-tint: oklch(29% 0.04 175);
+    --color-accent: oklch(62% 0.11 175);
+    --color-accent-tint: oklch(29% 0.04 175);
   }
   :root:not([data-theme='light']) [data-game='patches'] {
-    --accent: oklch(66% 0.14 45);
-    --accent-tint: oklch(30% 0.045 45);
+    --color-accent: oklch(66% 0.14 45);
+    --color-accent-tint: oklch(30% 0.045 45);
   }
 }
 
 :root[data-theme='dark'] [data-game='sudoku'] {
-  --accent: oklch(64% 0.15 250);
-  --accent-tint: oklch(29% 0.05 250);
+  --color-accent: oklch(64% 0.15 250);
+  --color-accent-tint: oklch(29% 0.05 250);
 }
 :root[data-theme='dark'] [data-game='zip'] {
-  --accent: oklch(62% 0.11 175);
-  --accent-tint: oklch(29% 0.04 175);
+  --color-accent: oklch(62% 0.11 175);
+  --color-accent-tint: oklch(29% 0.04 175);
 }
 :root[data-theme='dark'] [data-game='patches'] {
-  --accent: oklch(66% 0.14 45);
-  --accent-tint: oklch(30% 0.045 45);
+  --color-accent: oklch(66% 0.14 45);
+  --color-accent-tint: oklch(30% 0.045 45);
 }
 
 body {

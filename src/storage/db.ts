@@ -408,3 +408,15 @@ export async function clearPatchesInProgress(difficulty: Difficulty): Promise<vo
   const db = await getDB()
   await db.delete('patchesInProgress', difficulty)
 }
+
+const ALL_DIFFICULTIES: Difficulty[] = ['easy', 'medium', 'hard']
+const ALL_PROGRESS_GETTERS = [getProgress, getSudokuProgress, getZipProgress, getPatchesProgress]
+
+/** Total completed levels across every game and difficulty — used for the Stats page's
+ *  "Solved" tile and the Neon skin's solve-count unlock. */
+export async function getTotalSolved(): Promise<number> {
+  const results = await Promise.all(
+    ALL_PROGRESS_GETTERS.flatMap((getter) => ALL_DIFFICULTIES.map((d) => getter(d))),
+  )
+  return results.reduce((sum, p) => sum + p.completedCount, 0)
+}
