@@ -153,6 +153,66 @@
   --color-accent-tint: oklch(30% 0.045 45);
 }
 
+/* Motion (design section 05) — short, interruptible, best-effort against the spec's
+   timings rather than exact spring physics. Page-transition animation is out of scope
+   (needs a route-transition wrapper); everything else here is plain CSS. */
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes pop-in {
+    from {
+      transform: scale(0.6);
+      opacity: 0;
+    }
+    to {
+      transform: scale(1);
+      opacity: 1;
+    }
+  }
+  @keyframes shake {
+    0%,
+    100% {
+      transform: translateX(0);
+    }
+    20%,
+    60% {
+      transform: translateX(-3px);
+    }
+    40%,
+    80% {
+      transform: translateX(3px);
+    }
+  }
+  @keyframes bump {
+    0%,
+    100% {
+      transform: scale(1);
+    }
+    50% {
+      transform: scale(1.15);
+    }
+  }
+  @keyframes sheet-up {
+    from {
+      transform: translateY(100%);
+    }
+    to {
+      transform: translateY(0);
+    }
+  }
+
+  .anim-pop-in {
+    animation: pop-in 160ms cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+  .anim-shake {
+    animation: shake 220ms ease-in-out;
+  }
+  .anim-bump {
+    animation: bump 400ms ease-out;
+  }
+  .anim-sheet-up {
+    animation: sheet-up 320ms cubic-bezier(0.32, 0.72, 0, 1);
+  }
+}
+
 body {
   margin: 0;
   padding-left: env(safe-area-inset-left);

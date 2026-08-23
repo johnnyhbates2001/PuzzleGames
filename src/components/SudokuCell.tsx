@@ -35,10 +35,12 @@ function SudokuCellImpl({ row, col, value, given, notes, selected, peer, sameVal
       data-row={row}
       data-col={col}
       aria-label={value === 0 ? 'Empty' : String(value)}
-      className={`relative flex aspect-square items-center justify-center text-[min(4.5vw,20px)] leading-none select-none ${borderClasses(row, col)} ${backgroundClass(selected, sameValue, peer)} ${conflict ? 'ring-[2.5px] ring-inset ring-danger' : ''}`}
+      className={`relative flex aspect-square items-center justify-center text-[min(4.5vw,20px)] leading-none select-none ${borderClasses(row, col)} ${backgroundClass(selected, sameValue, peer)} ${conflict ? 'anim-shake ring-[2.5px] ring-inset ring-danger' : ''}`}
     >
       {value !== 0 ? (
-        <span className={given ? 'font-bold text-ink' : conflict ? 'font-semibold text-danger' : 'font-semibold text-accent'}>
+        <span
+          className={`${given ? '' : 'anim-pop-in'} ${given ? 'font-bold text-ink' : conflict ? 'font-semibold text-danger' : 'font-semibold text-accent'}`}
+        >
           {value}
         </span>
       ) : notes.size > 0 ? (

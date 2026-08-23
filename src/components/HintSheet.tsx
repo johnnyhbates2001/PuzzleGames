@@ -31,7 +31,7 @@ export function HintSheet({ open, onClose, options, coins, onUseHint, checkMessa
       aria-label="Hints"
     >
       <div
-        className="w-full max-w-lg rounded-t-[32px] bg-surface p-5 pb-[max(1.5rem,env(safe-area-inset-bottom))] shadow-card"
+        className="anim-sheet-up w-full max-w-lg rounded-t-[32px] bg-surface p-5 pb-[max(1.5rem,env(safe-area-inset-bottom))] shadow-card"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mx-auto mb-3 h-1 w-9 rounded-full bg-bg" />

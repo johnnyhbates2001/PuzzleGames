@@ -34,12 +34,12 @@ function CellImpl({ row, col, cell, regionColor, conflict, onClick }: CellProps)
       data-col={col}
       aria-label={cell.queen ? 'Queen' : hasX(cell) ? 'Marked' : 'Empty'}
       className={`relative flex aspect-square items-center justify-center text-[min(6vw,28px)] font-semibold leading-none select-none transition-shadow ${
-        conflict ? 'ring-[2.5px] ring-inset ring-danger' : ''
+        conflict ? 'anim-shake ring-[2.5px] ring-inset ring-danger' : ''
       }`}
       style={{ backgroundColor: regionColor }}
     >
       {cell.queen ? (
-        <span className={conflict ? 'text-danger' : 'text-slate-900'}>♛</span>
+        <span className={`anim-pop-in ${conflict ? 'text-danger' : 'text-slate-900'}`}>♛</span>
       ) : hasX(cell) ? (
         <span className="text-slate-900/40">✕</span>
       ) : null}
