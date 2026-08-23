@@ -1,13 +1,19 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import type { Difficulty, ZipLevelRecord } from '../engine/zip/types'
-import { createInitialState, zipReducer } from '../state/zipReducer'
-import { getZipInProgress, recordZipCompletion, saveZipInProgress } from '../storage/db'
+import { createInitialState, getWrongCells, zipReducer } from '../state/zipReducer'
+import { getSettings, getZipInProgress, recordZipCompletion, saveZipInProgress, spendCoins } from '../storage/db'
 import { getNextZipLevel } from '../games/zipLevels'
 import { useAppLifecycle } from '../hooks/useAppLifecycle'
 import { ZipBoard } from '../components/ZipBoard'
 import { ZipControls } from '../components/ZipControls'
-import { Timer } from '../components/Timer'
+import { GameHeader } from '../components/GameHeader'
+import { HintSheet, type HintOption } from '../components/HintSheet'
+
+const HINT_OPTIONS: HintOption[] = [
+  { id: 'reveal-next', icon: '👁', title: 'Reveal next step', desc: 'Extends your path by one correct cell.', price: 25 },
+  { id: 'check', icon: '⚑', title: 'Check my work', desc: 'Flags any step that strayed from the path.', price: 40 },
+]
 
 // Content doesn't matter — this state is replaced by LOAD before the player can
 // interact, and (unlike Sudoku) Zip's engine is fully parameterized by level.size, so
@@ -38,6 +44,9 @@ export default function ZipGamePage() {
   const [state, dispatch] = useReducer(zipReducer, PLACEHOLDER_LEVEL, (level) => createInitialState(level))
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [coins, setCoins] = useState(0)
+  const [hintsOpen, setHintsOpen] = useState(false)
+  const [checkMessage, setCheckMessage] = useState<string | null>(null)
   const sourceRef = useRef<{ source: 'bank' | 'generated'; bankIndex?: number }>({ source: 'generated' })
   const initialReplayLevelRef = useRef((location.state as ReplayLocationState | null)?.replayLevel)
 
@@ -51,12 +60,14 @@ export default function ZipGamePage() {
       try {
         const replayLevel = initialReplayLevelRef.current
         if (replayLevel) {
+          getSettings().then((s) => !cancelled && setCoins(s.coins))
           dispatch({ type: 'LOAD', level: replayLevel })
           return
         }
 
-        const inProgress = await getZipInProgress(validDifficulty as Difficulty)
+        const [settings, inProgress] = await Promise.all([getSettings(), getZipInProgress(validDifficulty as Difficulty)])
         if (cancelled) return
+        setCoins(settings.coins)
 
         if (inProgress) {
           sourceRef.current = { source: inProgress.levelSource, bankIndex: inProgress.bankIndex }
@@ -137,6 +148,26 @@ export default function ZipGamePage() {
     dispatch({ type: 'ENTER_CELL', row, col, now: Date.now() })
   }, [])
 
+  const handleUseHint = useCallback(
+    async (id: string, price: number) => {
+      const ok = await spendCoins(price)
+      if (!ok) return
+      setCoins((c) => c - price)
+
+      if (id === 'check') {
+        const wrong = getWrongCells(state)
+        setCheckMessage(wrong.size === 0 ? 'Looking good — nothing wrong yet!' : `${wrong.size} step${wrong.size === 1 ? '' : 's'} strayed from the path.`)
+        dispatch({ type: 'HINT_CHECK' })
+        return
+      }
+
+      setCheckMessage(null)
+      if (id === 'reveal-next') dispatch({ type: 'HINT_REVEAL_NEXT', now: Date.now() })
+      setHintsOpen(false)
+    },
+    [state],
+  )
+
   if (!validDifficulty) {
     return <ErrorScreen message="Unknown difficulty." onBack={() => navigate('/zip')} />
   }
@@ -149,20 +180,7 @@ export default function ZipGamePage() {
       data-game="zip"
       className="mx-auto flex min-h-svh max-w-lg flex-col items-center gap-6 bg-bg px-4 py-[max(1.5rem,env(safe-area-inset-top))] text-ink"
     >
-      <div className="flex w-full items-center justify-between">
-        <button
-          type="button"
-          onClick={() => navigate('/zip')}
-          aria-label="Back"
-          className="inline-flex size-9 items-center justify-center rounded-full bg-accent-tint text-accent"
-        >
-          <svg width="9" height="15" viewBox="0 0 9 15" fill="none">
-            <path d="M8 1L1 7.5 8 14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-        </button>
-        <Timer elapsedMs={state.elapsedMs} runStartedAt={state.runStartedAt} />
-        <span className="size-9" aria-hidden="true" />
-      </div>
+      <GameHeader backTo="/zip" elapsedMs={state.elapsedMs} runStartedAt={state.runStartedAt} coins={coins} />
 
       <div className="flex w-full max-w-[420px] flex-col items-center gap-6">
         {loading ? (
@@ -176,8 +194,22 @@ export default function ZipGamePage() {
           canClear={state.path.length > 0}
           onUndo={() => dispatch({ type: 'UNDO' })}
           onClear={() => dispatch({ type: 'CLEAR', now: Date.now() })}
+          onOpenHints={() => {
+            setCheckMessage(null)
+            setHintsOpen(true)
+          }}
+          hintPrice={HINT_OPTIONS[0].price}
         />
       </div>
+
+      <HintSheet
+        open={hintsOpen}
+        onClose={() => setHintsOpen(false)}
+        options={HINT_OPTIONS}
+        coins={coins}
+        onUseHint={handleUseHint}
+        checkMessage={checkMessage}
+      />
     </main>
   )
 }

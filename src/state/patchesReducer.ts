@@ -29,6 +29,7 @@ export type PatchesAction =
   | { type: 'RESUME'; now: number }
   | { type: 'LOAD'; level: PatchesLevelRecord; snapshot?: PersistedPatchesSnapshot }
   | { type: 'HINT_REVEAL_CLUE'; now: number }
+  | { type: 'HINT_CHECK' }
 
 export function createInitialState(level: PatchesLevelRecord): PatchesGameState {
   return {
@@ -139,6 +140,11 @@ export function patchesReducer(state: PatchesGameState, action: PatchesAction): 
       if (clueIndex === -1) return state
       const placed = [...state.placed, { rect: state.level.solution[clueIndex], clueIndex }]
       return withWinCheck({ ...state, placed, hintsUsed: state.hintsUsed + 1 }, action.now)
+    }
+
+    case 'HINT_CHECK': {
+      if (state.status === 'won') return state
+      return { ...state, hintsUsed: state.hintsUsed + 1 }
     }
 
     case 'LOAD': {

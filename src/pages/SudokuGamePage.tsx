@@ -2,15 +2,22 @@ import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'r
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { SUDOKU_SIZE, type Difficulty, type SudokuLevelRecord } from '../engine/sudoku/types'
 import { getConflicts } from '../engine/sudoku/validator'
-import { createInitialState, sudokuReducer } from '../state/sudokuReducer'
+import { createInitialState, getWrongCells, sudokuReducer } from '../state/sudokuReducer'
 import { boardValues } from '../state/sudokuTypes'
-import { getSudokuInProgress, recordSudokuCompletion, saveSudokuInProgress } from '../storage/db'
+import { getSettings, getSudokuInProgress, recordSudokuCompletion, saveSudokuInProgress, spendCoins } from '../storage/db'
 import { getNextSudokuLevel } from '../games/sudokuLevels'
 import { useAppLifecycle } from '../hooks/useAppLifecycle'
 import { SudokuBoard } from '../components/SudokuBoard'
 import { SudokuKeypad } from '../components/SudokuKeypad'
 import { SudokuControls } from '../components/SudokuControls'
-import { Timer } from '../components/Timer'
+import { GameHeader } from '../components/GameHeader'
+import { HintSheet, type HintOption } from '../components/HintSheet'
+
+const HINT_OPTIONS: HintOption[] = [
+  { id: 'reveal-cell', icon: '👁', title: 'Reveal a cell', desc: 'Fills one correct square of your choice.', price: 25 },
+  { id: 'check', icon: '⚑', title: 'Check my work', desc: 'Flags anything currently placed wrong.', price: 40 },
+  { id: 'solve-box', icon: '✧', title: 'Solve a box', desc: 'Completes one whole 3×3 box.', price: 120 },
+]
 
 // Shape must be a real 9x9 grid — the validator/board components are hardcoded to
 // SUDOKU_SIZE (real Sudoku is always 9x9, unlike Queens' per-difficulty size), so an
@@ -41,6 +48,9 @@ export default function SudokuGamePage() {
   const [state, dispatch] = useReducer(sudokuReducer, PLACEHOLDER_LEVEL, (level) => createInitialState(level))
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [coins, setCoins] = useState(0)
+  const [hintsOpen, setHintsOpen] = useState(false)
+  const [checkMessage, setCheckMessage] = useState<string | null>(null)
   const sourceRef = useRef<{ source: 'bank' | 'generated'; bankIndex?: number }>({ source: 'generated' })
   const initialReplayLevelRef = useRef((location.state as ReplayLocationState | null)?.replayLevel)
 
@@ -54,12 +64,14 @@ export default function SudokuGamePage() {
       try {
         const replayLevel = initialReplayLevelRef.current
         if (replayLevel) {
+          getSettings().then((s) => !cancelled && setCoins(s.coins))
           dispatch({ type: 'LOAD', level: replayLevel })
           return
         }
 
-        const inProgress = await getSudokuInProgress(validDifficulty as Difficulty)
+        const [settings, inProgress] = await Promise.all([getSettings(), getSudokuInProgress(validDifficulty as Difficulty)])
         if (cancelled) return
+        setCoins(settings.coins)
 
         if (inProgress) {
           sourceRef.current = { source: inProgress.levelSource, bankIndex: inProgress.bankIndex }
@@ -152,6 +164,27 @@ export default function SudokuGamePage() {
     dispatch({ type: 'TOGGLE_NOTE_MODE' })
   }, [])
 
+  const handleUseHint = useCallback(
+    async (id: string, price: number) => {
+      const ok = await spendCoins(price)
+      if (!ok) return
+      setCoins((c) => c - price)
+
+      if (id === 'check') {
+        const wrong = getWrongCells(state)
+        setCheckMessage(wrong.size === 0 ? 'Looking good — nothing wrong yet!' : `${wrong.size} cell${wrong.size === 1 ? '' : 's'} filled wrong.`)
+        dispatch({ type: 'HINT_CHECK' })
+        return
+      }
+
+      setCheckMessage(null)
+      if (id === 'reveal-cell') dispatch({ type: 'HINT_REVEAL_CELL', now: Date.now() })
+      else if (id === 'solve-box') dispatch({ type: 'HINT_SOLVE_BOX', now: Date.now() })
+      setHintsOpen(false)
+    },
+    [state],
+  )
+
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
       if (e.key >= '1' && e.key <= '9') {
@@ -181,20 +214,7 @@ export default function SudokuGamePage() {
       data-game="sudoku"
       className="mx-auto flex min-h-svh max-w-lg flex-col items-center gap-6 bg-bg px-4 py-[max(1.5rem,env(safe-area-inset-top))] text-ink"
     >
-      <div className="flex w-full items-center justify-between">
-        <button
-          type="button"
-          onClick={() => navigate('/sudoku')}
-          aria-label="Back"
-          className="inline-flex size-9 items-center justify-center rounded-full bg-accent-tint text-accent"
-        >
-          <svg width="9" height="15" viewBox="0 0 9 15" fill="none">
-            <path d="M8 1L1 7.5 8 14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-        </button>
-        <Timer elapsedMs={state.elapsedMs} runStartedAt={state.runStartedAt} />
-        <span className="size-9" aria-hidden="true" />
-      </div>
+      <GameHeader backTo="/sudoku" elapsedMs={state.elapsedMs} runStartedAt={state.runStartedAt} coins={coins} />
 
       <div className="flex w-full max-w-[420px] flex-col items-center gap-4">
         {loading ? (
@@ -222,8 +242,22 @@ export default function SudokuGamePage() {
           onErase={handleErase}
           onUndo={() => dispatch({ type: 'UNDO' })}
           onClear={() => dispatch({ type: 'CLEAR', now: Date.now() })}
+          onOpenHints={() => {
+            setCheckMessage(null)
+            setHintsOpen(true)
+          }}
+          hintPrice={HINT_OPTIONS[0].price}
         />
       </div>
+
+      <HintSheet
+        open={hintsOpen}
+        onClose={() => setHintsOpen(false)}
+        options={HINT_OPTIONS}
+        coins={coins}
+        onUseHint={handleUseHint}
+        checkMessage={checkMessage}
+      />
     </main>
   )
 }

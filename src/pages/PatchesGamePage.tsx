@@ -1,13 +1,19 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import type { Difficulty, PatchesLevelRecord } from '../engine/patches/types'
-import { createInitialState, patchesReducer } from '../state/patchesReducer'
-import { getPatchesInProgress, recordPatchesCompletion, savePatchesInProgress } from '../storage/db'
+import { createInitialState, getWrongCells, patchesReducer } from '../state/patchesReducer'
+import { getPatchesInProgress, getSettings, recordPatchesCompletion, savePatchesInProgress, spendCoins } from '../storage/db'
 import { getNextPatchesLevel } from '../games/patchesLevels'
 import { useAppLifecycle } from '../hooks/useAppLifecycle'
 import { PatchesBoard } from '../components/PatchesBoard'
 import { PatchesControls } from '../components/PatchesControls'
-import { Timer } from '../components/Timer'
+import { GameHeader } from '../components/GameHeader'
+import { HintSheet, type HintOption } from '../components/HintSheet'
+
+const HINT_OPTIONS: HintOption[] = [
+  { id: 'check', icon: '⚑', title: 'Check my work', desc: 'Flags any placed patch with the wrong size.', price: 40 },
+  { id: 'reveal-clue', icon: '✧', title: 'Reveal a patch', desc: "Places one clue's correct rectangle.", price: 120 },
+]
 
 // Content doesn't matter — this state is replaced by LOAD before the player can
 // interact, and (like Zip) Patches' engine is fully parameterized by level.size, so a
@@ -37,6 +43,9 @@ export default function PatchesGamePage() {
   const [state, dispatch] = useReducer(patchesReducer, PLACEHOLDER_LEVEL, (level) => createInitialState(level))
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [coins, setCoins] = useState(0)
+  const [hintsOpen, setHintsOpen] = useState(false)
+  const [checkMessage, setCheckMessage] = useState<string | null>(null)
   const sourceRef = useRef<{ source: 'bank' | 'generated'; bankIndex?: number }>({ source: 'generated' })
   const initialReplayLevelRef = useRef((location.state as ReplayLocationState | null)?.replayLevel)
 
@@ -50,12 +59,14 @@ export default function PatchesGamePage() {
       try {
         const replayLevel = initialReplayLevelRef.current
         if (replayLevel) {
+          getSettings().then((s) => !cancelled && setCoins(s.coins))
           dispatch({ type: 'LOAD', level: replayLevel })
           return
         }
 
-        const inProgress = await getPatchesInProgress(validDifficulty as Difficulty)
+        const [settings, inProgress] = await Promise.all([getSettings(), getPatchesInProgress(validDifficulty as Difficulty)])
         if (cancelled) return
+        setCoins(settings.coins)
 
         if (inProgress) {
           sourceRef.current = { source: inProgress.levelSource, bankIndex: inProgress.bankIndex }
@@ -148,6 +159,26 @@ export default function PatchesGamePage() {
     dispatch({ type: 'REMOVE_RECT', row, col })
   }, [])
 
+  const handleUseHint = useCallback(
+    async (id: string, price: number) => {
+      const ok = await spendCoins(price)
+      if (!ok) return
+      setCoins((c) => c - price)
+
+      if (id === 'check') {
+        const wrong = getWrongCells(state)
+        setCheckMessage(wrong.size === 0 ? 'Looking good — nothing wrong yet!' : 'A placed patch has the wrong size for its clue.')
+        dispatch({ type: 'HINT_CHECK' })
+        return
+      }
+
+      setCheckMessage(null)
+      if (id === 'reveal-clue') dispatch({ type: 'HINT_REVEAL_CLUE', now: Date.now() })
+      setHintsOpen(false)
+    },
+    [state],
+  )
+
   if (!validDifficulty) {
     return <ErrorScreen message="Unknown difficulty." onBack={() => navigate('/patches')} />
   }
@@ -160,20 +191,7 @@ export default function PatchesGamePage() {
       data-game="patches"
       className="mx-auto flex min-h-svh max-w-lg flex-col items-center gap-6 bg-bg px-4 py-[max(1.5rem,env(safe-area-inset-top))] text-ink"
     >
-      <div className="flex w-full items-center justify-between">
-        <button
-          type="button"
-          onClick={() => navigate('/patches')}
-          aria-label="Back"
-          className="inline-flex size-9 items-center justify-center rounded-full bg-accent-tint text-accent"
-        >
-          <svg width="9" height="15" viewBox="0 0 9 15" fill="none">
-            <path d="M8 1L1 7.5 8 14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-        </button>
-        <Timer elapsedMs={state.elapsedMs} runStartedAt={state.runStartedAt} />
-        <span className="size-9" aria-hidden="true" />
-      </div>
+      <GameHeader backTo="/patches" elapsedMs={state.elapsedMs} runStartedAt={state.runStartedAt} coins={coins} />
 
       <div className="flex w-full max-w-[420px] flex-col items-center gap-6">
         {loading ? (
@@ -194,8 +212,22 @@ export default function PatchesGamePage() {
           canClear={state.placed.length > 0}
           onUndo={() => dispatch({ type: 'UNDO' })}
           onClear={() => dispatch({ type: 'CLEAR' })}
+          onOpenHints={() => {
+            setCheckMessage(null)
+            setHintsOpen(true)
+          }}
+          hintPrice={HINT_OPTIONS[0].price}
         />
       </div>
+
+      <HintSheet
+        open={hintsOpen}
+        onClose={() => setHintsOpen(false)}
+        options={HINT_OPTIONS}
+        coins={coins}
+        onUseHint={handleUseHint}
+        checkMessage={checkMessage}
+      />
     </main>
   )
 }

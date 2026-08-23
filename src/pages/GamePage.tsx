@@ -2,13 +2,20 @@ import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'r
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import type { Coord, Difficulty, LevelRecord } from '../engine/types'
 import { getConflicts } from '../engine/validator'
-import { createInitialState, gameReducer } from '../state/gameReducer'
-import { getInProgress, getSettings, recordCompletion, saveInProgress, setAutoPlaceX } from '../storage/db'
+import { createInitialState, gameReducer, getWrongQueens } from '../state/gameReducer'
+import { getInProgress, getSettings, recordCompletion, saveInProgress, setAutoPlaceX, spendCoins } from '../storage/db'
 import { getNextLevel } from '../games/queensLevels'
 import { useAppLifecycle } from '../hooks/useAppLifecycle'
 import { Board } from '../components/Board'
-import { Timer } from '../components/Timer'
 import { Controls } from '../components/Controls'
+import { GameHeader } from '../components/GameHeader'
+import { HintSheet, type HintOption } from '../components/HintSheet'
+
+const HINT_OPTIONS: HintOption[] = [
+  { id: 'reveal-cell', icon: '👁', title: 'Reveal a cell', desc: 'Fills one correct square of your choice.', price: 25 },
+  { id: 'check', icon: '⚑', title: 'Check my work', desc: 'Flags anything currently placed wrong.', price: 40 },
+  { id: 'solve-region', icon: '✧', title: 'Solve a region', desc: 'Completes one whole colored region.', price: 120 },
+]
 
 const PLACEHOLDER_LEVEL: LevelRecord = {
   id: 'placeholder',
@@ -35,6 +42,9 @@ export default function GamePage() {
   const [state, dispatch] = useReducer(gameReducer, PLACEHOLDER_LEVEL, (level) => createInitialState(level, true))
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [coins, setCoins] = useState(0)
+  const [hintsOpen, setHintsOpen] = useState(false)
+  const [checkMessage, setCheckMessage] = useState<string | null>(null)
   const sourceRef = useRef<{ source: 'bank' | 'generated'; bankIndex?: number }>({ source: 'generated' })
   // Captured once at mount — GamePage always remounts fresh on navigation into this
   // route (Complete -> Game is always a route change), so this never needs to react
@@ -54,6 +64,7 @@ export default function GamePage() {
         if (replayLevel) {
           const settings = await getSettings()
           if (cancelled) return
+          setCoins(settings.coins)
           sourceRef.current = { source: 'generated' }
           dispatch({ type: 'LOAD', level: replayLevel, autoPlaceX: settings.autoPlaceX })
           return
@@ -61,6 +72,7 @@ export default function GamePage() {
 
         const [settings, inProgress] = await Promise.all([getSettings(), getInProgress(validDifficulty as Difficulty)])
         if (cancelled) return
+        setCoins(settings.coins)
 
         if (inProgress) {
           sourceRef.current = { source: inProgress.levelSource, bankIndex: inProgress.bankIndex }
@@ -153,6 +165,27 @@ export default function GamePage() {
     dispatch({ type: 'DRAG_MARK_CELL', row, col, mode })
   }, [])
 
+  const handleUseHint = useCallback(
+    async (id: string, price: number) => {
+      const ok = await spendCoins(price)
+      if (!ok) return
+      setCoins((c) => c - price)
+
+      if (id === 'check') {
+        const wrong = getWrongQueens(state)
+        setCheckMessage(wrong.size === 0 ? 'Looking good — nothing wrong yet!' : `${wrong.size} queen${wrong.size === 1 ? '' : 's'} placed wrong.`)
+        dispatch({ type: 'HINT_CHECK' })
+        return
+      }
+
+      setCheckMessage(null)
+      if (id === 'reveal-cell') dispatch({ type: 'HINT_REVEAL_CELL', now: Date.now() })
+      else if (id === 'solve-region') dispatch({ type: 'HINT_SOLVE_REGION', now: Date.now() })
+      setHintsOpen(false)
+    },
+    [state],
+  )
+
   const conflicts = useMemo(() => {
     const queens: Coord[] = []
     for (let r = 0; r < state.level.size; r++) {
@@ -175,26 +208,21 @@ export default function GamePage() {
       data-game="queens"
       className="mx-auto flex min-h-svh max-w-lg flex-col items-center gap-6 bg-bg px-4 py-[max(1.5rem,env(safe-area-inset-top))] text-ink"
     >
-      <div className="flex w-full items-center justify-between">
-        <button
-          type="button"
-          onClick={() => navigate('/queens')}
-          aria-label="Back"
-          className="inline-flex size-9 items-center justify-center rounded-full bg-accent-tint text-accent"
-        >
-          <svg width="9" height="15" viewBox="0 0 9 15" fill="none">
-            <path d="M8 1L1 7.5 8 14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-        </button>
-        <Timer elapsedMs={state.elapsedMs} runStartedAt={state.runStartedAt} />
-        <span
-          className={`rounded-full px-3 py-1.5 text-xs font-semibold ${
-            state.autoPlaceX ? 'bg-accent-tint text-accent' : 'text-ink-muted'
-          }`}
-        >
-          Auto X {state.autoPlaceX ? 'on' : 'off'}
-        </span>
-      </div>
+      <GameHeader
+        backTo="/queens"
+        elapsedMs={state.elapsedMs}
+        runStartedAt={state.runStartedAt}
+        coins={coins}
+        right={
+          <span
+            className={`rounded-full px-3 py-1.5 text-xs font-semibold ${
+              state.autoPlaceX ? 'bg-accent-tint text-accent' : 'text-ink-muted'
+            }`}
+          >
+            Auto X {state.autoPlaceX ? 'on' : 'off'}
+          </span>
+        }
+      />
 
       {/* Board and Controls share this single wrapper's width (rather than each
           declaring their own max-width independently) so widening the board to
@@ -224,8 +252,22 @@ export default function GamePage() {
             dispatch({ type: 'SET_AUTO_X', enabled })
             void setAutoPlaceX(enabled)
           }}
+          onOpenHints={() => {
+            setCheckMessage(null)
+            setHintsOpen(true)
+          }}
+          hintPrice={HINT_OPTIONS[0].price}
         />
       </div>
+
+      <HintSheet
+        open={hintsOpen}
+        onClose={() => setHintsOpen(false)}
+        options={HINT_OPTIONS}
+        coins={coins}
+        onUseHint={handleUseHint}
+        checkMessage={checkMessage}
+      />
     </main>
   )
 }

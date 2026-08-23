@@ -35,6 +35,7 @@ export type SudokuAction =
   | { type: 'LOAD'; level: SudokuLevelRecord; snapshot?: PersistedSudokuSnapshot }
   | { type: 'HINT_REVEAL_CELL'; now: number }
   | { type: 'HINT_SOLVE_BOX'; now: number }
+  | { type: 'HINT_CHECK' }
 
 const MAX_HISTORY = 200
 
@@ -191,6 +192,11 @@ export function sudokuReducer(state: SudokuGameState, action: SudokuAction): Sud
         }
       }
       return withWinCheck({ ...state, board, history: pushHistory(state), hintsUsed: state.hintsUsed + 1 }, action.now)
+    }
+
+    case 'HINT_CHECK': {
+      if (state.status === 'won') return state
+      return { ...state, hintsUsed: state.hintsUsed + 1 }
     }
 
     case 'LOAD': {

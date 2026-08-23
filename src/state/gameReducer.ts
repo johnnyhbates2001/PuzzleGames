@@ -36,6 +36,7 @@ export type GameAction =
   | { type: 'DRAG_MARK_CELL'; row: number; col: number; mode: 'add' | 'erase' }
   | { type: 'HINT_REVEAL_CELL'; now: number }
   | { type: 'HINT_SOLVE_REGION'; now: number }
+  | { type: 'HINT_CHECK' }
 
 const MAX_HISTORY = 200
 
@@ -263,6 +264,13 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         { ...state, board, history: pushHistory(state), hintsUsed: state.hintsUsed + 1 },
         action.now,
       )
+    }
+
+    case 'HINT_CHECK': {
+      // Non-mutating (see getWrongQueens) — this just marks the solve as assisted,
+      // matching every other paid hint tier.
+      if (state.status === 'won') return state
+      return { ...state, hintsUsed: state.hintsUsed + 1 }
     }
 
     case 'LOAD': {

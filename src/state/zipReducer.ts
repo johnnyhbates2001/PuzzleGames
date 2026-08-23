@@ -26,6 +26,7 @@ export type ZipAction =
   | { type: 'RESUME'; now: number }
   | { type: 'LOAD'; level: ZipLevelRecord; snapshot?: PersistedZipSnapshot }
   | { type: 'HINT_REVEAL_NEXT'; now: number }
+  | { type: 'HINT_CHECK' }
 
 const MAX_HISTORY = 200
 
@@ -108,6 +109,11 @@ export function zipReducer(state: ZipGameState, action: ZipAction): ZipGameState
       if (validLen >= state.level.solution.length) return state
       const path = state.level.solution.slice(0, validLen + 1)
       return withWinCheck({ ...state, path, history: pushHistory(state), hintsUsed: state.hintsUsed + 1 }, action.now)
+    }
+
+    case 'HINT_CHECK': {
+      if (state.status === 'won') return state
+      return { ...state, hintsUsed: state.hintsUsed + 1 }
     }
 
     case 'LOAD': {
