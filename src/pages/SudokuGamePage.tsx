@@ -279,6 +279,7 @@ export default function SudokuGamePage() {
               selected={state.selected}
               conflicts={conflicts}
               ripple={ripple}
+              solved={state.status === 'won'}
               onCellClick={handleCellClick}
             />
             <SudokuKeypad

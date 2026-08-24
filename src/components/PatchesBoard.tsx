@@ -11,8 +11,14 @@ interface PatchesBoardProps {
   onCommitDrag: (row: number, col: number) => void
   onCancelDrag: () => void
   onRemoveRect: (row: number, col: number) => void
+  /** True once every clue has a matching rectangle — triggers the one-shot diagonal
+   *  solve-sweep across every cell before the win effect navigates away (see
+   *  useGameCompletion). */
+  solved?: boolean
   className?: string
 }
+
+const SWEEP_STEP_MS = 42
 
 function cellFromPoint(clientX: number, clientY: number): { row: number; col: number } | null {
   const el = document.elementFromPoint(clientX, clientY)
@@ -21,7 +27,7 @@ function cellFromPoint(clientX: number, clientY: number): { row: number; col: nu
   return { row: Number(button.dataset.row), col: Number(button.dataset.col) }
 }
 
-export function PatchesBoard({ level, placed, onStartDrag, onCommitDrag, onCancelDrag, onRemoveRect, className }: PatchesBoardProps) {
+export function PatchesBoard({ level, placed, onStartDrag, onCommitDrag, onCancelDrag, onRemoveRect, solved, className }: PatchesBoardProps) {
   const regionColors = useRegionColors()
   const draggingRef = useRef(false)
   const pointerIdRef = useRef<number | null>(null)
@@ -96,6 +102,7 @@ export function PatchesBoard({ level, placed, onStartDrag, onCommitDrag, onCance
           mismatched={placedIdx !== -1 && isMismatched(placed[placedIdx].rect, level.clues[placed[placedIdx].clueIndex])}
           borderRight={placedIdx !== rightIdx}
           borderBottom={placedIdx !== bottomIdx}
+          sweepDelayMs={solved ? (r + c) * SWEEP_STEP_MS : undefined}
         />,
       )
     }

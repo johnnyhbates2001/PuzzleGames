@@ -16,6 +16,9 @@ interface ZipCellProps {
    *  a shake, cleared by the caller once the animation finishes. */
   shake: boolean
   onShakeEnd: () => void
+  /** Ms to delay the solve-sweep's entrance by — set only once the path is complete,
+   *  proportional to (row + col) so the wave travels diagonally (see ZipBoard.tsx). */
+  sweepDelayMs?: number
 }
 
 function ZipCellImpl({
@@ -32,6 +35,7 @@ function ZipCellImpl({
   wallBottom,
   shake,
   onShakeEnd,
+  sweepDelayMs,
 }: ZipCellProps) {
   return (
     <button
@@ -43,7 +47,8 @@ function ZipCellImpl({
         wallRight ? 'border-r-[3px] border-r-grid-line-strong' : 'border-r border-r-grid-gap'
       } ${wallBottom ? 'border-b-[3px] border-b-grid-line-strong' : 'border-b border-b-grid-gap'} ${
         shake ? 'anim-shake' : ''
-      }`}
+      } ${sweepDelayMs !== undefined ? 'anim-solve-sweep' : ''}`}
+      style={{ animationDelay: sweepDelayMs !== undefined ? `${sweepDelayMs}ms` : undefined }}
       onAnimationEnd={shake ? onShakeEnd : undefined}
     >
       {inPath && (

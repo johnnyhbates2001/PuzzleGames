@@ -233,6 +233,7 @@ export default function PatchesGamePage() {
             onCommitDrag={handleCommitDrag}
             onCancelDrag={handleCancelDrag}
             onRemoveRect={handleRemoveRect}
+            solved={state.status === 'won'}
           />
         )}
 

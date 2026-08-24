@@ -10,8 +10,13 @@ interface ZipBoardProps {
   rejectedCell: Coord | null
   /** Fired once the shake animation finishes, so the caller can clear rejectedCell. */
   onRejectedShakeEnd: () => void
+  /** True once the path is complete — triggers the one-shot diagonal solve-sweep
+   *  across every cell before the win effect navigates away (see useGameCompletion). */
+  solved?: boolean
   className?: string
 }
+
+const SWEEP_STEP_MS = 42
 
 function cellFromPoint(clientX: number, clientY: number): { row: number; col: number } | null {
   const el = document.elementFromPoint(clientX, clientY)
@@ -20,7 +25,7 @@ function cellFromPoint(clientX: number, clientY: number): { row: number; col: nu
   return { row: Number(button.dataset.row), col: Number(button.dataset.col) }
 }
 
-export function ZipBoard({ level, path, onCellEnter, rejectedCell, onRejectedShakeEnd, className }: ZipBoardProps) {
+export function ZipBoard({ level, path, onCellEnter, rejectedCell, onRejectedShakeEnd, solved, className }: ZipBoardProps) {
   // Every cell the pointer passes over (starting with the initial press) is routed
   // through the same onCellEnter call — unlike Board.tsx's Queens gesture, there's no
   // tap-vs-drag mode ambiguity to resolve here: a plain tap and a drag stroke mean the
@@ -86,6 +91,7 @@ export function ZipBoard({ level, path, onCellEnter, rejectedCell, onRejectedSha
           wallBottom={r < level.size - 1 && wallSet.has(edgeKey({ row: r, col: c }, { row: r + 1, col: c }))}
           shake={rejectedCell?.row === r && rejectedCell?.col === c}
           onShakeEnd={onRejectedShakeEnd}
+          sweepDelayMs={solved ? (r + c) * SWEEP_STEP_MS : undefined}
         />,
       )
     }

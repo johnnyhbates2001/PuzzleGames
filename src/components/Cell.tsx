@@ -26,10 +26,13 @@ interface CellProps {
    *  proportional to distance from the queen that ruled them out (see Board.tsx),
    *  so the X's visibly propagate outward instead of all appearing at once. */
   autoXDelayMs?: number
+  /** Ms to delay the solve-sweep's entrance by — set only once the level is solved,
+   *  proportional to (row + col) so the wave travels diagonally (see Board.tsx). */
+  sweepDelayMs?: number
   onClick: (row: number, col: number) => void
 }
 
-function CellImpl({ row, col, cell, regionColor, conflict, autoXDelayMs, onClick }: CellProps) {
+function CellImpl({ row, col, cell, regionColor, conflict, autoXDelayMs, sweepDelayMs, onClick }: CellProps) {
   return (
     <button
       type="button"
@@ -39,8 +42,8 @@ function CellImpl({ row, col, cell, regionColor, conflict, autoXDelayMs, onClick
       aria-label={cell.queen ? 'Queen' : hasX(cell) ? 'Marked' : 'Empty'}
       className={`relative flex aspect-square items-center justify-center text-[min(6vw,28px)] font-semibold leading-none select-none transition-shadow ${
         conflict ? 'anim-shake ring-[2.5px] ring-inset ring-danger' : ''
-      }`}
-      style={{ backgroundColor: regionColor }}
+      } ${sweepDelayMs !== undefined ? 'anim-solve-sweep' : ''}`}
+      style={{ backgroundColor: regionColor, animationDelay: sweepDelayMs !== undefined ? `${sweepDelayMs}ms` : undefined }}
     >
       {cell.queen ? (
         <span className={`anim-pop-in ${conflict ? 'text-danger' : 'text-slate-900'}`}>♛</span>

@@ -229,6 +229,7 @@ export default function ZipGamePage() {
             onCellEnter={handleCellEnter}
             rejectedCell={rejectedCell}
             onRejectedShakeEnd={() => setRejectedCell(null)}
+            solved={state.status === 'won'}
           />
         )}
 

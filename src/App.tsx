@@ -28,6 +28,7 @@ function RootLayout() {
   return (
     <>
       <ScrollReset />
+      <UpdateToast />
       <Outlet />
     </>
   )
@@ -66,7 +67,6 @@ function App() {
   return (
     <SkinProvider>
       <AudioProvider>
-        <UpdateToast />
         <RouterProvider router={router} />
       </AudioProvider>
     </SkinProvider>

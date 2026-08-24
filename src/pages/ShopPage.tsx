@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { CoinBalance } from '../components/CoinBalance'
 import { TabBar } from '../components/TabBar'
 import { useSkin } from '../hooks/useSkin'
@@ -9,10 +9,22 @@ function swatches16(colors: string[]): string[] {
   return Array.from({ length: 16 }, (_, i) => colors[i % colors.length])
 }
 
+const SWATCH_FLIP_STAGGER_MS = 30
+const SWATCH_FLIP_DURATION_MS = 460
+// Total time the last swatch's flip needs (15 * stagger + its own duration) — the
+// window `justEquippedId` stays set for, so every tile finishes before it's cleared.
+const SWATCH_FLIP_TOTAL_MS = 15 * SWATCH_FLIP_STAGGER_MS + SWATCH_FLIP_DURATION_MS
+
 export default function ShopPage() {
   const { skin: equippedSkin, ownedSkins, buyAndEquip } = useSkin()
   const [coins, setCoins] = useState(0)
   const [totalSolved, setTotalSolved] = useState(0)
+  // The skin whose swatches should be playing the equip-flip right now — set the
+  // instant a tap successfully equips a skin, cleared once every staggered swatch has
+  // finished, so the flip only ever plays for the tile that was just tapped, never for
+  // whichever skin happens to already be equipped on mount/re-render.
+  const [justEquippedId, setJustEquippedId] = useState<string | null>(null)
+  const flipTimeoutRef = useRef<ReturnType<typeof setTimeout>>(undefined)
 
   useEffect(() => {
     let cancelled = false
@@ -22,6 +34,8 @@ export default function ShopPage() {
       cancelled = true
     }
   }, [])
+
+  useEffect(() => () => clearTimeout(flipTimeoutRef.current), [])
 
   return (
     <main
@@ -49,14 +63,25 @@ export default function ShopPage() {
             if (ok) {
               const settings = await getSettings()
               setCoins(settings.coins)
+              setJustEquippedId(s.id)
+              clearTimeout(flipTimeoutRef.current)
+              flipTimeoutRef.current = setTimeout(() => setJustEquippedId(null), SWATCH_FLIP_TOTAL_MS)
             }
           }
+          const flipping = justEquippedId === s.id
 
           return (
-            <div key={s.id} className={`flex flex-col gap-2 rounded-[18px] bg-surface p-2.5 ${isEquipped ? 'ring-2 ring-accent' : ''}`}>
-              <div className="grid grid-cols-4 gap-0.5 overflow-hidden rounded-[9px]">
+            <div
+              key={s.id}
+              className={`flex flex-col gap-2 rounded-[18px] bg-surface p-2.5 ring-2 transition-shadow duration-300 ${isEquipped ? 'ring-accent' : 'ring-transparent'}`}
+            >
+              <div className="grid grid-cols-4 gap-0.5 overflow-hidden rounded-[9px] [perspective:400px]">
                 {swatches16(s.colors).map((c, i) => (
-                  <div key={i} className="aspect-square" style={{ backgroundColor: c }} />
+                  <div
+                    key={i}
+                    className={`aspect-square ${flipping ? 'anim-skin-flip' : ''}`}
+                    style={{ backgroundColor: c, animationDelay: flipping ? `${i * SWATCH_FLIP_STAGGER_MS}ms` : undefined }}
+                  />
                 ))}
               </div>
               <div>

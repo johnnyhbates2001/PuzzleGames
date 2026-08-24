@@ -16,6 +16,9 @@ interface SudokuBoardProps {
    *  drives a brief outward pulse across its row/col/box peers (see SudokuGamePage).
    *  Distinct from `selected`, which persists across renders and shouldn't re-pulse. */
   ripple: RippleOrigin | null
+  /** True once the puzzle is solved — triggers the one-shot diagonal solve-sweep
+   *  across every cell before the win effect navigates away (see useGameCompletion). */
+  solved?: boolean
   onCellClick: (row: number, col: number) => void
   className?: string
 }
@@ -26,8 +29,9 @@ function isPeer(row: number, col: number, origin: { row: number; col: number }):
 }
 
 const RIPPLE_STEP_MS = 25
+const SWEEP_STEP_MS = 42
 
-export function SudokuBoard({ board, selected, conflicts, ripple, onCellClick, className }: SudokuBoardProps) {
+export function SudokuBoard({ board, selected, conflicts, ripple, solved, onCellClick, className }: SudokuBoardProps) {
   const selectedValue = selected ? board[selected.row][selected.col].value : 0
 
   return (
@@ -49,6 +53,7 @@ export function SudokuBoard({ board, selected, conflicts, ripple, onCellClick, c
             conflict={cell.value !== 0 && conflicts.has(`${r},${c}`)}
             rippleDelayMs={ripple && isPeer(r, c, ripple) ? (Math.abs(r - ripple.row) + Math.abs(c - ripple.col)) * RIPPLE_STEP_MS : undefined}
             rippleSeq={ripple?.seq}
+            sweepDelayMs={solved ? (r + c) * SWEEP_STEP_MS : undefined}
             onClick={onCellClick}
           />
         )),
