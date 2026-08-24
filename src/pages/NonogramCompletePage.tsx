@@ -73,7 +73,10 @@ export default function NonogramCompletePage() {
           <NonogramBoard
             level={level}
             grid={grid}
+            markMode="fill"
             onCellClick={() => {}}
+            onDragStart={() => {}}
+            onCellDragEnter={() => {}}
             className="pointer-events-none absolute inset-x-4 top-[max(1.5rem,env(safe-area-inset-top))] max-w-lg opacity-65 blur-[3px] sm:mx-auto sm:inset-x-0"
           />
         }

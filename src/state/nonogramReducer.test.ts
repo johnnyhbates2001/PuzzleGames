@@ -27,14 +27,31 @@ describe('createInitialState', () => {
 })
 
 describe('CELL_CLICK', () => {
-  it('cycles a cell empty -> filled -> x -> empty', () => {
+  it('toggles a cell between empty and the current mode\'s mark (default: fill)', () => {
     let state = fresh()
+    expect(state.markMode).toBe('fill')
     state = nonogramReducer(state, { type: 'CELL_CLICK', row: 1, col: 0, now: 0 })
     expect(state.grid[1][0]).toBe('filled')
+    state = nonogramReducer(state, { type: 'CELL_CLICK', row: 1, col: 0, now: 0 })
+    expect(state.grid[1][0]).toBe('empty')
+  })
+
+  it('toggles between empty and X once in X mode, and overwrites an existing fill', () => {
+    let state = fresh()
+    state = nonogramReducer(state, { type: 'TOGGLE_MARK_MODE' })
+    expect(state.markMode).toBe('x')
     state = nonogramReducer(state, { type: 'CELL_CLICK', row: 1, col: 0, now: 0 })
     expect(state.grid[1][0]).toBe('x')
     state = nonogramReducer(state, { type: 'CELL_CLICK', row: 1, col: 0, now: 0 })
     expect(state.grid[1][0]).toBe('empty')
+
+    // A cell already filled gets overwritten to X by a tap in X mode, not cleared.
+    state = nonogramReducer(state, { type: 'TOGGLE_MARK_MODE' }) // back to fill
+    state = nonogramReducer(state, { type: 'CELL_CLICK', row: 1, col: 0, now: 0 })
+    expect(state.grid[1][0]).toBe('filled')
+    state = nonogramReducer(state, { type: 'TOGGLE_MARK_MODE' }) // to X
+    state = nonogramReducer(state, { type: 'CELL_CLICK', row: 1, col: 0, now: 0 })
+    expect(state.grid[1][0]).toBe('x')
   })
 
   it('wins the instant the fill pattern matches the solution', () => {
@@ -63,6 +80,80 @@ describe('CELL_CLICK', () => {
 
     const afterWin = state
     state = nonogramReducer(state, { type: 'CELL_CLICK', row: 1, col: 0, now: 0 })
+    expect(state).toBe(afterWin)
+  })
+})
+
+describe('TOGGLE_MARK_MODE', () => {
+  it('flips between fill and x', () => {
+    let state = fresh()
+    state = nonogramReducer(state, { type: 'TOGGLE_MARK_MODE' })
+    expect(state.markMode).toBe('x')
+    state = nonogramReducer(state, { type: 'TOGGLE_MARK_MODE' })
+    expect(state.markMode).toBe('fill')
+  })
+
+  it('is frozen once won', () => {
+    let state = fresh()
+    state = nonogramReducer(state, { type: 'CELL_CLICK', row: 0, col: 0, now: 0 })
+    state = nonogramReducer(state, { type: 'CELL_CLICK', row: 0, col: 1, now: 0 })
+    state = nonogramReducer(state, { type: 'CELL_CLICK', row: 1, col: 1, now: 0 })
+    expect(state.status).toBe('won')
+    const afterWin = state
+    state = nonogramReducer(state, { type: 'TOGGLE_MARK_MODE' })
+    expect(state).toBe(afterWin)
+  })
+})
+
+describe('BEGIN_DRAG_MARK / DRAG_MARK_CELL', () => {
+  it('drags in fill mode paint every entered cell, one Undo reverting the whole stroke', () => {
+    let state = fresh()
+    state = nonogramReducer(state, { type: 'BEGIN_DRAG_MARK' })
+    state = nonogramReducer(state, { type: 'DRAG_MARK_CELL', row: 0, col: 0, mode: 'add', now: 0 })
+    state = nonogramReducer(state, { type: 'DRAG_MARK_CELL', row: 0, col: 1, mode: 'add', now: 0 })
+    expect(state.grid[0]).toEqual(['filled', 'filled'])
+
+    state = nonogramReducer(state, { type: 'UNDO' })
+    expect(state.grid[0]).toEqual(['empty', 'empty'])
+  })
+
+  it('erase mode clears only cells that already carry the mode\'s mark', () => {
+    let state = fresh()
+    state = nonogramReducer(state, { type: 'CELL_CLICK', row: 0, col: 0, now: 0 }) // filled
+    state = nonogramReducer(state, { type: 'BEGIN_DRAG_MARK' })
+    state = nonogramReducer(state, { type: 'DRAG_MARK_CELL', row: 0, col: 0, mode: 'erase', now: 0 })
+    state = nonogramReducer(state, { type: 'DRAG_MARK_CELL', row: 0, col: 1, mode: 'erase', now: 0 }) // already empty: no-op
+    expect(state.grid[0]).toEqual(['empty', 'empty'])
+  })
+
+  it('respects the current mark mode — dragging in X mode paints X, not fill', () => {
+    let state = fresh()
+    state = nonogramReducer(state, { type: 'TOGGLE_MARK_MODE' })
+    state = nonogramReducer(state, { type: 'BEGIN_DRAG_MARK' })
+    state = nonogramReducer(state, { type: 'DRAG_MARK_CELL', row: 1, col: 0, mode: 'add', now: 0 })
+    expect(state.grid[1][0]).toBe('x')
+  })
+
+  it('can win mid-drag once the fill pattern matches the solution', () => {
+    let state = fresh()
+    state = nonogramReducer(state, { type: 'RESUME', now: 0 })
+    state = nonogramReducer(state, { type: 'BEGIN_DRAG_MARK' })
+    state = nonogramReducer(state, { type: 'DRAG_MARK_CELL', row: 0, col: 0, mode: 'add', now: 0 })
+    state = nonogramReducer(state, { type: 'DRAG_MARK_CELL', row: 0, col: 1, mode: 'add', now: 0 })
+    state = nonogramReducer(state, { type: 'DRAG_MARK_CELL', row: 1, col: 1, mode: 'add', now: 5000 })
+    expect(state.status).toBe('won')
+    expect(state.elapsedMs).toBe(5000)
+  })
+
+  it('is frozen once won', () => {
+    let state = fresh()
+    state = nonogramReducer(state, { type: 'CELL_CLICK', row: 0, col: 0, now: 0 })
+    state = nonogramReducer(state, { type: 'CELL_CLICK', row: 0, col: 1, now: 0 })
+    state = nonogramReducer(state, { type: 'CELL_CLICK', row: 1, col: 1, now: 0 })
+    expect(state.status).toBe('won')
+    const afterWin = state
+    state = nonogramReducer(state, { type: 'BEGIN_DRAG_MARK' })
+    state = nonogramReducer(state, { type: 'DRAG_MARK_CELL', row: 1, col: 0, mode: 'add', now: 0 })
     expect(state).toBe(afterWin)
   })
 })

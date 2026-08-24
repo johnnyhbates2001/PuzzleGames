@@ -167,6 +167,20 @@ export default function NonogramGamePage() {
     [playSound, buzz],
   )
 
+  const handleDragStart = useCallback(() => {
+    playSound('tap')
+    buzz(10)
+    dispatch({ type: 'BEGIN_DRAG_MARK' })
+  }, [playSound, buzz])
+
+  const handleCellDragEnter = useCallback((row: number, col: number, mode: 'add' | 'erase') => {
+    dispatch({ type: 'DRAG_MARK_CELL', row, col, mode, now: Date.now() })
+  }, [])
+
+  const handleToggleMarkMode = useCallback(() => {
+    dispatch({ type: 'TOGGLE_MARK_MODE' })
+  }, [])
+
   const handleUseHint = useCallback(
     async (id: string, price: number) => {
       const ok = await spendCoins(price)
@@ -217,14 +231,24 @@ export default function NonogramGamePage() {
         {loading ? (
           <p className="text-ink-muted">Loading level…</p>
         ) : (
-          <NonogramBoard level={state.level} grid={state.grid} onCellClick={handleCellClick} solved={state.status === 'won'} />
+          <NonogramBoard
+            level={state.level}
+            grid={state.grid}
+            markMode={state.markMode}
+            onCellClick={handleCellClick}
+            onDragStart={handleDragStart}
+            onCellDragEnter={handleCellDragEnter}
+            solved={state.status === 'won'}
+          />
         )}
 
         <NonogramControls
           canUndo={state.history.length > 0}
           canClear={state.grid.some((row) => row.some((mark) => mark !== 'empty'))}
+          markMode={state.markMode}
           onUndo={() => dispatch({ type: 'UNDO' })}
           onClear={() => dispatch({ type: 'CLEAR', now: Date.now() })}
+          onToggleMarkMode={handleToggleMarkMode}
           onOpenHints={() => {
             setCheckMessage(null)
             setHintsOpen(true)

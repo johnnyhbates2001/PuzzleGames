@@ -60,6 +60,21 @@ export interface PatchClue {
   shape: PatchShape
 }
 
+export function clueIndexAt(clues: PatchClue[], cell: Coord): number {
+  return clues.findIndex((c) => c.cell.row === cell.row && c.cell.col === cell.col)
+}
+
+/** The rectangle spanning two opposite corners, clamped to the grid — used both to
+ *  commit a drag (patchesReducer.ts) and to render its live growing preview while
+ *  the drag is still in progress (PatchesBoard.tsx). */
+export function boundingRect(a: Coord, b: Coord, size: number): Rect {
+  const row = Math.max(0, Math.min(a.row, b.row))
+  const col = Math.max(0, Math.min(a.col, b.col))
+  const rowEnd = Math.min(size - 1, Math.max(a.row, b.row))
+  const colEnd = Math.min(size - 1, Math.max(a.col, b.col))
+  return { row, col, width: colEnd - col + 1, height: rowEnd - row + 1 }
+}
+
 export interface PatchesLevelRecord {
   id: string
   difficulty: Difficulty

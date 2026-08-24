@@ -26,29 +26,45 @@ import { countSolutions } from './solver.ts'
 
 const TARGET_RECT_COUNT: Record<Difficulty, number> = { easy: 9, medium: 11, hard: 9 }
 const PARTITION_RETRIES = 80
+/** No generated rectangle may have area smaller than this (no 1x1 patches). */
+const MIN_AREA = 2
+
+/** Smallest a piece may be along the axis being split, given the fixed size of the
+ *  OTHER axis — 1 is fine as long as the other axis is at least 2 (area = 1 *
+ *  otherDim >= MIN_AREA already), but if the other axis is also 1, this axis needs
+ *  to be at least MIN_AREA itself so the piece's own area clears the floor. */
+function minSegment(otherDim: number): number {
+  return otherDim >= MIN_AREA ? 1 : MIN_AREA
+}
+
+/** Inclusive [lo, hi] range of valid split offsets along `length` that leave both
+ *  resulting pieces at or above MIN_AREA area, or null if no such split exists. */
+function splitRange(length: number, otherDim: number): [number, number] | null {
+  const min = minSegment(otherDim)
+  const max = length - min
+  return min <= max ? [min, max] : null
+}
 
 export function generatePartition(size: number, targetCount: number, rng: Rng): Rect[] {
   let rects: Rect[] = [{ row: 0, col: 0, width: size, height: size }]
 
   while (rects.length < targetCount) {
-    const splittable = rects
-      .map((r, i) => ({ r, i }))
-      .filter(({ r }) => r.width > 1 || r.height > 1)
-    if (splittable.length === 0) break
+    const candidates = rects
+      .map((r, i) => ({ r, i, vRange: splitRange(r.width, r.height), hRange: splitRange(r.height, r.width) }))
+      .filter(({ vRange, hRange }) => vRange !== null || hRange !== null)
+    if (candidates.length === 0) break
 
-    const { r: target, i: idx } = splittable[Math.floor(rng() * splittable.length)]
-    const canVertical = target.width > 1
-    const canHorizontal = target.height > 1
-    const vertical = canVertical && (!canHorizontal || rng() < 0.5)
+    const { r: target, i: idx, vRange, hRange } = candidates[Math.floor(rng() * candidates.length)]
+    const vertical = vRange !== null && (hRange === null || rng() < 0.5)
+    const [lo, hi] = (vertical ? vRange : hRange)!
+    const splitAt = lo + Math.floor(rng() * (hi - lo + 1))
 
     let a: Rect
     let b: Rect
     if (vertical) {
-      const splitAt = 1 + Math.floor(rng() * (target.width - 1)) // 1..width-1
       a = { ...target, width: splitAt }
       b = { ...target, col: target.col + splitAt, width: target.width - splitAt }
     } else {
-      const splitAt = 1 + Math.floor(rng() * (target.height - 1))
       a = { ...target, height: splitAt }
       b = { ...target, row: target.row + splitAt, height: target.height - splitAt }
     }
