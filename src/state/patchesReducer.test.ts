@@ -31,12 +31,40 @@ describe('START_DRAG', () => {
     const state = fresh()
     const started = patchesReducer(state, { type: 'START_DRAG', row: 0, col: 0 })
     expect(started.dragAnchor).toEqual({ row: 0, col: 0 })
+    // dragEnd starts at the anchor itself — a 1-cell preview the instant the drag begins.
+    expect(started.dragEnd).toEqual({ row: 0, col: 0 })
   })
 
   it('refuses to start from a non-clue cell', () => {
     const state = fresh()
     const after = patchesReducer(state, { type: 'START_DRAG', row: 0, col: 1 })
     expect(after).toBe(state)
+  })
+})
+
+describe('DRAG_MOVE', () => {
+  it('updates dragEnd while a drag is in progress, for the live preview', () => {
+    let state = patchesReducer(fresh(), { type: 'START_DRAG', row: 0, col: 0 })
+    state = patchesReducer(state, { type: 'DRAG_MOVE', row: 0, col: 1 })
+    expect(state.dragEnd).toEqual({ row: 0, col: 1 })
+    expect(state.dragAnchor).toEqual({ row: 0, col: 0 }) // anchor is untouched
+  })
+
+  it('is a no-op with no drag in progress', () => {
+    const state = fresh()
+    const after = patchesReducer(state, { type: 'DRAG_MOVE', row: 0, col: 1 })
+    expect(after).toBe(state)
+  })
+})
+
+describe('CANCEL_DRAG', () => {
+  it('clears both dragAnchor and dragEnd without placing anything', () => {
+    let state = patchesReducer(fresh(), { type: 'START_DRAG', row: 0, col: 0 })
+    state = patchesReducer(state, { type: 'DRAG_MOVE', row: 0, col: 1 })
+    state = patchesReducer(state, { type: 'CANCEL_DRAG' })
+    expect(state.dragAnchor).toBeNull()
+    expect(state.dragEnd).toBeNull()
+    expect(state.placed).toEqual([])
   })
 })
 
@@ -47,6 +75,7 @@ describe('COMMIT_DRAG', () => {
       { rect: { row: 0, col: 0, width: 2, height: 1 }, clueIndex: 0, anchor: { row: 0, col: 0 } },
     ])
     expect(state.dragAnchor).toBeNull()
+    expect(state.dragEnd).toBeNull()
   })
 
   it('rejects a commit that would overlap an already-placed rectangle', () => {

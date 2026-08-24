@@ -2,9 +2,14 @@ import type { Coord, NonogramLevelRecord } from '../engine/nonogram/types'
 import { coordKey } from '../engine/nonogram/types'
 import { isSolved, wrongCells, type Mark } from '../engine/nonogram/validator'
 
+/** Which mark a tap/drag currently applies — swapped via a toolbar button (see
+ *  TOGGLE_MARK_MODE) rather than by cycling through both marks on every tap. */
+export type MarkMode = 'fill' | 'x'
+
 export interface NonogramState {
   level: NonogramLevelRecord
   grid: Mark[][]
+  markMode: MarkMode
   /** Full-grid snapshot stack for Undo — cheap at these grid sizes (<=100 cells). */
   history: Mark[][][]
   elapsedMs: number
@@ -22,6 +27,9 @@ export interface PersistedNonogramSnapshot {
 
 export type NonogramAction =
   | { type: 'CELL_CLICK'; row: number; col: number; now: number }
+  | { type: 'TOGGLE_MARK_MODE' }
+  | { type: 'BEGIN_DRAG_MARK' }
+  | { type: 'DRAG_MARK_CELL'; row: number; col: number; mode: 'add' | 'erase'; now: number }
   | { type: 'CLEAR'; now: number }
   | { type: 'UNDO' }
   | { type: 'PAUSE'; now: number }
@@ -41,10 +49,17 @@ function cloneGrid(grid: Mark[][]): Mark[][] {
   return grid.map((row) => row.slice())
 }
 
+/** The mark a tap/drag in the current mode targets — 'x' never appears here since it's
+ *  reached only via the mode toggle, not by cycling past 'filled' the way it used to. */
+function targetMark(mode: MarkMode): Mark {
+  return mode === 'fill' ? 'filled' : 'x'
+}
+
 export function createInitialState(level: NonogramLevelRecord): NonogramState {
   return {
     level,
     grid: emptyGrid(level.size),
+    markMode: 'fill',
     history: [],
     elapsedMs: 0,
     runStartedAt: null,
@@ -103,8 +118,39 @@ export function nonogramReducer(state: NonogramState, action: NonogramAction): N
       if (state.status === 'won') return state
       const grid = cloneGrid(state.grid)
       const mark = grid[action.row][action.col]
-      grid[action.row][action.col] = mark === 'empty' ? 'filled' : mark === 'filled' ? 'x' : 'empty'
+      const target = targetMark(state.markMode)
+      grid[action.row][action.col] = mark === target ? 'empty' : target
       return withWinCheck({ ...state, grid, history: pushHistory(state) }, action.now)
+    }
+
+    case 'TOGGLE_MARK_MODE': {
+      if (state.status === 'won') return state
+      return { ...state, markMode: state.markMode === 'fill' ? 'x' : 'fill' }
+    }
+
+    case 'BEGIN_DRAG_MARK': {
+      if (state.status === 'won') return state
+      // Pushes one snapshot for the whole upcoming drag stroke — every DRAG_MARK_CELL
+      // in that stroke mutates without pushing again, so a single Undo reverts it all.
+      return { ...state, history: pushHistory(state) }
+    }
+
+    case 'DRAG_MARK_CELL': {
+      if (state.status === 'won') return state
+      const target = targetMark(state.markMode)
+      const cell = state.grid[action.row][action.col]
+      if (action.mode === 'add' ? cell === target : cell !== target) return state // no-op: already painted / nothing to erase
+
+      // Single-cell structural-sharing update (unlike cloneGrid's full deep clone):
+      // only the touched row gets a new array — this action fires repeatedly within
+      // one fast drag gesture, so avoiding a full-grid re-render per step is what keeps
+      // a real finger swipe smooth on a 10x10 board (see Board.tsx's DRAG_MARK_CELL,
+      // the same trick for Queens).
+      const newRow = state.grid[action.row].slice()
+      newRow[action.col] = action.mode === 'add' ? target : 'empty'
+      const grid = state.grid.slice()
+      grid[action.row] = newRow
+      return withWinCheck({ ...state, grid }, action.now)
     }
 
     case 'CLEAR': {

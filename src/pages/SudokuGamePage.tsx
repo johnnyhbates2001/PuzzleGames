@@ -4,7 +4,7 @@ import { useAppNavigate as useNavigate } from '../hooks/useAppNavigate'
 import { SUDOKU_SIZE, type Difficulty, type SudokuLevelRecord } from '../engine/sudoku/types'
 import { getConflicts } from '../engine/sudoku/validator'
 import { createInitialState, getWrongCells, sudokuReducer } from '../state/sudokuReducer'
-import { boardValues } from '../state/sudokuTypes'
+import { boardValues, digitCounts } from '../state/sudokuTypes'
 import {
   getDailyChallenge,
   getSettings,
@@ -243,6 +243,7 @@ export default function SudokuGamePage() {
   }, [maybeTriggerRipple])
 
   const conflicts = useMemo(() => getConflicts(boardValues(state.board)), [state.board])
+  const placedCounts = useMemo(() => digitCounts(state.board), [state.board])
   const selectedValue = state.selected ? state.board[state.selected.row][state.selected.col].value || null : null
 
   if (!validDifficulty && !isDaily) {
@@ -285,6 +286,7 @@ export default function SudokuGamePage() {
             <SudokuKeypad
               selectedValue={selectedValue}
               noteMode={state.noteMode}
+              digitCounts={placedCounts}
               onDigit={handleDigit}
               onToggleNoteMode={handleToggleNoteMode}
             />

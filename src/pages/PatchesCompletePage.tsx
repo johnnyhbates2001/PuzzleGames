@@ -73,7 +73,10 @@ export default function PatchesCompletePage() {
           <PatchesBoard
             level={level}
             placed={placed}
+            dragAnchor={null}
+            dragEnd={null}
             onStartDrag={() => {}}
+            onDragMove={() => {}}
             onCommitDrag={() => {}}
             onCancelDrag={() => {}}
             onRemoveRect={() => {}}

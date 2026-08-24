@@ -165,6 +165,10 @@ export default function PatchesGamePage() {
     [playSound, buzz],
   )
 
+  const handleDragMove = useCallback((row: number, col: number) => {
+    dispatch({ type: 'DRAG_MOVE', row, col })
+  }, [])
+
   const handleCommitDrag = useCallback((row: number, col: number) => {
     dispatch({ type: 'COMMIT_DRAG', row, col, now: Date.now() })
   }, [])
@@ -229,7 +233,10 @@ export default function PatchesGamePage() {
           <PatchesBoard
             level={state.level}
             placed={state.placed}
+            dragAnchor={state.dragAnchor}
+            dragEnd={state.dragEnd}
             onStartDrag={handleStartDrag}
+            onDragMove={handleDragMove}
             onCommitDrag={handleCommitDrag}
             onCancelDrag={handleCancelDrag}
             onRemoveRect={handleRemoveRect}

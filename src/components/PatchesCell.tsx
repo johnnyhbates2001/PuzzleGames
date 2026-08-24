@@ -10,6 +10,11 @@ interface PatchesCellProps {
   /** Ms to delay the fill-in animation by — set only for the most-recently-placed
    *  rect's cells, proportional to distance from the drag anchor (see PatchesBoard.tsx). */
   fillDelayMs?: number
+  /** Set only while this cell falls inside an in-progress drag's live preview
+   *  rectangle — the clue's own color while the placement is valid, or a danger tint
+   *  once it would overlap something. Renders as a translucent overlay so an
+   *  already-filled cell underneath (an invalid overlap) still shows through. */
+  previewColor?: string | null
   mismatched: boolean
   borderRight: boolean
   borderBottom: boolean
@@ -31,6 +36,7 @@ function PatchesCellImpl({
   clueShape,
   fillColor,
   fillDelayMs,
+  previewColor,
   mismatched,
   borderRight,
   borderBottom,
@@ -60,6 +66,9 @@ function PatchesCellImpl({
           className="anim-patch-fill pointer-events-none absolute inset-0"
           style={{ backgroundColor: fillColor, animationDelay: fillDelayMs ? `${fillDelayMs}ms` : undefined }}
         />
+      )}
+      {previewColor && (
+        <span className="pointer-events-none absolute inset-0 opacity-55" style={{ backgroundColor: previewColor }} />
       )}
       {mismatched && <span className="pointer-events-none absolute inset-0 rounded-[2px] ring-[2.5px] ring-inset ring-danger" />}
       {clueArea !== null && clueShape !== null && (

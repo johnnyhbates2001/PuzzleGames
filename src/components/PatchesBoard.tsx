@@ -1,13 +1,21 @@
 import { useRef } from 'react'
-import type { PatchesLevelRecord } from '../engine/patches/types'
-import { isMismatched, placedRectAt, type PlacedRect } from '../engine/patches/validator'
+import { boundingRect, clueIndexAt, rectContains, type Coord, type PatchesLevelRecord } from '../engine/patches/types'
+import { isMismatched, isRectFree, placedRectAt, type PlacedRect } from '../engine/patches/validator'
 import { PatchesCell } from './PatchesCell'
 import { useRegionColors } from '../hooks/useSkin'
 
 interface PatchesBoardProps {
   level: PatchesLevelRecord
   placed: PlacedRect[]
+  /** Drag state, lifted up to the reducer (see patchesReducer.ts) rather than kept
+   *  locally — dragEnd needs to survive re-renders driven by DRAG_MOVE dispatches so
+   *  the growing-rectangle preview below stays in sync with game state. */
+  dragAnchor: Coord | null
+  dragEnd: Coord | null
   onStartDrag: (row: number, col: number) => void
+  /** Fired for every new cell a drag stroke enters, so the preview rectangle can grow
+   *  live instead of only appearing once the drag commits. */
+  onDragMove: (row: number, col: number) => void
   onCommitDrag: (row: number, col: number) => void
   onCancelDrag: () => void
   onRemoveRect: (row: number, col: number) => void
@@ -19,6 +27,10 @@ interface PatchesBoardProps {
 }
 
 const SWEEP_STEP_MS = 42
+/** Sentinel "region id" for a cell inside the live drag preview, for border-drawing
+ *  purposes only — distinct from every real placed-rect index (>=0), from -1 (empty),
+ *  and from -2 (used below to force a border at the grid's outer edge). */
+const PREVIEW_REGION = -3
 
 function cellFromPoint(clientX: number, clientY: number): { row: number; col: number } | null {
   const el = document.elementFromPoint(clientX, clientY)
@@ -27,10 +39,23 @@ function cellFromPoint(clientX: number, clientY: number): { row: number; col: nu
   return { row: Number(button.dataset.row), col: Number(button.dataset.col) }
 }
 
-export function PatchesBoard({ level, placed, onStartDrag, onCommitDrag, onCancelDrag, onRemoveRect, solved, className }: PatchesBoardProps) {
+export function PatchesBoard({
+  level,
+  placed,
+  dragAnchor,
+  dragEnd,
+  onStartDrag,
+  onDragMove,
+  onCommitDrag,
+  onCancelDrag,
+  onRemoveRect,
+  solved,
+  className,
+}: PatchesBoardProps) {
   const regionColors = useRegionColors()
   const draggingRef = useRef(false)
   const pointerIdRef = useRef<number | null>(null)
+  const lastMoveKeyRef = useRef<string | null>(null)
 
   function handlePointerDown(e: React.PointerEvent<HTMLDivElement>) {
     if (e.pointerType === 'mouse' && e.button !== 0) return
@@ -48,14 +73,26 @@ export function PatchesBoard({ level, placed, onStartDrag, onCommitDrag, onCance
 
     draggingRef.current = true
     pointerIdRef.current = e.pointerId
+    lastMoveKeyRef.current = `${coord.row},${coord.col}`
     e.currentTarget.setPointerCapture(e.pointerId)
     onStartDrag(coord.row, coord.col)
+  }
+
+  function handlePointerMove(e: React.PointerEvent<HTMLDivElement>) {
+    if (!draggingRef.current) return
+    const coord = cellFromPoint(e.clientX, e.clientY)
+    if (!coord) return
+    const key = `${coord.row},${coord.col}`
+    if (key === lastMoveKeyRef.current) return
+    lastMoveKeyRef.current = key
+    onDragMove(coord.row, coord.col)
   }
 
   function handlePointerUp(e: React.PointerEvent<HTMLDivElement>) {
     if (!draggingRef.current) return
     draggingRef.current = false
     pointerIdRef.current = null
+    lastMoveKeyRef.current = null
     const coord = cellFromPoint(e.clientX, e.clientY)
     if (coord) onCommitDrag(coord.row, coord.col)
     else onCancelDrag()
@@ -65,6 +102,7 @@ export function PatchesBoard({ level, placed, onStartDrag, onCommitDrag, onCance
     if (!draggingRef.current) return
     draggingRef.current = false
     pointerIdRef.current = null
+    lastMoveKeyRef.current = null
     onCancelDrag()
   }
 
@@ -75,6 +113,20 @@ export function PatchesBoard({ level, placed, onStartDrag, onCommitDrag, onCance
     }
   })
 
+  // Live preview: the rectangle the current drag would commit if released right now —
+  // grown from the anchor clue to wherever the pointer currently is (dragEnd), tinted
+  // danger-red instead of the clue's own color whenever that placement is actually
+  // impossible (overlaps something), so the player sees it's invalid before releasing.
+  const previewClueIndex = dragAnchor ? clueIndexAt(level.clues, dragAnchor) : -1
+  const previewRect = dragAnchor && dragEnd && previewClueIndex !== -1 ? boundingRect(dragAnchor, dragEnd, level.size) : null
+  const previewValid = previewRect ? isRectFree(placed, level.clues, previewRect, previewClueIndex) : false
+  const previewColor = previewValid ? regionColors[previewClueIndex % regionColors.length] : 'var(--color-danger)'
+
+  function regionAt(r: number, c: number): number {
+    if (previewRect && rectContains(previewRect, { row: r, col: c })) return PREVIEW_REGION
+    return coveredBy[r][c]
+  }
+
   // Only the most-recently-placed rect gets a fill-in stagger — older rects are
   // already-settled state, not a fresh appearance.
   const lastIdx = placed.length - 1
@@ -84,9 +136,10 @@ export function PatchesBoard({ level, placed, onStartDrag, onCommitDrag, onCance
   for (let r = 0; r < level.size; r++) {
     for (let c = 0; c < level.size; c++) {
       const placedIdx = coveredBy[r][c]
+      const regionIdx = regionAt(r, c)
       const clue = level.clues.find((cl) => cl.cell.row === r && cl.cell.col === c) ?? null
-      const rightIdx = c < level.size - 1 ? coveredBy[r][c + 1] : -2
-      const bottomIdx = r < level.size - 1 ? coveredBy[r + 1][c] : -2
+      const rightIdx = c < level.size - 1 ? regionAt(r, c + 1) : -2
+      const bottomIdx = r < level.size - 1 ? regionAt(r + 1, c) : -2
       const fillDelayMs =
         placedIdx === lastIdx && lastAnchor ? (Math.abs(r - lastAnchor.row) + Math.abs(c - lastAnchor.col)) * 25 : undefined
 
@@ -99,9 +152,10 @@ export function PatchesBoard({ level, placed, onStartDrag, onCommitDrag, onCance
           clueShape={clue?.shape ?? null}
           fillColor={placedIdx === -1 ? null : regionColors[placed[placedIdx].clueIndex % regionColors.length]}
           fillDelayMs={fillDelayMs}
+          previewColor={regionIdx === PREVIEW_REGION ? previewColor : null}
           mismatched={placedIdx !== -1 && isMismatched(placed[placedIdx].rect, level.clues[placed[placedIdx].clueIndex])}
-          borderRight={placedIdx !== rightIdx}
-          borderBottom={placedIdx !== bottomIdx}
+          borderRight={regionIdx !== rightIdx}
+          borderBottom={regionIdx !== bottomIdx}
           sweepDelayMs={solved ? (r + c) * SWEEP_STEP_MS : undefined}
         />,
       )
@@ -113,6 +167,7 @@ export function PatchesBoard({ level, placed, onStartDrag, onCommitDrag, onCance
       className={`mx-auto grid w-full touch-none overflow-hidden rounded-[20px] border-2 border-grid-line-strong ${className ?? ''}`}
       style={{ gridTemplateColumns: `repeat(${level.size}, minmax(0, 1fr))` }}
       onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
       onPointerCancel={handlePointerCancel}
     >

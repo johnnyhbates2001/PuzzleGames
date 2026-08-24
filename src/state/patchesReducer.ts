@@ -1,10 +1,15 @@
-import { rectCells, type Coord, type PatchesLevelRecord, type Rect } from '../engine/patches/types'
+import { boundingRect, clueIndexAt, rectCells, type Coord, type PatchesLevelRecord } from '../engine/patches/types'
 import { isMismatched, isRectFree, isSolved, placedRectAt, type PlacedRect } from '../engine/patches/validator'
 
 export interface PatchesGameState {
   level: PatchesLevelRecord
   placed: PlacedRect[]
   dragAnchor: Coord | null
+  /** Current pointer cell while a drag is in progress — null whenever dragAnchor is,
+   *  and always updated together with it (see START_DRAG/DRAG_MOVE/COMMIT_DRAG/
+   *  CANCEL_DRAG) — lets PatchesBoard render the rectangle growing live instead of
+   *  only appearing once the drag commits. */
+  dragEnd: Coord | null
   elapsedMs: number
   runStartedAt: number | null
   status: 'playing' | 'won'
@@ -20,6 +25,7 @@ export interface PersistedPatchesSnapshot {
 
 export type PatchesAction =
   | { type: 'START_DRAG'; row: number; col: number }
+  | { type: 'DRAG_MOVE'; row: number; col: number }
   | { type: 'COMMIT_DRAG'; row: number; col: number; now: number }
   | { type: 'CANCEL_DRAG' }
   | { type: 'REMOVE_RECT'; row: number; col: number }
@@ -36,6 +42,7 @@ export function createInitialState(level: PatchesLevelRecord): PatchesGameState 
     level,
     placed: [],
     dragAnchor: null,
+    dragEnd: null,
     elapsedMs: 0,
     runStartedAt: null,
     status: 'playing',
@@ -45,10 +52,6 @@ export function createInitialState(level: PatchesLevelRecord): PatchesGameState 
 
 function coordKey(c: Coord): string {
   return `${c.row},${c.col}`
-}
-
-function clueIndexAt(level: PatchesLevelRecord, cell: Coord): number {
-  return level.clues.findIndex((c) => c.cell.row === cell.row && c.cell.col === cell.col)
 }
 
 /** Non-mutating "check my work": coordKeys of every cell in a placed rectangle whose
@@ -67,14 +70,6 @@ function isCovered(placed: PlacedRect[], cell: Coord): boolean {
   return placedRectAt(placed, cell) !== -1
 }
 
-function boundingRect(a: Coord, b: Coord, size: number): Rect {
-  const row = Math.max(0, Math.min(a.row, b.row))
-  const col = Math.max(0, Math.min(a.col, b.col))
-  const rowEnd = Math.min(size - 1, Math.max(a.row, b.row))
-  const colEnd = Math.min(size - 1, Math.max(a.col, b.col))
-  return { row, col, width: colEnd - col + 1, height: rowEnd - row + 1 }
-}
-
 function withWinCheck(state: PatchesGameState, now: number): PatchesGameState {
   if (!isSolved(state.level.size, state.level.clues, state.placed)) return state
   const elapsedMs = state.runStartedAt !== null ? state.elapsedMs + (now - state.runStartedAt) : state.elapsedMs
@@ -86,24 +81,29 @@ export function patchesReducer(state: PatchesGameState, action: PatchesAction): 
     case 'START_DRAG': {
       if (state.status === 'won') return state
       const cell = { row: action.row, col: action.col }
-      if (clueIndexAt(state.level, cell) === -1) return state // rectangles must start from a clue
+      if (clueIndexAt(state.level.clues, cell) === -1) return state // rectangles must start from a clue
       if (isCovered(state.placed, cell)) return state // that clue already has a rectangle
-      return { ...state, dragAnchor: cell }
+      return { ...state, dragAnchor: cell, dragEnd: cell }
+    }
+
+    case 'DRAG_MOVE': {
+      if (state.status === 'won' || !state.dragAnchor) return state
+      return { ...state, dragEnd: { row: action.row, col: action.col } }
     }
 
     case 'COMMIT_DRAG': {
       if (state.status === 'won' || !state.dragAnchor) return state
-      const clueIndex = clueIndexAt(state.level, state.dragAnchor)
+      const clueIndex = clueIndexAt(state.level.clues, state.dragAnchor)
       const rect = boundingRect(state.dragAnchor, { row: action.row, col: action.col }, state.level.size)
-      if (!isRectFree(state.placed, state.level.clues, rect, clueIndex)) return { ...state, dragAnchor: null }
+      if (!isRectFree(state.placed, state.level.clues, rect, clueIndex)) return { ...state, dragAnchor: null, dragEnd: null }
 
       const placed = [...state.placed, { rect, clueIndex, anchor: state.dragAnchor }]
-      return withWinCheck({ ...state, placed, dragAnchor: null }, action.now)
+      return withWinCheck({ ...state, placed, dragAnchor: null, dragEnd: null }, action.now)
     }
 
     case 'CANCEL_DRAG': {
       if (!state.dragAnchor) return state
-      return { ...state, dragAnchor: null }
+      return { ...state, dragAnchor: null, dragEnd: null }
     }
 
     case 'REMOVE_RECT': {
@@ -120,7 +120,7 @@ export function patchesReducer(state: PatchesGameState, action: PatchesAction): 
 
     case 'CLEAR': {
       if (state.status === 'won' || state.placed.length === 0) return state
-      return { ...state, placed: [], dragAnchor: null }
+      return { ...state, placed: [], dragAnchor: null, dragEnd: null }
     }
 
     case 'PAUSE': {
