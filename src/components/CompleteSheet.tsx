@@ -1,8 +1,9 @@
 import type { ReactNode } from 'react'
-import { Link } from 'react-router-dom'
+import { AppLink as Link } from './AppLink'
 import { useEffect } from 'react'
 import { formatElapsed } from './Timer'
 import { useAudio } from '../hooks/useAudio'
+import { Confetti } from './Confetti'
 
 interface CompleteSheetProps {
   /** The blurred, absolutely-positioned board preview — differs per game (Board /
@@ -52,10 +53,14 @@ export function CompleteSheet({
   return (
     <>
       {boardPreview}
+      <Confetti />
       <div className="absolute inset-0 bg-ink/32" />
 
-      <div className="absolute inset-x-4 bottom-0 mx-auto flex max-w-lg flex-col items-center gap-4 rounded-t-[32px] bg-surface p-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] text-center shadow-card">
-        <span className="absolute -top-8 flex size-16 items-center justify-center rounded-full border-4 border-surface bg-accent text-2xl font-bold text-white">
+      <div className="anim-sheet-up absolute inset-x-4 bottom-0 mx-auto flex max-w-lg flex-col items-center gap-4 rounded-t-[32px] bg-surface p-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] text-center shadow-card">
+        <span
+          className="anim-pop-in absolute -top-8 flex size-16 items-center justify-center rounded-full border-4 border-surface bg-accent text-2xl font-bold text-white"
+          style={{ animationDelay: '80ms', animationFillMode: 'both' }}
+        >
           ✓
         </span>
 

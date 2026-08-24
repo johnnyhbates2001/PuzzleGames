@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom'
+import { AppLink as Link } from './AppLink'
 
 const TABS = [
   { key: 'play', label: 'Play', icon: '▦', to: '/' },
@@ -15,7 +15,7 @@ interface TabBarProps {
  *  not during the Difficulty/Game/Complete push-navigation flow, matching the design. */
 export function TabBar({ active }: TabBarProps) {
   return (
-    <div className="mt-auto flex shrink-0 rounded-full bg-surface p-1.5 shadow-card">
+    <div className="fixed inset-x-4 bottom-[max(1rem,env(safe-area-inset-bottom))] z-40 mx-auto flex max-w-lg shrink-0 rounded-full bg-surface p-1.5 shadow-card">
       {TABS.map((tab) => (
         <Link
           key={tab.key}

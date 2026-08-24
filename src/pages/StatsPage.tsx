@@ -71,7 +71,7 @@ export default function StatsPage() {
   return (
     <main
       data-force-theme="dark"
-      className="mx-auto flex min-h-svh max-w-lg flex-col gap-4 bg-bg px-4 py-[max(2rem,env(safe-area-inset-top))] pb-[max(1.25rem,env(safe-area-inset-bottom))] text-ink"
+      className="mx-auto flex min-h-svh max-w-lg flex-col gap-4 bg-bg px-4 py-[max(2rem,env(safe-area-inset-top))] pb-[max(5.5rem,calc(env(safe-area-inset-bottom)+4.5rem))] text-ink"
     >
       <h1 className="font-display text-[30px] font-extrabold tracking-tight">Stats</h1>
 

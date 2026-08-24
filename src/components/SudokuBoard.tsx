@@ -2,20 +2,32 @@ import type { SudokuCellState } from '../state/sudokuTypes'
 import { boxIndex } from '../engine/sudoku/types'
 import { SudokuCell } from './SudokuCell'
 
+interface RippleOrigin {
+  row: number
+  col: number
+  seq: number
+}
+
 interface SudokuBoardProps {
   board: SudokuCellState[][]
   selected: { row: number; col: number } | null
   conflicts: Set<string>
+  /** The cell a digit was just placed in, plus a sequence number — purely cosmetic,
+   *  drives a brief outward pulse across its row/col/box peers (see SudokuGamePage).
+   *  Distinct from `selected`, which persists across renders and shouldn't re-pulse. */
+  ripple: RippleOrigin | null
   onCellClick: (row: number, col: number) => void
   className?: string
 }
 
-function isPeer(row: number, col: number, selected: { row: number; col: number }): boolean {
-  if (row === selected.row && col === selected.col) return false
-  return row === selected.row || col === selected.col || boxIndex(row, col) === boxIndex(selected.row, selected.col)
+function isPeer(row: number, col: number, origin: { row: number; col: number }): boolean {
+  if (row === origin.row && col === origin.col) return false
+  return row === origin.row || col === origin.col || boxIndex(row, col) === boxIndex(origin.row, origin.col)
 }
 
-export function SudokuBoard({ board, selected, conflicts, onCellClick, className }: SudokuBoardProps) {
+const RIPPLE_STEP_MS = 25
+
+export function SudokuBoard({ board, selected, conflicts, ripple, onCellClick, className }: SudokuBoardProps) {
   const selectedValue = selected ? board[selected.row][selected.col].value : 0
 
   return (
@@ -35,6 +47,8 @@ export function SudokuBoard({ board, selected, conflicts, onCellClick, className
             peer={selected !== null && isPeer(r, c, selected)}
             sameValue={selectedValue !== 0 && cell.value === selectedValue && !(selected!.row === r && selected!.col === c)}
             conflict={cell.value !== 0 && conflicts.has(`${r},${c}`)}
+            rippleDelayMs={ripple && isPeer(r, c, ripple) ? (Math.abs(r - ripple.row) + Math.abs(c - ripple.col)) * RIPPLE_STEP_MS : undefined}
+            rippleSeq={ripple?.seq}
             onClick={onCellClick}
           />
         )),

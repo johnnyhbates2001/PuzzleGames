@@ -43,7 +43,9 @@ describe('START_DRAG', () => {
 describe('COMMIT_DRAG', () => {
   it('places a rectangle spanning the anchor to the release cell', () => {
     const state = drag(fresh(), [0, 0], [0, 1])
-    expect(state.placed).toEqual([{ rect: { row: 0, col: 0, width: 2, height: 1 }, clueIndex: 0 }])
+    expect(state.placed).toEqual([
+      { rect: { row: 0, col: 0, width: 2, height: 1 }, clueIndex: 0, anchor: { row: 0, col: 0 } },
+    ])
     expect(state.dragAnchor).toBeNull()
   })
 
@@ -123,15 +125,15 @@ describe('HINT_REVEAL_CLUE', () => {
   it("places the first unplaced clue's solution rectangle and increments hintsUsed", () => {
     const state = patchesReducer(fresh(), { type: 'HINT_REVEAL_CLUE', now: 0 })
     expect(state.hintsUsed).toBe(1)
-    expect(state.placed).toEqual([{ rect: LEVEL.solution[0], clueIndex: 0 }])
+    expect(state.placed).toEqual([{ rect: LEVEL.solution[0], clueIndex: 0, anchor: LEVEL.clues[0].cell }])
   })
 
   it('skips clues that are already placed', () => {
     let state = drag(fresh(), [0, 0], [0, 1]) // clue 0 already placed
     state = patchesReducer(state, { type: 'HINT_REVEAL_CLUE', now: 0 })
     expect(state.placed).toEqual([
-      { rect: { row: 0, col: 0, width: 2, height: 1 }, clueIndex: 0 },
-      { rect: LEVEL.solution[1], clueIndex: 1 },
+      { rect: { row: 0, col: 0, width: 2, height: 1 }, clueIndex: 0, anchor: { row: 0, col: 0 } },
+      { rect: LEVEL.solution[1], clueIndex: 1, anchor: LEVEL.clues[1].cell },
     ])
   })
 

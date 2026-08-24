@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
-import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
+import { useLocation, useParams } from 'react-router-dom'
+import { AppLink as Link } from '../components/AppLink'
+import { useAppNavigate as useNavigate } from '../hooks/useAppNavigate'
 import type { Difficulty, LevelRecord } from '../engine/types'
 import type { CellState } from '../state/types'
 import { averageTimeMs, getProgress } from '../storage/db'

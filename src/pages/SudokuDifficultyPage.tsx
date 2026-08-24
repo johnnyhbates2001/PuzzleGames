@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { AppLink as Link } from '../components/AppLink'
 import type { Difficulty } from '../engine/sudoku/types'
 import { averageTimeMs, getSudokuProgress, type DifficultyProgress } from '../storage/db'
 import { formatElapsed } from '../components/Timer'

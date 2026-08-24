@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
-import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
+import { useLocation, useParams } from 'react-router-dom'
+import { AppLink as Link } from '../components/AppLink'
+import { useAppNavigate as useNavigate } from '../hooks/useAppNavigate'
 import type { Coord, Difficulty, ZipLevelRecord } from '../engine/zip/types'
 import { averageTimeMs, getZipProgress } from '../storage/db'
 import { ZipBoard } from '../components/ZipBoard'
@@ -71,6 +73,8 @@ export default function ZipCompletePage() {
             level={level}
             path={path}
             onCellEnter={() => {}}
+            rejectedCell={null}
+            onRejectedShakeEnd={() => {}}
             className="pointer-events-none absolute inset-x-4 top-[max(1.5rem,env(safe-area-inset-top))] max-w-lg opacity-65 blur-[3px] sm:mx-auto sm:inset-x-0"
           />
         }

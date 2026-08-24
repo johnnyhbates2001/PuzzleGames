@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react'
-import { useLocation, useNavigate, useParams } from 'react-router-dom'
+import { useLocation, useParams } from 'react-router-dom'
+import { useAppNavigate as useNavigate } from '../hooks/useAppNavigate'
 import type { Difficulty, PatchesLevelRecord } from '../engine/patches/types'
 import { createInitialState, getWrongCells, patchesReducer } from '../state/patchesReducer'
 import {

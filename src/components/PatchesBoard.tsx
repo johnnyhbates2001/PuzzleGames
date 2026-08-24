@@ -69,6 +69,11 @@ export function PatchesBoard({ level, placed, onStartDrag, onCommitDrag, onCance
     }
   })
 
+  // Only the most-recently-placed rect gets a fill-in stagger — older rects are
+  // already-settled state, not a fresh appearance.
+  const lastIdx = placed.length - 1
+  const lastAnchor = lastIdx >= 0 ? placed[lastIdx].anchor : undefined
+
   const cells = []
   for (let r = 0; r < level.size; r++) {
     for (let c = 0; c < level.size; c++) {
@@ -76,6 +81,8 @@ export function PatchesBoard({ level, placed, onStartDrag, onCommitDrag, onCance
       const clue = level.clues.find((cl) => cl.cell.row === r && cl.cell.col === c) ?? null
       const rightIdx = c < level.size - 1 ? coveredBy[r][c + 1] : -2
       const bottomIdx = r < level.size - 1 ? coveredBy[r + 1][c] : -2
+      const fillDelayMs =
+        placedIdx === lastIdx && lastAnchor ? (Math.abs(r - lastAnchor.row) + Math.abs(c - lastAnchor.col)) * 25 : undefined
 
       cells.push(
         <PatchesCell
@@ -85,6 +92,7 @@ export function PatchesBoard({ level, placed, onStartDrag, onCommitDrag, onCance
           clueArea={clue?.area ?? null}
           clueShape={clue?.shape ?? null}
           fillColor={placedIdx === -1 ? null : regionColors[placed[placedIdx].clueIndex % regionColors.length]}
+          fillDelayMs={fillDelayMs}
           mismatched={placedIdx !== -1 && isMismatched(placed[placedIdx].rect, level.clues[placed[placedIdx].clueIndex])}
           borderRight={placedIdx !== rightIdx}
           borderBottom={placedIdx !== bottomIdx}

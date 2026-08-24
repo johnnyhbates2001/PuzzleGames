@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useAppNavigate as useNavigate } from '../hooks/useAppNavigate'
 import { Timer } from './Timer'
 import { CoinBalance } from './CoinBalance'
 

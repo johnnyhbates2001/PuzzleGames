@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { AppLink as Link } from '../components/AppLink'
 import { DIFFICULTY_SIZE, type Difficulty } from '../engine/types'
 import { averageTimeMs, getProgress, type DifficultyProgress } from '../storage/db'
 import { formatElapsed } from '../components/Timer'

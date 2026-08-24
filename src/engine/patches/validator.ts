@@ -3,6 +3,11 @@ import { rectCells, rectContains, shapeOf, type Coord, type PatchClue, type Rect
 export interface PlacedRect {
   rect: Rect
   clueIndex: number
+  /** The clue cell the drag started from (or, for a hint-revealed rect, the clue
+   *  cell itself) — used only to drive the fill-in animation's stagger (Manhattan
+   *  distance from here). Optional: rects persisted before this field existed
+   *  won't have it, and simply render with no stagger. */
+  anchor?: Coord
 }
 
 /** Whether `rect` (attributed to `ownerClueIndex`) can be committed: it must not

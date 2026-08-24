@@ -22,10 +22,14 @@ interface CellProps {
   cell: CellState
   regionColor: string
   conflict: boolean
+  /** Ms to delay the auto-X's entrance animation by — set only for auto-X'd cells,
+   *  proportional to distance from the queen that ruled them out (see Board.tsx),
+   *  so the X's visibly propagate outward instead of all appearing at once. */
+  autoXDelayMs?: number
   onClick: (row: number, col: number) => void
 }
 
-function CellImpl({ row, col, cell, regionColor, conflict, onClick }: CellProps) {
+function CellImpl({ row, col, cell, regionColor, conflict, autoXDelayMs, onClick }: CellProps) {
   return (
     <button
       type="button"
@@ -41,7 +45,12 @@ function CellImpl({ row, col, cell, regionColor, conflict, onClick }: CellProps)
       {cell.queen ? (
         <span className={`anim-pop-in ${conflict ? 'text-danger' : 'text-slate-900'}`}>♛</span>
       ) : hasX(cell) ? (
-        <span className="text-slate-900/40">✕</span>
+        <span
+          className="anim-x-in text-slate-900/40"
+          style={autoXDelayMs ? { animationDelay: `${autoXDelayMs}ms` } : undefined}
+        >
+          ✕
+        </span>
       ) : null}
     </button>
   )

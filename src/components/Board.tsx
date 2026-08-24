@@ -25,6 +25,24 @@ interface Coord {
   col: number
 }
 
+const AUTO_X_STEP_MS = 20
+
+/** Delay (ms) for an auto-X'd cell's entrance animation: the Chebyshev distance
+ *  (a queen's reach — same row/col/diagonal count as 1 step) from the *nearest*
+ *  queen that ruled it out, so cells further from the queen animate in later and
+ *  the X's read as propagating outward rather than all appearing at once. Cells
+ *  ruled out by multiple queens use whichever queen is closest. */
+function autoXDelayMs(row: number, col: number, cell: CellState): number | undefined {
+  if (cell.queen || cell.autoXSources.size === 0) return undefined
+  let nearest = Infinity
+  for (const sourceId of cell.autoXSources) {
+    const [qr, qc] = sourceId.split(',').map(Number)
+    const distance = Math.max(Math.abs(row - qr), Math.abs(col - qc))
+    if (distance < nearest) nearest = distance
+  }
+  return nearest * AUTO_X_STEP_MS
+}
+
 function cellFromPoint(clientX: number, clientY: number): Coord | null {
   const el = document.elementFromPoint(clientX, clientY)
   const button = el?.closest('button[data-row]') as HTMLElement | null
@@ -120,6 +138,7 @@ export function Board({ level, board, conflicts, onCellClick, onDragStart, onCel
             cell={cell}
             regionColor={regionColors[level.regions[r][c] % regionColors.length]}
             conflict={cell.queen && conflicts.has(coordKey({ row: r, col: c }))}
+            autoXDelayMs={autoXDelayMs(r, c, cell)}
             onClick={onCellClick}
           />
         )),

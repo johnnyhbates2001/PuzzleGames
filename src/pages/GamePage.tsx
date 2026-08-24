@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
-import { useLocation, useNavigate, useParams } from 'react-router-dom'
+import { useLocation, useParams } from 'react-router-dom'
+import { useAppNavigate as useNavigate } from '../hooks/useAppNavigate'
 import type { Coord, Difficulty, LevelRecord } from '../engine/types'
 import { getConflicts } from '../engine/validator'
 import { createInitialState, gameReducer, getWrongQueens } from '../state/gameReducer'

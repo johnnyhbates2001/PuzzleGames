@@ -97,7 +97,7 @@ export function patchesReducer(state: PatchesGameState, action: PatchesAction): 
       const rect = boundingRect(state.dragAnchor, { row: action.row, col: action.col }, state.level.size)
       if (!isRectFree(state.placed, state.level.clues, rect, clueIndex)) return { ...state, dragAnchor: null }
 
-      const placed = [...state.placed, { rect, clueIndex }]
+      const placed = [...state.placed, { rect, clueIndex, anchor: state.dragAnchor }]
       return withWinCheck({ ...state, placed, dragAnchor: null }, action.now)
     }
 
@@ -138,7 +138,10 @@ export function patchesReducer(state: PatchesGameState, action: PatchesAction): 
       const placedClueIndices = new Set(state.placed.map((p) => p.clueIndex))
       const clueIndex = state.level.clues.findIndex((_, i) => !placedClueIndices.has(i))
       if (clueIndex === -1) return state
-      const placed = [...state.placed, { rect: state.level.solution[clueIndex], clueIndex }]
+      const placed = [
+        ...state.placed,
+        { rect: state.level.solution[clueIndex], clueIndex, anchor: state.level.clues[clueIndex].cell },
+      ]
       return withWinCheck({ ...state, placed, hintsUsed: state.hintsUsed + 1 }, action.now)
     }
 

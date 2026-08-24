@@ -10,6 +10,12 @@ interface SudokuCellProps {
   peer: boolean
   sameValue: boolean
   conflict: boolean
+  /** Ms to delay the cosmetic peer-ripple overlay by, set only when this cell is a
+   *  peer of the just-placed digit (see SudokuBoard.tsx). */
+  rippleDelayMs?: number
+  /** Bumped on every placement — forced into the overlay's `key` so it remounts
+   *  (and replays) even when a repeated placement computes the same delay. */
+  rippleSeq?: number
   onClick: (row: number, col: number) => void
 }
 
@@ -27,7 +33,20 @@ function backgroundClass(selected: boolean, sameValue: boolean, peer: boolean): 
   return 'bg-surface'
 }
 
-function SudokuCellImpl({ row, col, value, given, notes, selected, peer, sameValue, conflict, onClick }: SudokuCellProps) {
+function SudokuCellImpl({
+  row,
+  col,
+  value,
+  given,
+  notes,
+  selected,
+  peer,
+  sameValue,
+  conflict,
+  rippleDelayMs,
+  rippleSeq,
+  onClick,
+}: SudokuCellProps) {
   return (
     <button
       type="button"
@@ -37,6 +56,13 @@ function SudokuCellImpl({ row, col, value, given, notes, selected, peer, sameVal
       aria-label={value === 0 ? 'Empty' : String(value)}
       className={`relative flex aspect-square items-center justify-center text-[min(4.5vw,20px)] leading-none select-none ${borderClasses(row, col)} ${backgroundClass(selected, sameValue, peer)} ${conflict ? 'anim-shake ring-[2.5px] ring-inset ring-danger' : ''}`}
     >
+      {rippleDelayMs !== undefined && (
+        <span
+          key={rippleSeq}
+          className="anim-ripple pointer-events-none absolute inset-0 rounded-[3px] bg-accent/25"
+          style={{ animationDelay: `${rippleDelayMs}ms` }}
+        />
+      )}
       {value !== 0 ? (
         <span
           className={`${given ? '' : 'anim-pop-in'} ${given ? 'font-bold text-ink' : conflict ? 'font-semibold text-danger' : 'font-semibold text-accent'}`}

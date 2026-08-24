@@ -6,6 +6,10 @@ interface ZipBoardProps {
   level: ZipLevelRecord
   path: Coord[]
   onCellEnter: (row: number, col: number) => void
+  /** The cell an illegal move was just attempted on, if any — drives a one-shot shake. */
+  rejectedCell: Coord | null
+  /** Fired once the shake animation finishes, so the caller can clear rejectedCell. */
+  onRejectedShakeEnd: () => void
   className?: string
 }
 
@@ -16,7 +20,7 @@ function cellFromPoint(clientX: number, clientY: number): { row: number; col: nu
   return { row: Number(button.dataset.row), col: Number(button.dataset.col) }
 }
 
-export function ZipBoard({ level, path, onCellEnter, className }: ZipBoardProps) {
+export function ZipBoard({ level, path, onCellEnter, rejectedCell, onRejectedShakeEnd, className }: ZipBoardProps) {
   // Every cell the pointer passes over (starting with the initial press) is routed
   // through the same onCellEnter call — unlike Board.tsx's Queens gesture, there's no
   // tap-vs-drag mode ambiguity to resolve here: a plain tap and a drag stroke mean the
@@ -80,6 +84,8 @@ export function ZipBoard({ level, path, onCellEnter, className }: ZipBoardProps)
           connRight={touches(prev, r, c + 1) || touches(next, r, c + 1)}
           wallRight={c < level.size - 1 && wallSet.has(edgeKey({ row: r, col: c }, { row: r, col: c + 1 }))}
           wallBottom={r < level.size - 1 && wallSet.has(edgeKey({ row: r, col: c }, { row: r + 1, col: c }))}
+          shake={rejectedCell?.row === r && rejectedCell?.col === c}
+          onShakeEnd={onRejectedShakeEnd}
         />,
       )
     }

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
-import { useLocation, useNavigate, useParams } from 'react-router-dom'
+import { useLocation, useParams } from 'react-router-dom'
+import { useAppNavigate as useNavigate } from '../hooks/useAppNavigate'
 import { SUDOKU_SIZE, type Difficulty, type SudokuLevelRecord } from '../engine/sudoku/types'
 import { getConflicts } from '../engine/sudoku/validator'
 import { createInitialState, getWrongCells, sudokuReducer } from '../state/sudokuReducer'
@@ -64,6 +65,7 @@ export default function SudokuGamePage() {
   const [coins, setCoins] = useState(0)
   const [hintsOpen, setHintsOpen] = useState(false)
   const [checkMessage, setCheckMessage] = useState<string | null>(null)
+  const [ripple, setRipple] = useState<{ row: number; col: number; seq: number } | null>(null)
   const sourceRef = useRef<{ source: 'bank' | 'generated'; bankIndex?: number }>({ source: 'generated' })
   // Set during load if today's Daily Challenge was already completed — the win effect
   // reads this to skip re-awarding coins on a replay (recordDailyChallengeCompletion
@@ -214,13 +216,29 @@ export default function SudokuGamePage() {
     [playSound, buzz],
   )
 
+  // Purely cosmetic — never touches the reducer/persisted state. Only pulses on an
+  // actual value placement (not note-mode toggling, not a no-op re-entry of the same
+  // digit, not a given cell), mirroring INPUT_DIGIT's own guards so the ripple only
+  // fires when a placement will actually happen.
+  const maybeTriggerRipple = useCallback(
+    (digit: number) => {
+      if (!state.selected || state.noteMode) return
+      const { row, col } = state.selected
+      const cell = state.board[row][col]
+      if (cell.given || cell.value === digit) return
+      setRipple((r) => ({ row, col, seq: (r?.seq ?? 0) + 1 }))
+    },
+    [state.selected, state.noteMode, state.board],
+  )
+
   const handleDigit = useCallback(
     (digit: number) => {
       playSound('tap')
       buzz(10)
+      maybeTriggerRipple(digit)
       dispatch({ type: 'INPUT_DIGIT', digit, now: Date.now() })
     },
-    [playSound, buzz],
+    [playSound, buzz, maybeTriggerRipple],
   )
 
   const handleErase = useCallback(() => {
@@ -256,7 +274,9 @@ export default function SudokuGamePage() {
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
       if (e.key >= '1' && e.key <= '9') {
-        dispatch({ type: 'INPUT_DIGIT', digit: Number(e.key), now: Date.now() })
+        const digit = Number(e.key)
+        maybeTriggerRipple(digit)
+        dispatch({ type: 'INPUT_DIGIT', digit, now: Date.now() })
       } else if (e.key === 'Backspace' || e.key === 'Delete' || e.key === '0') {
         dispatch({ type: 'ERASE', now: Date.now() })
       } else if (e.key.toLowerCase() === 'n') {
@@ -265,7 +285,7 @@ export default function SudokuGamePage() {
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [])
+  }, [maybeTriggerRipple])
 
   const conflicts = useMemo(() => getConflicts(boardValues(state.board)), [state.board])
   const selectedValue = state.selected ? state.board[state.selected.row][state.selected.col].value || null : null
@@ -303,6 +323,7 @@ export default function SudokuGamePage() {
               board={state.board}
               selected={state.selected}
               conflicts={conflicts}
+              ripple={ripple}
               onCellClick={handleCellClick}
             />
             <SudokuKeypad

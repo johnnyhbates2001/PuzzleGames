@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
-import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
+import { useLocation, useParams } from 'react-router-dom'
+import { AppLink as Link } from '../components/AppLink'
+import { useAppNavigate as useNavigate } from '../hooks/useAppNavigate'
 import type { Difficulty, SudokuLevelRecord } from '../engine/sudoku/types'
 import type { SudokuCellState } from '../state/sudokuTypes'
 import { averageTimeMs, getSudokuProgress } from '../storage/db'
@@ -72,6 +74,7 @@ export default function SudokuCompletePage() {
             board={board}
             selected={null}
             conflicts={new Set()}
+            ripple={null}
             onCellClick={() => {}}
             className="pointer-events-none absolute inset-x-4 top-[max(1.5rem,env(safe-area-inset-top))] max-w-lg opacity-65 blur-[3px] sm:mx-auto sm:inset-x-0"
           />

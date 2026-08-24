@@ -211,6 +211,115 @@
   .anim-sheet-up {
     animation: sheet-up 320ms cubic-bezier(0.32, 0.72, 0, 1);
   }
+
+  /* Queens — auto-X propagation ripple (see Board.tsx's per-cell animationDelay) */
+  @keyframes x-in {
+    from {
+      transform: scale(0.5);
+      opacity: 0;
+    }
+    to {
+      transform: scale(1);
+      opacity: 1;
+    }
+  }
+  .anim-x-in {
+    animation: x-in 120ms ease-out both;
+  }
+
+  /* Zip — path segment draw-in */
+  @keyframes zip-stub-in {
+    from {
+      transform: scale(0);
+      opacity: 0;
+    }
+    to {
+      transform: scale(1);
+      opacity: 1;
+    }
+  }
+  .anim-zip-in {
+    animation: zip-stub-in 140ms ease-out both;
+  }
+
+  /* Patches — rect fill-in, staggered by distance from the drag anchor */
+  @keyframes patch-fill {
+    from {
+      transform: scale(0.85);
+      opacity: 0;
+    }
+    to {
+      transform: scale(1);
+      opacity: 1;
+    }
+  }
+  .anim-patch-fill {
+    animation: patch-fill 160ms ease-out both;
+  }
+
+  /* Sudoku — cosmetic peer ripple on digit placement (purely visual, no state change) */
+  @keyframes ripple {
+    0% {
+      opacity: 0.6;
+    }
+    100% {
+      opacity: 0;
+    }
+  }
+  .anim-ripple {
+    animation: ripple 260ms ease-out both;
+  }
+
+  /* Complete sheet confetti */
+  @keyframes confetti-fall {
+    0% {
+      transform: translate(0, 0) rotate(0deg);
+      opacity: 1;
+    }
+    100% {
+      transform: translate(var(--drift, 0px), 140px) rotate(var(--rotate, 180deg));
+      opacity: 0;
+    }
+  }
+  .anim-confetti {
+    animation: confetti-fall 1s ease-in both;
+  }
+
+  /* Page transitions — react-router adds html.transitioning during an active
+     View Transition (see useAppNavigate/AppLink). Single "root" group only (no
+     per-element view-transition-name) — a whole-page crossfade+slide, not a
+     shared-element morph. */
+  html.transitioning::view-transition-old(root),
+  html.transitioning::view-transition-new(root) {
+    animation-duration: 220ms;
+    animation-timing-function: cubic-bezier(0.32, 0.72, 0, 1);
+  }
+  html.transitioning::view-transition-old(root) {
+    animation-name: page-out;
+  }
+  html.transitioning::view-transition-new(root) {
+    animation-name: page-in;
+  }
+  @keyframes page-in {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  @keyframes page-out {
+    from {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    to {
+      opacity: 0;
+      transform: translateY(-8px);
+    }
+  }
 }
 
 html {

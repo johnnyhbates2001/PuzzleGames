@@ -7,6 +7,9 @@ interface PatchesCellProps {
   clueArea: number | null
   clueShape: PatchShape | null
   fillColor: string | null
+  /** Ms to delay the fill-in animation by — set only for the most-recently-placed
+   *  rect's cells, proportional to distance from the drag anchor (see PatchesBoard.tsx). */
+  fillDelayMs?: number
   mismatched: boolean
   borderRight: boolean
   borderBottom: boolean
@@ -18,18 +21,39 @@ const SHAPE_BADGE_CLASS: Record<PatchShape, string> = {
   wide: 'aspect-[3/2]',
 }
 
-function PatchesCellImpl({ row, col, clueArea, clueShape, fillColor, mismatched, borderRight, borderBottom }: PatchesCellProps) {
+function PatchesCellImpl({
+  row,
+  col,
+  clueArea,
+  clueShape,
+  fillColor,
+  fillDelayMs,
+  mismatched,
+  borderRight,
+  borderBottom,
+}: PatchesCellProps) {
   return (
     <button
       type="button"
       data-row={row}
       data-col={col}
       aria-label={clueArea !== null ? `Clue ${clueArea}` : `Row ${row + 1}, column ${col + 1}`}
-      className={`relative flex aspect-square touch-none items-center justify-center select-none ${fillColor ? '' : 'bg-surface'} ${
-        borderRight ? 'border-r-2 border-r-grid-line-strong' : 'border-r border-r-grid-gap'
-      } ${borderBottom ? 'border-b-2 border-b-grid-line-strong' : 'border-b border-b-grid-gap'}`}
-      style={fillColor ? { backgroundColor: fillColor } : undefined}
+      // Shake lives on the button itself (transform: translateX) so the whole cell
+      // shakes; the fill's entrance animation (transform: scale + opacity) lives on
+      // its own child span below — two `animation` shorthands on the same element
+      // would fight in the cascade instead of playing together.
+      className={`relative flex aspect-square touch-none items-center justify-center bg-surface select-none ${
+        mismatched ? 'anim-shake' : ''
+      } ${borderRight ? 'border-r-2 border-r-grid-line-strong' : 'border-r border-r-grid-gap'} ${
+        borderBottom ? 'border-b-2 border-b-grid-line-strong' : 'border-b border-b-grid-gap'
+      }`}
     >
+      {fillColor && (
+        <span
+          className="anim-patch-fill pointer-events-none absolute inset-0"
+          style={{ backgroundColor: fillColor, animationDelay: fillDelayMs ? `${fillDelayMs}ms` : undefined }}
+        />
+      )}
       {mismatched && <span className="pointer-events-none absolute inset-0 rounded-[2px] ring-[2.5px] ring-inset ring-danger" />}
       {clueArea !== null && clueShape !== null && (
         <span

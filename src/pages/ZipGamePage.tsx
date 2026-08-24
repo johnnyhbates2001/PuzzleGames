@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react'
-import { useLocation, useNavigate, useParams } from 'react-router-dom'
-import type { Difficulty, ZipLevelRecord } from '../engine/zip/types'
+import { useLocation, useParams } from 'react-router-dom'
+import { useAppNavigate as useNavigate } from '../hooks/useAppNavigate'
+import type { Coord, Difficulty, ZipLevelRecord } from '../engine/zip/types'
+import { applyCellEntry } from '../engine/zip/validator'
 import { createInitialState, getWrongCells, zipReducer } from '../state/zipReducer'
 import {
   getDailyChallenge,
@@ -60,6 +62,7 @@ export default function ZipGamePage() {
   const [coins, setCoins] = useState(0)
   const [hintsOpen, setHintsOpen] = useState(false)
   const [checkMessage, setCheckMessage] = useState<string | null>(null)
+  const [rejectedCell, setRejectedCell] = useState<Coord | null>(null)
   const sourceRef = useRef<{ source: 'bank' | 'generated'; bankIndex?: number }>({ source: 'generated' })
   // Set during load if today's Daily Challenge was already completed — the win effect
   // reads this to skip re-awarding coins on a replay (recordDailyChallengeCompletion
@@ -202,11 +205,18 @@ export default function ZipGamePage() {
 
   const handleCellEnter = useCallback(
     (row: number, col: number) => {
+      // Classify the move client-side first (using the same pure function the
+      // reducer itself uses) purely to drive a shake on illegal attempts — an
+      // unchanged path means the reducer would no-op too, so skip the dispatch.
+      if (applyCellEntry(state.path, state.level, { row, col }) === state.path) {
+        setRejectedCell({ row, col })
+        return
+      }
       playSound('tap')
       buzz(10)
       dispatch({ type: 'ENTER_CELL', row, col, now: Date.now() })
     },
-    [playSound, buzz],
+    [state.path, state.level, playSound, buzz],
   )
 
   const handleUseHint = useCallback(
@@ -258,7 +268,13 @@ export default function ZipGamePage() {
         {loading ? (
           <p className="text-ink-muted">Loading level…</p>
         ) : (
-          <ZipBoard level={state.level} path={state.path} onCellEnter={handleCellEnter} />
+          <ZipBoard
+            level={state.level}
+            path={state.path}
+            onCellEnter={handleCellEnter}
+            rejectedCell={rejectedCell}
+            onRejectedShakeEnd={() => setRejectedCell(null)}
+          />
         )}
 
         <ZipControls

@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
-import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
+import { useLocation, useParams } from 'react-router-dom'
+import { AppLink as Link } from '../components/AppLink'
+import { useAppNavigate as useNavigate } from '../hooks/useAppNavigate'
 import type { Difficulty, PatchesLevelRecord } from '../engine/patches/types'
 import type { PlacedRect } from '../engine/patches/validator'
 import { averageTimeMs, getPatchesProgress } from '../storage/db'
