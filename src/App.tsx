@@ -15,6 +15,7 @@ import ZipCompletePage from './pages/ZipCompletePage'
 import PatchesDifficultyPage from './pages/PatchesDifficultyPage'
 import PatchesGamePage from './pages/PatchesGamePage'
 import PatchesCompletePage from './pages/PatchesCompletePage'
+import ErrorPage from './pages/ErrorPage'
 import { ScrollReset } from './components/ScrollReset'
 import { UpdateToast } from './components/UpdateToast'
 import { SkinProvider } from './hooks/useSkin'
@@ -33,6 +34,7 @@ const router = createBrowserRouter([
   {
     path: '/',
     element: <RootLayout />,
+    errorElement: <ErrorPage />,
     children: [
       { index: true, element: <HomePage /> },
       { path: 'shop', element: <ShopPage /> },

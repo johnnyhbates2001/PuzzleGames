@@ -7,17 +7,16 @@ import { createInitialState, getWrongCells, sudokuReducer } from '../state/sudok
 import { boardValues } from '../state/sudokuTypes'
 import {
   getDailyChallenge,
-  getDailyStreak,
   getSettings,
   getSudokuInProgress,
-  recordDailyChallengeCompletion,
   recordSudokuCompletion,
   saveSudokuInProgress,
   spendCoins,
 } from '../storage/db'
 import { getNextSudokuLevel } from '../games/sudokuLevels'
 import { getDailySudokuLevel, todayDateKey } from '../games/dailyChallenge'
-import { useAppLifecycle } from '../hooks/useAppLifecycle'
+import { useGameLifecycle } from '../hooks/useGameLifecycle'
+import { useGameCompletion } from '../hooks/useGameCompletion'
 import { useAudio } from '../hooks/useAudio'
 import { SudokuBoard } from '../components/SudokuBoard'
 import { SudokuKeypad } from '../components/SudokuKeypad'
@@ -130,18 +129,7 @@ export default function SudokuGamePage() {
     }
   }, [validDifficulty, isDaily])
 
-  useEffect(() => {
-    if (!loading && !error && state.status === 'playing') {
-      dispatch({ type: 'RESUME', now: Date.now() })
-    }
-  }, [loading, error])
-
-  useAppLifecycle(
-    () => dispatch({ type: 'PAUSE', now: Date.now() }),
-    () => {
-      if (state.status === 'playing') dispatch({ type: 'RESUME', now: Date.now() })
-    },
-  )
+  useGameLifecycle(loading, error, state.status, dispatch)
 
   // Autosave in-progress state so leaving and returning resumes this exact board.
   // Daily Challenge intentionally skips this (see src/games/dailyChallenge.ts) — it
@@ -159,53 +147,20 @@ export default function SudokuGamePage() {
     })
   }, [state.board, state.elapsedMs, state.level, state.status, loading, validDifficulty, isDaily])
 
-  // On win: record completion, then hand off to the completion screen.
-  useEffect(() => {
-    if (state.status !== 'won' || (!validDifficulty && !isDaily)) return
-    let cancelled = false
-    playSound('success')
-    buzz([20, 40, 20, 40, 60])
-
-    if (isDaily) {
-      const finish = dailyAlreadyCompletedRef.current
-        ? getDailyStreak().then((streak) => ({ coinsAwarded: 0, streak }))
-        : recordDailyChallengeCompletion('sudoku', state.elapsedMs, state.hintsUsed > 0)
-      finish.then((result) => {
-        if (!cancelled) {
-          navigate('/sudoku/daily/complete', {
-            state: {
-              timeMs: state.elapsedMs,
-              level: state.level,
-              board: state.board,
-              coinsAwarded: result.coinsAwarded,
-              dailyStreak: result.streak,
-            },
-            replace: true,
-          })
-        }
-      })
-    } else {
-      recordSudokuCompletion(validDifficulty as Difficulty, state.elapsedMs, state.hintsUsed > 0).then((result) => {
-        if (!cancelled) {
-          navigate(`/sudoku/${validDifficulty}/complete`, {
-            state: {
-              timeMs: state.elapsedMs,
-              levelNumber: result.progress.completedCount,
-              level: state.level,
-              board: state.board,
-              coinsAwarded: result.coinsAwarded,
-              isPersonalBest: result.isPersonalBest,
-              dailyBonusApplied: result.dailyBonusApplied,
-            },
-            replace: true,
-          })
-        }
-      })
-    }
-    return () => {
-      cancelled = true
-    }
-  }, [state.status, validDifficulty, isDaily, navigate, state.elapsedMs, state.level, state.board])
+  useGameCompletion({
+    gameId: 'sudoku',
+    basePath: '/sudoku',
+    status: state.status,
+    isDaily,
+    validDifficulty,
+    elapsedMs: state.elapsedMs,
+    hintsUsed: state.hintsUsed,
+    level: state.level,
+    extraKey: 'board',
+    extraValue: state.board,
+    dailyAlreadyCompletedRef,
+    recordCompletion: recordSudokuCompletion,
+  })
 
   const handleCellClick = useCallback(
     (row: number, col: number) => {
