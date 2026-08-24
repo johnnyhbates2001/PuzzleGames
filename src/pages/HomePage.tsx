@@ -4,6 +4,7 @@ import { GAMES } from '../games/registry'
 import { SudokuGridPreview } from '../components/SudokuGridPreview'
 import { ZipGridPreview } from '../components/ZipGridPreview'
 import { PatchesGridPreview } from '../components/PatchesGridPreview'
+import { NonogramGridPreview } from '../components/NonogramGridPreview'
 import { SettingsButton } from '../components/SettingsButton'
 import { CoinBalance } from '../components/CoinBalance'
 import { TabBar } from '../components/TabBar'
@@ -11,6 +12,7 @@ import {
   getDailyChallenge,
   getDailyStreak,
   getHeatmap,
+  getNonogramProgress,
   getPatchesProgress,
   getProgress,
   getSettings,
@@ -26,6 +28,7 @@ const PREVIEW_BY_ID: Record<string, ReactNode> = {
   sudoku: <SudokuGridPreview />,
   zip: <ZipGridPreview />,
   patches: <PatchesGridPreview />,
+  nonogram: <NonogramGridPreview />,
 }
 
 const DIFFICULTIES: Difficulty[] = ['easy', 'medium', 'hard']
@@ -35,6 +38,7 @@ const PROGRESS_GETTER: Record<string, (d: Difficulty) => ReturnType<typeof getPr
   sudoku: getSudokuProgress,
   zip: getZipProgress,
   patches: getPatchesProgress,
+  nonogram: getNonogramProgress,
 }
 
 async function totalSolved(gameId: string): Promise<number> {

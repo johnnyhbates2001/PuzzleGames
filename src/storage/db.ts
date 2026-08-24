@@ -4,12 +4,14 @@ import type { SudokuLevelRecord } from '../engine/sudoku/types'
 import type { Coord, ZipLevelRecord } from '../engine/zip/types'
 import type { PatchesLevelRecord } from '../engine/patches/types'
 import type { PlacedRect } from '../engine/patches/validator'
+import type { NonogramLevelRecord } from '../engine/nonogram/types'
+import type { Mark as NonogramMark } from '../engine/nonogram/validator'
 import type { CellState } from '../state/types'
 import type { SudokuCellState } from '../state/sudokuTypes'
 import type { DailyGameId } from '../games/dailyChallenge'
 
 const DB_NAME = 'queens-pwa'
-const DB_VERSION = 6
+const DB_VERSION = 7
 
 export interface Settings {
   autoPlaceX: boolean
@@ -84,6 +86,19 @@ export interface PatchesInProgressLevel {
   savedAt: number
 }
 
+export interface NonogramInProgressLevel {
+  difficulty: Difficulty
+  /** Full level record, always — including runtime-generated (non-bank) levels, which have
+   *  nothing else to resume from. Also insulates resume from a future bank re-shuffle. */
+  level: NonogramLevelRecord
+  levelSource: 'bank' | 'generated'
+  /** Bookkeeping only — never used to reconstruct the level. */
+  bankIndex?: number
+  grid: NonogramMark[][]
+  elapsedMs: number
+  savedAt: number
+}
+
 export interface DailyChallengeRecord {
   gameId: DailyGameId
   completedAt: number
@@ -104,6 +119,8 @@ interface QueensDB extends DBSchema {
   zipInProgress: { key: Difficulty; value: ZipInProgressLevel }
   patchesProgress: { key: Difficulty; value: DifficultyProgress }
   patchesInProgress: { key: Difficulty; value: PatchesInProgressLevel }
+  nonogramProgress: { key: Difficulty; value: DifficultyProgress }
+  nonogramInProgress: { key: Difficulty; value: NonogramInProgressLevel }
   /** Key = local date string ('YYYY-MM-DD'). Value = number of levels completed that day,
    *  across every game — feeds the home-screen streak and the stats-page heatmap. */
   dailyActivity: { key: string; value: number }
@@ -155,6 +172,10 @@ function getDB(): Promise<IDBPDatabase<QueensDB>> {
         }
         if (oldVersion < 6) {
           db.createObjectStore('dailyChallenge')
+        }
+        if (oldVersion < 7) {
+          db.createObjectStore('nonogramProgress')
+          db.createObjectStore('nonogramInProgress')
         }
       },
     })
@@ -296,8 +317,8 @@ export function computeCoinAward(difficulty: Difficulty, isPersonalBest: boolean
   return !assisted && isPersonalBest ? base + PERSONAL_BEST_BONUS : base
 }
 
-type ProgressStoreName = 'progress' | 'sudokuProgress' | 'zipProgress' | 'patchesProgress'
-type InProgressStoreName = 'inProgress' | 'sudokuInProgress' | 'zipInProgress' | 'patchesInProgress'
+type ProgressStoreName = 'progress' | 'sudokuProgress' | 'zipProgress' | 'patchesProgress' | 'nonogramProgress'
+type InProgressStoreName = 'inProgress' | 'sudokuInProgress' | 'zipInProgress' | 'patchesInProgress' | 'nonogramInProgress'
 
 /** Shared by the four record*Completion functions below, which differ only in which
  *  pair of stores they touch. In one transaction: advances the bank pointer, clears the
@@ -470,8 +491,37 @@ export async function clearPatchesInProgress(difficulty: Difficulty): Promise<vo
   await db.delete('patchesInProgress', difficulty)
 }
 
+export async function getNonogramProgress(difficulty: Difficulty): Promise<DifficultyProgress> {
+  const db = await getDB()
+  return (await db.get('nonogramProgress', difficulty)) ?? defaultProgress(difficulty)
+}
+
+/** See recordCompletion — same shape, Nonogram's stores. */
+export async function recordNonogramCompletion(
+  difficulty: Difficulty,
+  elapsedMs: number,
+  assisted = false,
+): Promise<CompletionResult> {
+  return finishCompletion('nonogramProgress', 'nonogramInProgress', difficulty, elapsedMs, assisted)
+}
+
+export async function getNonogramInProgress(difficulty: Difficulty): Promise<NonogramInProgressLevel | undefined> {
+  const db = await getDB()
+  return db.get('nonogramInProgress', difficulty)
+}
+
+export async function saveNonogramInProgress(entry: NonogramInProgressLevel): Promise<void> {
+  const db = await getDB()
+  await db.put('nonogramInProgress', entry, entry.difficulty)
+}
+
+export async function clearNonogramInProgress(difficulty: Difficulty): Promise<void> {
+  const db = await getDB()
+  await db.delete('nonogramInProgress', difficulty)
+}
+
 const ALL_DIFFICULTIES: Difficulty[] = ['easy', 'medium', 'hard']
-const ALL_PROGRESS_GETTERS = [getProgress, getSudokuProgress, getZipProgress, getPatchesProgress]
+const ALL_PROGRESS_GETTERS = [getProgress, getSudokuProgress, getZipProgress, getPatchesProgress, getNonogramProgress]
 
 /** Total completed levels across every game and difficulty — used for the Stats page's
  *  "Solved" tile and the Neon skin's solve-count unlock. */

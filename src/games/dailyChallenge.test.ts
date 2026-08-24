@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { DAILY_GAMES, gameForDate, getDailyQueensLevel, hashSeed } from './dailyChallenge'
+import { DAILY_GAMES, gameForDate, getDailyNonogramLevel, getDailyQueensLevel, hashSeed } from './dailyChallenge'
 
 describe('gameForDate', () => {
   it('is deterministic for a given date', () => {
@@ -42,5 +42,20 @@ describe('getDailyQueensLevel', () => {
     const a = getDailyQueensLevel('2026-08-24')
     const b = getDailyQueensLevel('2026-08-25')
     expect(a.regions).not.toEqual(b.regions)
+  })
+})
+
+describe('getDailyNonogramLevel', () => {
+  it('generates the identical puzzle for the same date', () => {
+    const a = getDailyNonogramLevel('2026-08-24')
+    const b = getDailyNonogramLevel('2026-08-24')
+    expect(a.solution).toEqual(b.solution)
+    expect(a.id).toBe(b.id)
+  })
+
+  it('generates a different puzzle for a different date', () => {
+    const a = getDailyNonogramLevel('2026-08-24')
+    const b = getDailyNonogramLevel('2026-08-25')
+    expect(a.solution).not.toEqual(b.solution)
   })
 })

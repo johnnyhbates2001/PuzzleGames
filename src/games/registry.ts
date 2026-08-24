@@ -31,4 +31,10 @@ export const GAMES: GameDefinition[] = [
     description: 'Draw a rectangle from every clue, sized and shaped to match it.',
     route: '/patches',
   },
+  {
+    id: 'nonogram',
+    title: 'Nonogram',
+    description: 'Fill cells to match the row and column clues and reveal the picture.',
+    route: '/nonogram',
+  },
 ]

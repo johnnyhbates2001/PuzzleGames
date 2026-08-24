@@ -5,6 +5,7 @@ import { SKINS } from '../skins'
 import { ACHIEVEMENTS, type AchievementContext } from '../achievements/definitions'
 import {
   getDailyStreak,
+  getNonogramProgress,
   getPatchesProgress,
   getProgress,
   getSettings,
@@ -23,6 +24,7 @@ const PROGRESS_GETTER: Record<string, (d: Difficulty) => Promise<DifficultyProgr
   sudoku: getSudokuProgress,
   zip: getZipProgress,
   patches: getPatchesProgress,
+  nonogram: getNonogramProgress,
 }
 
 async function solvedForGame(gameId: string): Promise<number> {

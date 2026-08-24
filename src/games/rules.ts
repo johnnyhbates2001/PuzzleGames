@@ -38,7 +38,7 @@ export const GAME_RULES: Record<string, GameRules> = {
     steps: [
       'The numbers beside each row and column give the length of every run of filled cells in that line, in order, with at least one empty cell between runs.',
       'Fill in the cells that match every row and column’s clues; everything else stays empty.',
-      'Tap a cell to cycle it empty → filled → X (marked definitely empty) → empty, or drag to mark several cells the same way.',
+      'Tap a cell to cycle it empty → filled → X (marked definitely empty) → empty.',
     ],
     tip: 'Marking cells you know are empty with an X is optional, but it helps track your logic on bigger boards.',
   },

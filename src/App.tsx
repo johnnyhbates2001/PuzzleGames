@@ -15,6 +15,9 @@ import ZipCompletePage from './pages/ZipCompletePage'
 import PatchesDifficultyPage from './pages/PatchesDifficultyPage'
 import PatchesGamePage from './pages/PatchesGamePage'
 import PatchesCompletePage from './pages/PatchesCompletePage'
+import NonogramDifficultyPage from './pages/NonogramDifficultyPage'
+import NonogramGamePage from './pages/NonogramGamePage'
+import NonogramCompletePage from './pages/NonogramCompletePage'
 import ErrorPage from './pages/ErrorPage'
 import { ScrollReset } from './components/ScrollReset'
 import { UpdateToast } from './components/UpdateToast'
@@ -52,6 +55,9 @@ const router = createBrowserRouter([
       { path: 'patches', element: <PatchesDifficultyPage /> },
       { path: 'patches/:difficulty', element: <PatchesGamePage /> },
       { path: 'patches/:difficulty/complete', element: <PatchesCompletePage /> },
+      { path: 'nonogram', element: <NonogramDifficultyPage /> },
+      { path: 'nonogram/:difficulty', element: <NonogramGamePage /> },
+      { path: 'nonogram/:difficulty/complete', element: <NonogramCompletePage /> },
     ],
   },
 ])
