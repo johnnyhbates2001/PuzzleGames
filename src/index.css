@@ -124,6 +124,10 @@
   --color-accent: oklch(53% 0.15 45);
   --color-accent-tint: oklch(94% 0.04 45);
 }
+[data-game='nonogram'] {
+  --color-accent: oklch(53% 0.19 340);
+  --color-accent-tint: oklch(94% 0.045 340);
+}
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) [data-game='sudoku'] {
@@ -138,6 +142,10 @@
     --color-accent: oklch(66% 0.14 45);
     --color-accent-tint: oklch(30% 0.045 45);
   }
+  :root:not([data-theme='light']) [data-game='nonogram'] {
+    --color-accent: oklch(68% 0.16 340);
+    --color-accent-tint: oklch(31% 0.05 340);
+  }
 }
 
 :root[data-theme='dark'] [data-game='sudoku'] {
@@ -151,6 +159,10 @@
 :root[data-theme='dark'] [data-game='patches'] {
   --color-accent: oklch(66% 0.14 45);
   --color-accent-tint: oklch(30% 0.045 45);
+}
+:root[data-theme='dark'] [data-game='nonogram'] {
+  --color-accent: oklch(68% 0.16 340);
+  --color-accent-tint: oklch(31% 0.05 340);
 }
 
 /* Motion (design section 05) — short, interruptible, best-effort against the spec's

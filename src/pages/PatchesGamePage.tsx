@@ -5,17 +5,16 @@ import type { Difficulty, PatchesLevelRecord } from '../engine/patches/types'
 import { createInitialState, getWrongCells, patchesReducer } from '../state/patchesReducer'
 import {
   getDailyChallenge,
-  getDailyStreak,
   getPatchesInProgress,
   getSettings,
-  recordDailyChallengeCompletion,
   recordPatchesCompletion,
   savePatchesInProgress,
   spendCoins,
 } from '../storage/db'
 import { getNextPatchesLevel } from '../games/patchesLevels'
 import { getDailyPatchesLevel, todayDateKey } from '../games/dailyChallenge'
-import { useAppLifecycle } from '../hooks/useAppLifecycle'
+import { useGameLifecycle } from '../hooks/useGameLifecycle'
+import { useGameCompletion } from '../hooks/useGameCompletion'
 import { useAudio } from '../hooks/useAudio'
 import { PatchesBoard } from '../components/PatchesBoard'
 import { PatchesControls } from '../components/PatchesControls'
@@ -124,18 +123,7 @@ export default function PatchesGamePage() {
     }
   }, [validDifficulty, isDaily])
 
-  useEffect(() => {
-    if (!loading && !error && state.status === 'playing') {
-      dispatch({ type: 'RESUME', now: Date.now() })
-    }
-  }, [loading, error])
-
-  useAppLifecycle(
-    () => dispatch({ type: 'PAUSE', now: Date.now() }),
-    () => {
-      if (state.status === 'playing') dispatch({ type: 'RESUME', now: Date.now() })
-    },
-  )
+  useGameLifecycle(loading, error, state.status, dispatch)
 
   // Autosave in-progress state so leaving and returning resumes this exact board.
   // Daily Challenge intentionally skips this (see src/games/dailyChallenge.ts) — it
@@ -153,53 +141,20 @@ export default function PatchesGamePage() {
     })
   }, [state.placed, state.elapsedMs, state.level, state.status, loading, validDifficulty, isDaily])
 
-  // On win: record completion, then hand off to the completion screen.
-  useEffect(() => {
-    if (state.status !== 'won' || (!validDifficulty && !isDaily)) return
-    let cancelled = false
-    playSound('success')
-    buzz([20, 40, 20, 40, 60])
-
-    if (isDaily) {
-      const finish = dailyAlreadyCompletedRef.current
-        ? getDailyStreak().then((streak) => ({ coinsAwarded: 0, streak }))
-        : recordDailyChallengeCompletion('patches', state.elapsedMs, state.hintsUsed > 0)
-      finish.then((result) => {
-        if (!cancelled) {
-          navigate('/patches/daily/complete', {
-            state: {
-              timeMs: state.elapsedMs,
-              level: state.level,
-              placed: state.placed,
-              coinsAwarded: result.coinsAwarded,
-              dailyStreak: result.streak,
-            },
-            replace: true,
-          })
-        }
-      })
-    } else {
-      recordPatchesCompletion(validDifficulty as Difficulty, state.elapsedMs, state.hintsUsed > 0).then((result) => {
-        if (!cancelled) {
-          navigate(`/patches/${validDifficulty}/complete`, {
-            state: {
-              timeMs: state.elapsedMs,
-              levelNumber: result.progress.completedCount,
-              level: state.level,
-              placed: state.placed,
-              coinsAwarded: result.coinsAwarded,
-              isPersonalBest: result.isPersonalBest,
-              dailyBonusApplied: result.dailyBonusApplied,
-            },
-            replace: true,
-          })
-        }
-      })
-    }
-    return () => {
-      cancelled = true
-    }
-  }, [state.status, validDifficulty, isDaily, navigate, state.elapsedMs, state.level, state.placed])
+  useGameCompletion({
+    gameId: 'patches',
+    basePath: '/patches',
+    status: state.status,
+    isDaily,
+    validDifficulty,
+    elapsedMs: state.elapsedMs,
+    hintsUsed: state.hintsUsed,
+    level: state.level,
+    extraKey: 'placed',
+    extraValue: state.placed,
+    dailyAlreadyCompletedRef,
+    recordCompletion: recordPatchesCompletion,
+  })
 
   const handleStartDrag = useCallback(
     (row: number, col: number) => {

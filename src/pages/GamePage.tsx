@@ -6,18 +6,17 @@ import { getConflicts } from '../engine/validator'
 import { createInitialState, gameReducer, getWrongQueens } from '../state/gameReducer'
 import {
   getDailyChallenge,
-  getDailyStreak,
   getInProgress,
   getSettings,
   recordCompletion,
-  recordDailyChallengeCompletion,
   saveInProgress,
   setAutoPlaceX,
   spendCoins,
 } from '../storage/db'
 import { getNextLevel } from '../games/queensLevels'
 import { getDailyQueensLevel, todayDateKey } from '../games/dailyChallenge'
-import { useAppLifecycle } from '../hooks/useAppLifecycle'
+import { useGameLifecycle } from '../hooks/useGameLifecycle'
+import { useGameCompletion } from '../hooks/useGameCompletion'
 import { useAudio } from '../hooks/useAudio'
 import { Board } from '../components/Board'
 import { Controls } from '../components/Controls'
@@ -135,19 +134,7 @@ export default function GamePage() {
     }
   }, [validDifficulty, isDaily])
 
-  // LOAD always leaves the timer paused (runStartedAt=null); explicitly resume once mounted.
-  useEffect(() => {
-    if (!loading && !error && state.status === 'playing') {
-      dispatch({ type: 'RESUME', now: Date.now() })
-    }
-  }, [loading, error])
-
-  useAppLifecycle(
-    () => dispatch({ type: 'PAUSE', now: Date.now() }),
-    () => {
-      if (state.status === 'playing') dispatch({ type: 'RESUME', now: Date.now() })
-    },
-  )
+  useGameLifecycle(loading, error, state.status, dispatch)
 
   // Autosave in-progress state so leaving and returning resumes this exact board.
   // Daily Challenge intentionally skips this (see src/games/dailyChallenge.ts) — it
@@ -165,53 +152,20 @@ export default function GamePage() {
     })
   }, [state.board, state.elapsedMs, state.level, state.status, loading, validDifficulty, isDaily])
 
-  // On win: record completion, then hand off to the completion screen.
-  useEffect(() => {
-    if (state.status !== 'won' || (!validDifficulty && !isDaily)) return
-    let cancelled = false
-    playSound('success')
-    buzz([20, 40, 20, 40, 60])
-
-    if (isDaily) {
-      const finish = dailyAlreadyCompletedRef.current
-        ? getDailyStreak().then((streak) => ({ coinsAwarded: 0, streak }))
-        : recordDailyChallengeCompletion('queens', state.elapsedMs, state.hintsUsed > 0)
-      finish.then((result) => {
-        if (!cancelled) {
-          navigate('/queens/daily/complete', {
-            state: {
-              timeMs: state.elapsedMs,
-              level: state.level,
-              board: state.board,
-              coinsAwarded: result.coinsAwarded,
-              dailyStreak: result.streak,
-            },
-            replace: true,
-          })
-        }
-      })
-    } else {
-      recordCompletion(validDifficulty as Difficulty, state.elapsedMs, state.hintsUsed > 0).then((result) => {
-        if (!cancelled) {
-          navigate(`/queens/${validDifficulty}/complete`, {
-            state: {
-              timeMs: state.elapsedMs,
-              levelNumber: result.progress.completedCount,
-              level: state.level,
-              board: state.board,
-              coinsAwarded: result.coinsAwarded,
-              isPersonalBest: result.isPersonalBest,
-              dailyBonusApplied: result.dailyBonusApplied,
-            },
-            replace: true,
-          })
-        }
-      })
-    }
-    return () => {
-      cancelled = true
-    }
-  }, [state.status, validDifficulty, isDaily, navigate, state.elapsedMs, state.level, state.board])
+  useGameCompletion({
+    gameId: 'queens',
+    basePath: '/queens',
+    status: state.status,
+    isDaily,
+    validDifficulty,
+    elapsedMs: state.elapsedMs,
+    hintsUsed: state.hintsUsed,
+    level: state.level,
+    extraKey: 'board',
+    extraValue: state.board,
+    dailyAlreadyCompletedRef,
+    recordCompletion,
+  })
 
   const handleCellClick = useCallback(
     (row: number, col: number) => {

@@ -16,7 +16,13 @@ export interface AchievementDef {
   check: (ctx: AchievementContext) => boolean
 }
 
-const GAME_LABELS: Record<string, string> = { queens: 'Queens', sudoku: 'Sudoku', zip: 'Zip', patches: 'Patches' }
+const GAME_LABELS: Record<string, string> = {
+  queens: 'Queens',
+  sudoku: 'Sudoku',
+  zip: 'Zip',
+  patches: 'Patches',
+  nonogram: 'Nonogram',
+}
 
 function perGameExpertAchievements(): AchievementDef[] {
   return Object.entries(GAME_LABELS).map(([id, label]) => ({

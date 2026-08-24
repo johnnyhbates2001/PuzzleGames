@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react'
 import { AppLink as Link } from '../components/AppLink'
-import { PATCHES_SIZE, type Difficulty } from '../engine/patches/types'
-import { averageTimeMs, getPatchesProgress, type DifficultyProgress } from '../storage/db'
+import { NONOGRAM_SIZE, type Difficulty } from '../engine/nonogram/types'
+import { averageTimeMs, getNonogramProgress, type DifficultyProgress } from '../storage/db'
 import { formatElapsed } from '../components/Timer'
-import { PatchesGridPreview } from '../components/PatchesGridPreview'
+import { NonogramGridPreview } from '../components/NonogramGridPreview'
 import { RulesButton, RulesSheet } from '../components/RulesSheet'
 import { GAME_RULES } from '../games/rules'
 
@@ -15,13 +15,13 @@ const DOT_CLASS: Record<Difficulty, string> = {
   hard: 'bg-diff-hard',
 }
 
-export default function PatchesDifficultyPage() {
+export default function NonogramDifficultyPage() {
   const [progress, setProgress] = useState<Partial<Record<Difficulty, DifficultyProgress>>>({})
   const [rulesOpen, setRulesOpen] = useState(false)
 
   useEffect(() => {
     let cancelled = false
-    Promise.all(DIFFICULTIES.map((d) => getPatchesProgress(d))).then((results) => {
+    Promise.all(DIFFICULTIES.map((d) => getNonogramProgress(d))).then((results) => {
       if (cancelled) return
       const map: Partial<Record<Difficulty, DifficultyProgress>> = {}
       DIFFICULTIES.forEach((d, i) => {
@@ -36,7 +36,7 @@ export default function PatchesDifficultyPage() {
 
   return (
     <main
-      data-game="patches"
+      data-game="nonogram"
       className="mx-auto flex min-h-svh max-w-lg flex-col justify-center gap-6 bg-bg px-4 py-[max(2rem,env(safe-area-inset-top))] text-ink"
     >
       <div className="flex items-center justify-between">
@@ -51,7 +51,7 @@ export default function PatchesDifficultyPage() {
         </Link>
         <RulesButton onClick={() => setRulesOpen(true)} />
       </div>
-      <h1 className="font-display text-[28px] font-extrabold">Patches</h1>
+      <h1 className="font-display text-[28px] font-extrabold">Nonogram</h1>
       <div className="flex flex-col gap-3">
         {DIFFICULTIES.map((d) => {
           const p = progress[d]
@@ -59,11 +59,11 @@ export default function PatchesDifficultyPage() {
           return (
             <Link
               key={d}
-              to={`/patches/${d}`}
+              to={`/nonogram/${d}`}
               className="flex items-center gap-4 rounded-[20px] bg-surface p-4 shadow-card transition hover:shadow-md"
             >
               <div className="size-[52px] shrink-0 overflow-hidden rounded-xl bg-bg p-1.5">
-                <PatchesGridPreview />
+                <NonogramGridPreview />
               </div>
               <div className="flex-1">
                 <div className="flex items-center gap-1.5">
@@ -71,7 +71,7 @@ export default function PatchesDifficultyPage() {
                   <h2 className="text-[17px] font-bold">{LABELS[d]}</h2>
                 </div>
                 <p className="mt-0.5 text-[13px] text-ink-muted">
-                  {PATCHES_SIZE[d]}×{PATCHES_SIZE[d]}
+                  {NONOGRAM_SIZE[d]}×{NONOGRAM_SIZE[d]}
                 </p>
               </div>
               <div className="text-right">
@@ -88,9 +88,9 @@ export default function PatchesDifficultyPage() {
       <RulesSheet
         open={rulesOpen}
         onClose={() => setRulesOpen(false)}
-        title="Patches"
-        steps={GAME_RULES.patches.steps}
-        tip={GAME_RULES.patches.tip}
+        title="Nonogram"
+        steps={GAME_RULES.nonogram.steps}
+        tip={GAME_RULES.nonogram.tip}
       />
     </main>
   )

@@ -4,6 +4,8 @@ import { ZIP_SIZE, type Difficulty } from '../engine/zip/types'
 import { averageTimeMs, getZipProgress, type DifficultyProgress } from '../storage/db'
 import { formatElapsed } from '../components/Timer'
 import { ZipGridPreview } from '../components/ZipGridPreview'
+import { RulesButton, RulesSheet } from '../components/RulesSheet'
+import { GAME_RULES } from '../games/rules'
 
 const DIFFICULTIES: Difficulty[] = ['easy', 'medium', 'hard']
 const LABELS: Record<Difficulty, string> = { easy: 'Easy', medium: 'Medium', hard: 'Hard' }
@@ -15,6 +17,7 @@ const DOT_CLASS: Record<Difficulty, string> = {
 
 export default function ZipDifficultyPage() {
   const [progress, setProgress] = useState<Partial<Record<Difficulty, DifficultyProgress>>>({})
+  const [rulesOpen, setRulesOpen] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -36,15 +39,18 @@ export default function ZipDifficultyPage() {
       data-game="zip"
       className="mx-auto flex min-h-svh max-w-lg flex-col justify-center gap-6 bg-bg px-4 py-[max(2rem,env(safe-area-inset-top))] text-ink"
     >
-      <Link
-        to="/"
-        className="inline-flex size-9 items-center justify-center rounded-full bg-accent-tint text-accent"
-        aria-label="Home"
-      >
-        <svg width="9" height="15" viewBox="0 0 9 15" fill="none">
-          <path d="M8 1L1 7.5 8 14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      </Link>
+      <div className="flex items-center justify-between">
+        <Link
+          to="/"
+          className="inline-flex size-9 items-center justify-center rounded-full bg-accent-tint text-accent"
+          aria-label="Home"
+        >
+          <svg width="9" height="15" viewBox="0 0 9 15" fill="none">
+            <path d="M8 1L1 7.5 8 14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </Link>
+        <RulesButton onClick={() => setRulesOpen(true)} />
+      </div>
       <h1 className="font-display text-[28px] font-extrabold">Zip</h1>
       <div className="flex flex-col gap-3">
         {DIFFICULTIES.map((d) => {
@@ -78,6 +84,14 @@ export default function ZipDifficultyPage() {
           )
         })}
       </div>
+
+      <RulesSheet
+        open={rulesOpen}
+        onClose={() => setRulesOpen(false)}
+        title="Zip"
+        steps={GAME_RULES.zip.steps}
+        tip={GAME_RULES.zip.tip}
+      />
     </main>
   )
 }

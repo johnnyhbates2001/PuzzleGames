@@ -5,6 +5,7 @@ import { formatElapsed } from '../components/Timer'
 import type { Difficulty } from '../engine/types'
 import {
   getHeatmap,
+  getNonogramProgress,
   getPatchesProgress,
   getProgress,
   getSettings,
@@ -22,6 +23,7 @@ const PROGRESS_GETTER: Record<string, (d: Difficulty) => Promise<DifficultyProgr
   sudoku: getSudokuProgress,
   zip: getZipProgress,
   patches: getPatchesProgress,
+  nonogram: getNonogramProgress,
 }
 
 interface GameSummary {

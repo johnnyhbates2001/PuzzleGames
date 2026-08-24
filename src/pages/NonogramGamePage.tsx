@@ -1,42 +1,42 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react'
 import { useLocation, useParams } from 'react-router-dom'
 import { useAppNavigate as useNavigate } from '../hooks/useAppNavigate'
-import type { Coord, Difficulty, ZipLevelRecord } from '../engine/zip/types'
-import { applyCellEntry } from '../engine/zip/validator'
-import { createInitialState, getWrongCells, zipReducer } from '../state/zipReducer'
+import type { Difficulty, NonogramLevelRecord } from '../engine/nonogram/types'
+import { createInitialState, getWrongCells, nonogramReducer } from '../state/nonogramReducer'
 import {
   getDailyChallenge,
+  getNonogramInProgress,
   getSettings,
-  getZipInProgress,
-  recordZipCompletion,
-  saveZipInProgress,
+  recordNonogramCompletion,
+  saveNonogramInProgress,
   spendCoins,
 } from '../storage/db'
-import { getNextZipLevel } from '../games/zipLevels'
-import { getDailyZipLevel, todayDateKey } from '../games/dailyChallenge'
+import { getNextNonogramLevel } from '../games/nonogramLevels'
+import { getDailyNonogramLevel, todayDateKey } from '../games/dailyChallenge'
 import { useGameLifecycle } from '../hooks/useGameLifecycle'
 import { useGameCompletion } from '../hooks/useGameCompletion'
 import { useAudio } from '../hooks/useAudio'
-import { ZipBoard } from '../components/ZipBoard'
-import { ZipControls } from '../components/ZipControls'
+import { NonogramBoard } from '../components/NonogramBoard'
+import { NonogramControls } from '../components/NonogramControls'
 import { GameHeader } from '../components/GameHeader'
 import { HintSheet, type HintOption } from '../components/HintSheet'
 
 const HINT_OPTIONS: HintOption[] = [
-  { id: 'reveal-next', icon: '👁', title: 'Reveal next step', desc: 'Extends your path by one correct cell.', price: 25 },
-  { id: 'check', icon: '⚑', title: 'Check my work', desc: 'Flags any step that strayed from the path.', price: 40 },
+  { id: 'reveal-cell', icon: '👁', title: 'Reveal a cell', desc: 'Fills or X-marks one correct square.', price: 25 },
+  { id: 'check', icon: '⚑', title: 'Check my work', desc: 'Flags anything currently marked wrong.', price: 40 },
+  { id: 'reveal-line', icon: '✧', title: 'Reveal a line', desc: 'Completes one whole row or column.', price: 120 },
 ]
 
 // Content doesn't matter — this state is replaced by LOAD before the player can
-// interact, and (unlike Sudoku) Zip's engine is fully parameterized by level.size, so
-// a trivial 1x1 placeholder is safe.
-const PLACEHOLDER_LEVEL: ZipLevelRecord = {
+// interact, and (like Zip/Patches) Nonogram's engine is fully parameterized by
+// level.size, so a trivial 1x1 placeholder is safe.
+const PLACEHOLDER_LEVEL: NonogramLevelRecord = {
   id: 'placeholder',
   difficulty: 'easy',
   size: 1,
-  checkpoints: [{ row: 0, col: 0 }],
-  walls: [],
-  solution: [{ row: 0, col: 0 }],
+  solution: [[false]],
+  rowClues: [[0]],
+  colClues: [[0]],
 }
 
 function isValidDifficulty(value: string | undefined): value is Difficulty {
@@ -44,10 +44,10 @@ function isValidDifficulty(value: string | undefined): value is Difficulty {
 }
 
 interface ReplayLocationState {
-  replayLevel?: ZipLevelRecord
+  replayLevel?: NonogramLevelRecord
 }
 
-export default function ZipGamePage() {
+export default function NonogramGamePage() {
   const { difficulty } = useParams<{ difficulty: string }>()
   const navigate = useNavigate()
   const location = useLocation()
@@ -55,13 +55,12 @@ export default function ZipGamePage() {
   const validDifficulty = isValidDifficulty(difficulty) ? difficulty : null
   const { playSound, buzz } = useAudio()
 
-  const [state, dispatch] = useReducer(zipReducer, PLACEHOLDER_LEVEL, (level) => createInitialState(level))
+  const [state, dispatch] = useReducer(nonogramReducer, PLACEHOLDER_LEVEL, (level) => createInitialState(level))
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [coins, setCoins] = useState(0)
   const [hintsOpen, setHintsOpen] = useState(false)
   const [checkMessage, setCheckMessage] = useState<string | null>(null)
-  const [rejectedCell, setRejectedCell] = useState<Coord | null>(null)
   const sourceRef = useRef<{ source: 'bank' | 'generated'; bankIndex?: number }>({ source: 'generated' })
   // Set during load if today's Daily Challenge was already completed — the win effect
   // reads this to skip re-awarding coins on a replay (recordDailyChallengeCompletion
@@ -89,13 +88,14 @@ export default function ZipGamePage() {
           const [settings, existing] = await Promise.all([getSettings(), getDailyChallenge(dateKey)])
           if (cancelled) return
           setCoins(settings.coins)
+          sourceRef.current = { source: 'generated' }
           dailyAlreadyCompletedRef.current = !!existing
-          const level = getDailyZipLevel(dateKey)
+          const level = getDailyNonogramLevel(dateKey)
           dispatch({ type: 'LOAD', level })
           return
         }
 
-        const [settings, inProgress] = await Promise.all([getSettings(), getZipInProgress(validDifficulty as Difficulty)])
+        const [settings, inProgress] = await Promise.all([getSettings(), getNonogramInProgress(validDifficulty as Difficulty)])
         if (cancelled) return
         setCoins(settings.coins)
 
@@ -104,10 +104,10 @@ export default function ZipGamePage() {
           dispatch({
             type: 'LOAD',
             level: inProgress.level,
-            snapshot: { path: inProgress.path, elapsedMs: inProgress.elapsedMs },
+            snapshot: { grid: inProgress.grid, elapsedMs: inProgress.elapsedMs },
           })
         } else {
-          const next = await getNextZipLevel(validDifficulty as Difficulty)
+          const next = await getNextNonogramLevel(validDifficulty as Difficulty)
           if (cancelled) return
           sourceRef.current = { source: next.source, bankIndex: next.bankIndex }
           dispatch({ type: 'LOAD', level: next.level })
@@ -132,46 +132,39 @@ export default function ZipGamePage() {
   // always restarts fresh from the same deterministic puzzle within a day.
   useEffect(() => {
     if (loading || !validDifficulty || isDaily || state.status !== 'playing') return
-    saveZipInProgress({
+    saveNonogramInProgress({
       difficulty: validDifficulty as Difficulty,
       level: state.level,
       levelSource: sourceRef.current.source,
       bankIndex: sourceRef.current.bankIndex,
-      path: state.path,
+      grid: state.grid,
       elapsedMs: state.elapsedMs,
       savedAt: Date.now(),
     })
-  }, [state.path, state.elapsedMs, state.level, state.status, loading, validDifficulty, isDaily])
+  }, [state.grid, state.elapsedMs, state.level, state.status, loading, validDifficulty, isDaily])
 
   useGameCompletion({
-    gameId: 'zip',
-    basePath: '/zip',
+    gameId: 'nonogram',
+    basePath: '/nonogram',
     status: state.status,
     isDaily,
     validDifficulty,
     elapsedMs: state.elapsedMs,
     hintsUsed: state.hintsUsed,
     level: state.level,
-    extraKey: 'path',
-    extraValue: state.path,
+    extraKey: 'grid',
+    extraValue: state.grid,
     dailyAlreadyCompletedRef,
-    recordCompletion: recordZipCompletion,
+    recordCompletion: recordNonogramCompletion,
   })
 
-  const handleCellEnter = useCallback(
+  const handleCellClick = useCallback(
     (row: number, col: number) => {
-      // Classify the move client-side first (using the same pure function the
-      // reducer itself uses) purely to drive a shake on illegal attempts — an
-      // unchanged path means the reducer would no-op too, so skip the dispatch.
-      if (applyCellEntry(state.path, state.level, { row, col }) === state.path) {
-        setRejectedCell({ row, col })
-        return
-      }
       playSound('tap')
       buzz(10)
-      dispatch({ type: 'ENTER_CELL', row, col, now: Date.now() })
+      dispatch({ type: 'CELL_CLICK', row, col, now: Date.now() })
     },
-    [state.path, state.level, playSound, buzz],
+    [playSound, buzz],
   )
 
   const handleUseHint = useCallback(
@@ -183,32 +176,33 @@ export default function ZipGamePage() {
 
       if (id === 'check') {
         const wrong = getWrongCells(state)
-        setCheckMessage(wrong.size === 0 ? 'Looking good — nothing wrong yet!' : `${wrong.size} step${wrong.size === 1 ? '' : 's'} strayed from the path.`)
+        setCheckMessage(wrong.size === 0 ? 'Looking good — nothing wrong yet!' : `${wrong.size} cell${wrong.size === 1 ? '' : 's'} marked wrong.`)
         dispatch({ type: 'HINT_CHECK' })
         return
       }
 
       setCheckMessage(null)
-      if (id === 'reveal-next') dispatch({ type: 'HINT_REVEAL_NEXT', now: Date.now() })
+      if (id === 'reveal-cell') dispatch({ type: 'HINT_REVEAL_CELL', now: Date.now() })
+      else if (id === 'reveal-line') dispatch({ type: 'HINT_REVEAL_LINE', now: Date.now() })
       setHintsOpen(false)
     },
     [state, playSound],
   )
 
   if (!validDifficulty && !isDaily) {
-    return <ErrorScreen message="Unknown difficulty." onBack={() => navigate('/zip')} />
+    return <ErrorScreen message="Unknown difficulty." onBack={() => navigate('/nonogram')} />
   }
   if (error) {
-    return <ErrorScreen message={error} onBack={() => navigate('/zip')} />
+    return <ErrorScreen message={error} onBack={() => navigate('/nonogram')} />
   }
 
   return (
     <main
-      data-game="zip"
+      data-game="nonogram"
       className="mx-auto flex min-h-svh max-w-lg flex-col items-center gap-6 bg-bg px-4 py-[max(1.5rem,env(safe-area-inset-top))] text-ink"
     >
       <GameHeader
-        backTo="/zip"
+        backTo="/nonogram"
         elapsedMs={state.elapsedMs}
         runStartedAt={state.runStartedAt}
         coins={coins}
@@ -223,18 +217,12 @@ export default function ZipGamePage() {
         {loading ? (
           <p className="text-ink-muted">Loading level…</p>
         ) : (
-          <ZipBoard
-            level={state.level}
-            path={state.path}
-            onCellEnter={handleCellEnter}
-            rejectedCell={rejectedCell}
-            onRejectedShakeEnd={() => setRejectedCell(null)}
-          />
+          <NonogramBoard level={state.level} grid={state.grid} onCellClick={handleCellClick} />
         )}
 
-        <ZipControls
+        <NonogramControls
           canUndo={state.history.length > 0}
-          canClear={state.path.length > 0}
+          canClear={state.grid.some((row) => row.some((mark) => mark !== 'empty'))}
           onUndo={() => dispatch({ type: 'UNDO' })}
           onClear={() => dispatch({ type: 'CLEAR', now: Date.now() })}
           onOpenHints={() => {
