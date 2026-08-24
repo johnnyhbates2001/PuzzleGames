@@ -210,7 +210,20 @@
       transform: translateY(0);
     }
   }
+  @keyframes rise {
+    from {
+      opacity: 0;
+      transform: translateY(14px) scale(0.985);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
 
+  .anim-rise {
+    animation: rise 420ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
   .anim-pop-in {
     animation: pop-in 160ms cubic-bezier(0.34, 1.56, 0.64, 1);
   }
@@ -282,6 +295,148 @@
     animation: ripple 260ms ease-out both;
   }
 
+  /* Solve sweep — a diagonal wave across the board the instant a level is solved (see
+     each Game*Page's win effect), before navigating to the completion screen. Per-cell
+     animationDelay = (row + col) * 42ms, set alongside this class by each Board. */
+  @keyframes solve-sweep {
+    0% {
+      transform: none;
+      filter: none;
+    }
+    38% {
+      transform: scale(1.16);
+      filter: brightness(1.3) saturate(1.25);
+    }
+    100% {
+      transform: none;
+      filter: none;
+    }
+  }
+  .anim-solve-sweep {
+    animation: solve-sweep 620ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  /* Update toast — entrance so a new-version prompt reads as arriving, not glitching in */
+  @keyframes toast-in {
+    from {
+      opacity: 0;
+      transform: translateY(52px) scale(0.9);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+  .anim-toast-in {
+    animation: toast-in 520ms cubic-bezier(0.34, 1.4, 0.64, 1) both;
+  }
+
+  /* Awards — unlock reveal for an award newly unlocked since the last visit (see
+     AwardsPage's `isNew`, computed from the existing seenAchievements setting — no
+     extra persistence needed, that bookkeeping was already there). */
+  @keyframes unlock {
+    0% {
+      filter: grayscale(1);
+      opacity: 0.42;
+      transform: none;
+    }
+    35% {
+      filter: grayscale(0);
+      opacity: 1;
+      transform: scale(1.32) rotate(-9deg);
+    }
+    62% {
+      transform: scale(0.94) rotate(4deg);
+    }
+    100% {
+      filter: grayscale(0);
+      opacity: 1;
+      transform: none;
+    }
+  }
+  .anim-unlock {
+    animation: unlock 700ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  }
+  @keyframes ring-flash {
+    0%,
+    100% {
+      box-shadow: 0 0 0 0 var(--color-accent);
+    }
+    35% {
+      box-shadow: 0 0 0 4px var(--color-accent);
+    }
+  }
+  .anim-ring-flash {
+    animation: ring-flash 700ms ease-out both;
+  }
+  @keyframes shine-sweep {
+    from {
+      transform: translateX(-40%) skewX(-20deg);
+    }
+    to {
+      transform: translateX(340%) skewX(-20deg);
+    }
+  }
+  .anim-shine-sweep {
+    animation: shine-sweep 760ms ease-out 280ms both;
+  }
+
+  /* Home — streak pips filling left-to-right, only on the visit a streak actually
+     advances (see HomePage's streakAdvanced, backed by Settings.lastSeenStreak). The
+     flame reuses the existing .anim-bump rather than a new keyframe. */
+  @keyframes pip-fill {
+    from {
+      opacity: 0.3;
+      transform: scale(0.4);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+  .anim-pip-fill {
+    animation: pip-fill 380ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  }
+
+  /* Shop — swatch tiles flip in sequence when a skin is newly equipped (see
+     ShopPage's justEquippedId) */
+  @keyframes skin-flip {
+    0%,
+    100% {
+      transform: rotateY(0deg);
+    }
+    50% {
+      transform: rotateY(-88deg);
+    }
+  }
+  .anim-skin-flip {
+    animation: skin-flip 460ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  }
+
+  /* Complete sheet coin flight — each dot travels from the reward pill to the header
+     balance pill (--dx/--dy set per-dot by CompleteSheet, measured once via
+     getBoundingClientRect, matching Confetti.tsx's "randomize once, drive via CSS
+     custom properties" approach). The self-centering translate(-50%,-50%) has to live
+     *inside* the keyframe rather than as a separate static transform class — a CSS
+     animation's `transform` fully replaces the computed value each frame, so a
+     transform set outside the animation would just get clobbered the instant it starts. */
+  @keyframes coin-fly {
+    0% {
+      transform: translate(-50%, -50%) translate(0, 0) scale(1);
+      opacity: 0;
+    }
+    8% {
+      opacity: 1;
+    }
+    100% {
+      transform: translate(-50%, -50%) translate(var(--dx), var(--dy)) scale(0.55);
+      opacity: 0;
+    }
+  }
+  .anim-coin-fly {
+    animation: coin-fly 620ms cubic-bezier(0.4, 0, 0.2, 1) both;
+  }
+
   /* Complete sheet confetti */
   @keyframes confetti-fall {
     0% {
@@ -297,40 +452,98 @@
     animation: confetti-fall 1s ease-in both;
   }
 
-  /* Page transitions — react-router adds html.transitioning during an active
-     View Transition (see useAppNavigate/AppLink). Single "root" group only (no
-     per-element view-transition-name) — a whole-page crossfade+slide, not a
-     shared-element morph. */
+  /* Page transitions — react-router adds html.transitioning during an active View
+     Transition (see useAppNavigate/AppLink). Single "root" group only (no
+     per-element view-transition-name) — a whole-page slide, not a shared-element
+     morph; see the comment on navDirection.ts's import sites for why per-element
+     names would fight this. Direction-aware: <html data-nav> is stamped by
+     AppLink/useAppNavigate *before* the navigation that starts the transition (see
+     navDirection.ts), and the rules below branch on it so Back visibly reverses
+     Forward instead of playing the same animation both ways. mix-blend-mode:normal
+     turns off the default cross-fade blending — a slide doesn't need a crossfade,
+     and without this both pages stay opaque and double-expose over each other. */
   html.transitioning::view-transition-old(root),
   html.transitioning::view-transition-new(root) {
-    animation-duration: 220ms;
+    animation-duration: 300ms;
     animation-timing-function: cubic-bezier(0.32, 0.72, 0, 1);
+    mix-blend-mode: normal;
   }
-  html.transitioning::view-transition-old(root) {
-    animation-name: page-out;
+
+  /* forward — new page pushes in from the right, old parallaxes left and dims */
+  @keyframes push-in {
+    from {
+      transform: translateX(100%);
+    }
+    to {
+      transform: none;
+    }
   }
-  html.transitioning::view-transition-new(root) {
-    animation-name: page-in;
+  @keyframes push-out {
+    from {
+      transform: none;
+      filter: brightness(1);
+    }
+    to {
+      transform: translateX(-28%);
+      filter: brightness(0.82);
+    }
   }
-  @keyframes page-in {
+  /* back — old page slides away to the right, revealing the new one underneath */
+  @keyframes pop-in {
+    from {
+      transform: translateX(-28%);
+      filter: brightness(0.82);
+    }
+    to {
+      transform: none;
+      filter: none;
+    }
+  }
+  @keyframes pop-out {
+    from {
+      transform: none;
+    }
+    to {
+      transform: translateX(100%);
+    }
+  }
+  /* peers (tab bar, and into/out of the Complete screen) — lateral, so no hierarchy
+     to express; a quick fade rather than a slide. */
+  @keyframes peer-in {
     from {
       opacity: 0;
-      transform: translateY(8px);
     }
     to {
       opacity: 1;
-      transform: translateY(0);
     }
   }
-  @keyframes page-out {
-    from {
-      opacity: 1;
-      transform: translateY(0);
-    }
-    to {
-      opacity: 0;
-      transform: translateY(-8px);
-    }
+
+  /* Z-order flips on pop: going forward the new page sits on top of the old; going
+     back the *old* page sits on top and slides off to reveal what's underneath.
+     That's what makes it read as a stack rather than two independent slides. */
+  html[data-nav='forward'].transitioning::view-transition-new(root) {
+    z-index: 2;
+    animation-name: push-in;
+  }
+  html[data-nav='forward'].transitioning::view-transition-old(root) {
+    z-index: 1;
+    animation-name: push-out;
+  }
+  html[data-nav='back'].transitioning::view-transition-new(root) {
+    z-index: 1;
+    animation-name: pop-in;
+  }
+  html[data-nav='back'].transitioning::view-transition-old(root) {
+    z-index: 2;
+    animation-name: pop-out;
+  }
+  html[data-nav='peer'].transitioning::view-transition-new(root) {
+    z-index: 2;
+    animation-name: peer-in;
+    animation-duration: 180ms;
+  }
+  html[data-nav='peer'].transitioning::view-transition-old(root) {
+    animation: none;
   }
 }
 

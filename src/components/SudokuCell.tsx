@@ -16,6 +16,9 @@ interface SudokuCellProps {
   /** Bumped on every placement — forced into the overlay's `key` so it remounts
    *  (and replays) even when a repeated placement computes the same delay. */
   rippleSeq?: number
+  /** Ms to delay the solve-sweep's entrance by — set only once the puzzle is solved,
+   *  proportional to (row + col) so the wave travels diagonally (see SudokuBoard.tsx). */
+  sweepDelayMs?: number
   onClick: (row: number, col: number) => void
 }
 
@@ -45,6 +48,7 @@ function SudokuCellImpl({
   conflict,
   rippleDelayMs,
   rippleSeq,
+  sweepDelayMs,
   onClick,
 }: SudokuCellProps) {
   return (
@@ -54,7 +58,8 @@ function SudokuCellImpl({
       data-row={row}
       data-col={col}
       aria-label={value === 0 ? 'Empty' : String(value)}
-      className={`relative flex aspect-square items-center justify-center text-[min(4.5vw,20px)] leading-none select-none ${borderClasses(row, col)} ${backgroundClass(selected, sameValue, peer)} ${conflict ? 'anim-shake ring-[2.5px] ring-inset ring-danger' : ''}`}
+      className={`relative flex aspect-square items-center justify-center text-[min(4.5vw,20px)] leading-none select-none ${borderClasses(row, col)} ${backgroundClass(selected, sameValue, peer)} ${conflict ? 'anim-shake ring-[2.5px] ring-inset ring-danger' : ''} ${sweepDelayMs !== undefined ? 'anim-solve-sweep' : ''}`}
+      style={{ animationDelay: sweepDelayMs !== undefined ? `${sweepDelayMs}ms` : undefined }}
     >
       {rippleDelayMs !== undefined && (
         <span

@@ -7,10 +7,16 @@ interface NonogramBoardProps {
   level: NonogramLevelRecord
   grid: Mark[][]
   onCellClick: (row: number, col: number) => void
+  /** True once the grid matches the solution — triggers the one-shot diagonal
+   *  solve-sweep across every cell before the win effect navigates away (see
+   *  useGameCompletion). */
+  solved?: boolean
   className?: string
 }
 
-export function NonogramBoard({ level, grid, onCellClick, className }: NonogramBoardProps) {
+const SWEEP_STEP_MS = 42
+
+export function NonogramBoard({ level, grid, onCellClick, solved, className }: NonogramBoardProps) {
   const { size, rowClues, colClues } = level
 
   // Free, real-time, solution-independent feedback (see contradictoryLines) — never a
@@ -31,6 +37,7 @@ export function NonogramBoard({ level, grid, onCellClick, className }: NonogramB
           mark={grid[r][c]}
           borderRight={c === size - 1 ? false : c % 5 === 4}
           borderBottom={r === size - 1 ? false : r % 5 === 4}
+          sweepDelayMs={solved ? (r + c) * SWEEP_STEP_MS : undefined}
           onClick={onCellClick}
         />,
       )

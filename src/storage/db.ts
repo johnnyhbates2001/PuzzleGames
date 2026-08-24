@@ -24,6 +24,10 @@ export interface Settings {
   unassistedCompletions: number
   /** Achievement ids the player has already seen the unlock toast for. */
   seenAchievements: string[]
+  /** Highest streak value the Home screen has already played the pip-fill/flame-bounce
+   *  animation for — lets it fire only the visit a streak actually advances, not every
+   *  time Home mounts. */
+  lastSeenStreak: number
 }
 
 export interface DifficultyProgress {
@@ -138,6 +142,7 @@ const DEFAULT_SETTINGS: Settings = {
   hapticsEnabled: true,
   unassistedCompletions: 0,
   seenAchievements: [],
+  lastSeenStreak: 0,
 }
 
 function defaultProgress(difficulty: Difficulty): DifficultyProgress {
@@ -217,6 +222,14 @@ export async function markAchievementsSeen(ids: string[]): Promise<void> {
   const seen = new Set(current.seenAchievements)
   ids.forEach((id) => seen.add(id))
   await db.put('settings', { ...current, seenAchievements: [...seen] }, 'global')
+}
+
+/** See Settings.lastSeenStreak — called once Home has played the pip-fill/flame-bounce
+ *  animation for a given streak value, so it doesn't replay on the next visit. */
+export async function setLastSeenStreak(streak: number): Promise<void> {
+  const db = await getDB()
+  const current = await getSettings()
+  await db.put('settings', { ...current, lastSeenStreak: streak }, 'global')
 }
 
 export async function addCoins(delta: number): Promise<number> {

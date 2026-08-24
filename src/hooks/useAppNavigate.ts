@@ -1,12 +1,16 @@
 import { useCallback } from 'react'
-import { useNavigate, type NavigateFunction, type NavigateOptions, type To } from 'react-router-dom'
+import { useLocation, useNavigate, type NavigateFunction, type NavigateOptions, type To } from 'react-router-dom'
 import { useReducedMotion } from './useReducedMotion'
+import { navDirection, setNavDirection } from '../navDirection'
 
 /** Drop-in `useNavigate` replacement that opts every navigation into a View
- *  Transition (see App.tsx's data router) unless the user prefers reduced motion. */
+ *  Transition (see App.tsx's data router) unless the user prefers reduced motion,
+ *  and stamps the transition's direction on `<html>` first — see AppLink for why
+ *  the timing (before, not in an effect after) matters. */
 export function useAppNavigate(): NavigateFunction {
   const navigate = useNavigate()
   const reducedMotion = useReducedMotion()
+  const location = useLocation()
 
   return useCallback(
     ((to: To | number, options?: NavigateOptions) => {
@@ -14,8 +18,9 @@ export function useAppNavigate(): NavigateFunction {
         navigate(to)
         return
       }
+      if (!reducedMotion) setNavDirection(navDirection(location.pathname, to))
       navigate(to, { ...options, viewTransition: !reducedMotion })
     }) as NavigateFunction,
-    [navigate, reducedMotion],
+    [navigate, reducedMotion, location.pathname],
   )
 }

@@ -17,6 +17,9 @@ interface BoardProps {
    *  cell, retroactively). `mode` is fixed for the whole stroke, decided by the start
    *  cell's X state at the moment the drag is confirmed. */
   onCellDragEnter: (row: number, col: number, mode: 'add' | 'erase') => void
+  /** True once the level is solved — triggers the one-shot diagonal solve-sweep
+   *  across every cell before the win effect navigates away (see useGameCompletion). */
+  solved?: boolean
   className?: string
 }
 
@@ -26,6 +29,7 @@ interface Coord {
 }
 
 const AUTO_X_STEP_MS = 20
+const SWEEP_STEP_MS = 42
 
 /** Delay (ms) for an auto-X'd cell's entrance animation: the Chebyshev distance
  *  (a queen's reach — same row/col/diagonal count as 1 step) from the *nearest*
@@ -50,7 +54,7 @@ function cellFromPoint(clientX: number, clientY: number): Coord | null {
   return { row: Number(button.dataset.row), col: Number(button.dataset.col) }
 }
 
-export function Board({ level, board, conflicts, onCellClick, onDragStart, onCellDragEnter, className }: BoardProps) {
+export function Board({ level, board, conflicts, onCellClick, onDragStart, onCellDragEnter, solved, className }: BoardProps) {
   const regionColors = useRegionColors()
   // Gesture state lives in refs, not React state — pointermove fires far too often
   // (and far too latency-sensitively) to route through re-renders, and refs are stable
@@ -139,6 +143,7 @@ export function Board({ level, board, conflicts, onCellClick, onDragStart, onCel
             regionColor={regionColors[level.regions[r][c] % regionColors.length]}
             conflict={cell.queen && conflicts.has(coordKey({ row: r, col: c }))}
             autoXDelayMs={autoXDelayMs(r, c, cell)}
+            sweepDelayMs={solved ? (r + c) * SWEEP_STEP_MS : undefined}
             onClick={onCellClick}
           />
         )),

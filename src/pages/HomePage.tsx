@@ -19,6 +19,7 @@ import {
   getStreak,
   getSudokuProgress,
   getZipProgress,
+  setLastSeenStreak,
 } from '../storage/db'
 import type { Difficulty } from '../engine/types'
 import { gameForDate, todayDateKey } from '../games/dailyChallenge'
@@ -54,6 +55,9 @@ export default function HomePage() {
   const [solvedByGame, setSolvedByGame] = useState<Record<string, number>>({})
   const [dailyStreak, setDailyStreak] = useState(0)
   const [dailyDoneToday, setDailyDoneToday] = useState(false)
+  // True only for the first Home visit after the streak actually advances — gates the
+  // pip-fill/flame-bounce below so it plays once per new streak day, not every visit.
+  const [streakAdvanced, setStreakAdvanced] = useState(false)
 
   const dateKey = todayDateKey()
   const dailyGameId = gameForDate(dateKey)
@@ -62,7 +66,14 @@ export default function HomePage() {
   useEffect(() => {
     let cancelled = false
     getSettings().then((s) => !cancelled && setCoins(s.coins))
-    getStreak().then((s) => !cancelled && setStreak(s))
+    Promise.all([getStreak(), getSettings()]).then(([s, settings]) => {
+      if (cancelled) return
+      setStreak(s)
+      if (s > settings.lastSeenStreak) {
+        setStreakAdvanced(true)
+        void setLastSeenStreak(s)
+      }
+    })
     getHeatmap(1).then((counts) => !cancelled && setStreakWeek(counts.map((c) => c > 0)))
     getDailyStreak().then((s) => !cancelled && setDailyStreak(s))
     getDailyChallenge(dateKey).then((record) => !cancelled && setDailyDoneToday(!!record))
@@ -93,8 +104,13 @@ export default function HomePage() {
       </div>
 
       {streak > 0 && (
-        <div className="flex items-center gap-2.5 rounded-[18px] bg-accent-tint px-3.5 py-3">
-          <span className="text-xl">🔥</span>
+        <div className="anim-rise flex items-center gap-2.5 rounded-[18px] bg-accent-tint px-3.5 py-3">
+          <span
+            className={`text-xl ${streakAdvanced ? 'anim-bump' : ''}`}
+            style={streakAdvanced ? { animationDelay: '560ms', animationFillMode: 'both' } : undefined}
+          >
+            🔥
+          </span>
           <div className="flex-1">
             <p className="text-sm font-bold text-ink">
               {streak} day streak
@@ -103,18 +119,25 @@ export default function HomePage() {
           </div>
           <div className="flex gap-1">
             {streakWeek.map((on, i) => (
-              <span key={i} className={`size-4 rounded-[5px] ${on ? 'bg-accent' : 'bg-accent-tint border border-border-dashed'}`} />
+              <span
+                key={i}
+                className={`size-4 rounded-[5px] ${on ? 'bg-accent' : 'bg-accent-tint border border-border-dashed'} ${
+                  on && streakAdvanced ? 'anim-pip-fill' : ''
+                }`}
+                style={on && streakAdvanced ? { animationDelay: `${i * 70}ms` } : undefined}
+              />
             ))}
           </div>
         </div>
       )}
 
       <div className="flex flex-col gap-3">
-        {GAMES.map((game) => (
+        {GAMES.map((game, i) => (
           <Link
             key={game.id}
             to={game.route}
-            className="flex items-center gap-4 rounded-3xl bg-surface p-4 shadow-card transition hover:shadow-md"
+            className="anim-rise flex items-center gap-4 rounded-3xl bg-surface p-4 shadow-card transition hover:shadow-md"
+            style={{ animationDelay: `${Math.min(i, 6) * 45}ms` }}
           >
             <div className="flex size-14 shrink-0 items-center justify-center rounded-2xl bg-accent-tint p-2.5">
               {PREVIEW_BY_ID[game.id]}
@@ -123,7 +146,7 @@ export default function HomePage() {
               <div className="flex items-center gap-1.5">
                 <h2 className="text-[20px] font-bold">{game.title}</h2>
                 {!!solvedByGame[game.id] && (
-                  <span className="rounded-full bg-accent-tint px-1.5 py-0.5 text-[10px] font-bold tracking-wide text-accent uppercase">
+                  <span className="anim-pop-in rounded-full bg-accent-tint px-1.5 py-0.5 text-[10px] font-bold tracking-wide text-accent uppercase">
                     {solvedByGame[game.id]} solved
                   </span>
                 )}
@@ -136,7 +159,8 @@ export default function HomePage() {
         {dailyGame && (
           <Link
             to={`${dailyGame.route}/daily`}
-            className="flex items-center gap-4 rounded-3xl bg-[oklch(20%_0.02_260)] p-4 shadow-card transition hover:shadow-md"
+            className="anim-rise flex items-center gap-4 rounded-3xl bg-[oklch(20%_0.02_260)] p-4 shadow-card transition hover:shadow-md"
+            style={{ animationDelay: `${Math.min(GAMES.length, 6) * 45}ms` }}
           >
             <div className="flex size-14 shrink-0 items-center justify-center rounded-2xl bg-white/10 p-2.5">
               {PREVIEW_BY_ID[dailyGame.id]}

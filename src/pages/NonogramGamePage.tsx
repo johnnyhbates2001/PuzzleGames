@@ -217,7 +217,7 @@ export default function NonogramGamePage() {
         {loading ? (
           <p className="text-ink-muted">Loading level…</p>
         ) : (
-          <NonogramBoard level={state.level} grid={state.grid} onCellClick={handleCellClick} />
+          <NonogramBoard level={state.level} grid={state.grid} onCellClick={handleCellClick} solved={state.status === 'won'} />
         )}
 
         <NonogramControls

@@ -266,6 +266,7 @@ export default function GamePage() {
             onCellClick={handleCellClick}
             onDragStart={handleDragStart}
             onCellDragEnter={handleCellDragEnter}
+            solved={state.status === 'won'}
           />
         )}
 

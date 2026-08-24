@@ -1,6 +1,8 @@
 import { useRef } from 'react'
+import { useLocation } from 'react-router-dom'
 import { useRegisterSW } from 'virtual:pwa-register/react'
 import { useAppLifecycle } from '../hooks/useAppLifecycle'
+import { navDepth } from '../navDirection'
 
 const UPDATE_CHECK_INTERVAL_MS = 60 * 60 * 1000 // hourly, while the app stays open
 
@@ -13,6 +15,9 @@ const UPDATE_CHECK_INTERVAL_MS = 60 * 60 * 1000 // hourly, while the app stays o
  */
 export function UpdateToast() {
   const registrationRef = useRef<ServiceWorkerRegistration | null>(null)
+  // The four top-level screens (depth 0, see navDirection.ts) show the TabBar in
+  // this same fixed bottom slot — sit above it there instead of overlapping.
+  const hasTabBar = navDepth(useLocation().pathname) === 0
 
   const {
     needRefresh: [needRefresh],
@@ -33,7 +38,11 @@ export function UpdateToast() {
   if (!needRefresh) return null
 
   return (
-    <div className="fixed inset-x-0 bottom-[max(1rem,env(safe-area-inset-bottom))] z-50 mx-auto flex w-fit items-center gap-3 rounded-full bg-accent px-4 py-2 text-sm text-white shadow-card">
+    <div
+      className={`anim-toast-in fixed inset-x-0 z-50 mx-auto flex w-fit items-center gap-3 rounded-full bg-accent px-4 py-2 text-sm text-white shadow-card ${
+        hasTabBar ? 'bottom-[max(5.5rem,calc(env(safe-area-inset-bottom)+4.5rem))]' : 'bottom-[max(1rem,env(safe-area-inset-bottom))]'
+      }`}
+    >
       <span>New version available</span>
       <button
         type="button"

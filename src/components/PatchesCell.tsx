@@ -13,6 +13,9 @@ interface PatchesCellProps {
   mismatched: boolean
   borderRight: boolean
   borderBottom: boolean
+  /** Ms to delay the solve-sweep's entrance by — set only once the board is solved,
+   *  proportional to (row + col) so the wave travels diagonally (see PatchesBoard.tsx). */
+  sweepDelayMs?: number
 }
 
 const SHAPE_BADGE_CLASS: Record<PatchShape, string> = {
@@ -31,6 +34,7 @@ function PatchesCellImpl({
   mismatched,
   borderRight,
   borderBottom,
+  sweepDelayMs,
 }: PatchesCellProps) {
   return (
     <button
@@ -41,12 +45,15 @@ function PatchesCellImpl({
       // Shake lives on the button itself (transform: translateX) so the whole cell
       // shakes; the fill's entrance animation (transform: scale + opacity) lives on
       // its own child span below — two `animation` shorthands on the same element
-      // would fight in the cascade instead of playing together.
+      // would fight in the cascade instead of playing together. The solve-sweep
+      // (also a transform on the button) only ever runs once the board is fully
+      // solved, well after any mismatch shake, so the two never overlap in practice.
       className={`relative flex aspect-square touch-none items-center justify-center bg-surface select-none ${
         mismatched ? 'anim-shake' : ''
       } ${borderRight ? 'border-r-2 border-r-grid-line-strong' : 'border-r border-r-grid-gap'} ${
         borderBottom ? 'border-b-2 border-b-grid-line-strong' : 'border-b border-b-grid-gap'
-      }`}
+      } ${sweepDelayMs !== undefined ? 'anim-solve-sweep' : ''}`}
+      style={{ animationDelay: sweepDelayMs !== undefined ? `${sweepDelayMs}ms` : undefined }}
     >
       {fillColor && (
         <span
