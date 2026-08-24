@@ -213,12 +213,24 @@
   }
 }
 
+html {
+  height: 100%;
+  background: var(--bg);
+}
+
+/* Body is fixed and non-scrolling — every screen is designed to fit the viewport,
+   so there's nothing to scroll. This also kills iOS Safari's rubber-band overscroll,
+   which otherwise reveals blank (unpainted) space past the page edges when flicked.
+   #root is the actual scroll container, as a safety net for content that overflows. */
 body {
+  position: fixed;
+  inset: 0;
   margin: 0;
   padding-left: env(safe-area-inset-left);
   padding-right: env(safe-area-inset-right);
   padding-bottom: env(safe-area-inset-bottom);
-  overscroll-behavior-y: contain;
+  overflow: hidden;
+  overscroll-behavior: none;
 }
 
 /* Prevents double-tap-to-zoom on iOS Safari for ordinary tap targets. The board grid
@@ -231,4 +243,8 @@ a {
 
 #root {
   min-height: 100svh;
+  height: 100%;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  -webkit-overflow-scrolling: touch;
 }
