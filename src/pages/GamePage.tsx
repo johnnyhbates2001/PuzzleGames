@@ -3,9 +3,21 @@ import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import type { Coord, Difficulty, LevelRecord } from '../engine/types'
 import { getConflicts } from '../engine/validator'
 import { createInitialState, gameReducer, getWrongQueens } from '../state/gameReducer'
-import { getInProgress, getSettings, recordCompletion, saveInProgress, setAutoPlaceX, spendCoins } from '../storage/db'
+import {
+  getDailyChallenge,
+  getDailyStreak,
+  getInProgress,
+  getSettings,
+  recordCompletion,
+  recordDailyChallengeCompletion,
+  saveInProgress,
+  setAutoPlaceX,
+  spendCoins,
+} from '../storage/db'
 import { getNextLevel } from '../games/queensLevels'
+import { getDailyQueensLevel, todayDateKey } from '../games/dailyChallenge'
 import { useAppLifecycle } from '../hooks/useAppLifecycle'
+import { useAudio } from '../hooks/useAudio'
 import { Board } from '../components/Board'
 import { Controls } from '../components/Controls'
 import { GameHeader } from '../components/GameHeader'
@@ -37,7 +49,9 @@ export default function GamePage() {
   const { difficulty } = useParams<{ difficulty: string }>()
   const navigate = useNavigate()
   const location = useLocation()
+  const isDaily = difficulty === 'daily'
   const validDifficulty = isValidDifficulty(difficulty) ? difficulty : null
+  const { playSound, buzz } = useAudio()
 
   const [state, dispatch] = useReducer(gameReducer, PLACEHOLDER_LEVEL, (level) => createInitialState(level, true))
   const [loading, setLoading] = useState(true)
@@ -46,14 +60,21 @@ export default function GamePage() {
   const [hintsOpen, setHintsOpen] = useState(false)
   const [checkMessage, setCheckMessage] = useState<string | null>(null)
   const sourceRef = useRef<{ source: 'bank' | 'generated'; bankIndex?: number }>({ source: 'generated' })
+  // Set during load if today's Daily Challenge was already completed — the win effect
+  // reads this to skip re-awarding coins on a replay (recordDailyChallengeCompletion
+  // would otherwise let a player farm coins by re-solving the same puzzle all day).
+  const dailyAlreadyCompletedRef = useRef(false)
   // Captured once at mount — GamePage always remounts fresh on navigation into this
   // route (Complete -> Game is always a route change), so this never needs to react
   // to a later location.state change.
   const initialReplayLevelRef = useRef((location.state as ReplayLocationState | null)?.replayLevel)
 
   // Load the in-progress save for this difficulty if one exists, else the next level.
+  // The 'daily' route (/queens/daily) shares this same param slot: it skips bank/resume
+  // entirely and always loads today's deterministic puzzle (or replays it, via the same
+  // replayLevel mechanism used for post-completion replays, if today's is already solved).
   useEffect(() => {
-    if (!validDifficulty) return
+    if (!validDifficulty && !isDaily) return
     let cancelled = false
 
     async function init() {
@@ -67,6 +88,18 @@ export default function GamePage() {
           setCoins(settings.coins)
           sourceRef.current = { source: 'generated' }
           dispatch({ type: 'LOAD', level: replayLevel, autoPlaceX: settings.autoPlaceX })
+          return
+        }
+
+        if (isDaily) {
+          const dateKey = todayDateKey()
+          const [settings, existing] = await Promise.all([getSettings(), getDailyChallenge(dateKey)])
+          if (cancelled) return
+          setCoins(settings.coins)
+          sourceRef.current = { source: 'generated' }
+          dailyAlreadyCompletedRef.current = !!existing
+          const level = getDailyQueensLevel(dateKey)
+          dispatch({ type: 'LOAD', level, autoPlaceX: settings.autoPlaceX })
           return
         }
 
@@ -99,7 +132,7 @@ export default function GamePage() {
     return () => {
       cancelled = true
     }
-  }, [validDifficulty])
+  }, [validDifficulty, isDaily])
 
   // LOAD always leaves the timer paused (runStartedAt=null); explicitly resume once mounted.
   useEffect(() => {
@@ -116,8 +149,10 @@ export default function GamePage() {
   )
 
   // Autosave in-progress state so leaving and returning resumes this exact board.
+  // Daily Challenge intentionally skips this (see src/games/dailyChallenge.ts) — it
+  // always restarts fresh from the same deterministic puzzle within a day.
   useEffect(() => {
-    if (loading || !validDifficulty || state.status !== 'playing') return
+    if (loading || !validDifficulty || isDaily || state.status !== 'playing') return
     saveInProgress({
       difficulty: validDifficulty as Difficulty,
       level: state.level,
@@ -127,39 +162,70 @@ export default function GamePage() {
       elapsedMs: state.elapsedMs,
       savedAt: Date.now(),
     })
-  }, [state.board, state.elapsedMs, state.level, state.status, loading, validDifficulty])
+  }, [state.board, state.elapsedMs, state.level, state.status, loading, validDifficulty, isDaily])
 
   // On win: record completion, then hand off to the completion screen.
   useEffect(() => {
-    if (state.status !== 'won' || !validDifficulty) return
+    if (state.status !== 'won' || (!validDifficulty && !isDaily)) return
     let cancelled = false
-    recordCompletion(validDifficulty as Difficulty, state.elapsedMs, state.hintsUsed > 0).then((result) => {
-      if (!cancelled) {
-        navigate(`/queens/${validDifficulty}/complete`, {
-          state: {
-            timeMs: state.elapsedMs,
-            levelNumber: result.progress.completedCount,
-            level: state.level,
-            board: state.board,
-            coinsAwarded: result.coinsAwarded,
-            isPersonalBest: result.isPersonalBest,
-          },
-          replace: true,
-        })
-      }
-    })
+    playSound('success')
+    buzz([20, 40, 20, 40, 60])
+
+    if (isDaily) {
+      const finish = dailyAlreadyCompletedRef.current
+        ? getDailyStreak().then((streak) => ({ coinsAwarded: 0, streak }))
+        : recordDailyChallengeCompletion('queens', state.elapsedMs, state.hintsUsed > 0)
+      finish.then((result) => {
+        if (!cancelled) {
+          navigate('/queens/daily/complete', {
+            state: {
+              timeMs: state.elapsedMs,
+              level: state.level,
+              board: state.board,
+              coinsAwarded: result.coinsAwarded,
+              dailyStreak: result.streak,
+            },
+            replace: true,
+          })
+        }
+      })
+    } else {
+      recordCompletion(validDifficulty as Difficulty, state.elapsedMs, state.hintsUsed > 0).then((result) => {
+        if (!cancelled) {
+          navigate(`/queens/${validDifficulty}/complete`, {
+            state: {
+              timeMs: state.elapsedMs,
+              levelNumber: result.progress.completedCount,
+              level: state.level,
+              board: state.board,
+              coinsAwarded: result.coinsAwarded,
+              isPersonalBest: result.isPersonalBest,
+              dailyBonusApplied: result.dailyBonusApplied,
+            },
+            replace: true,
+          })
+        }
+      })
+    }
     return () => {
       cancelled = true
     }
-  }, [state.status, validDifficulty, navigate, state.elapsedMs, state.level, state.board])
+  }, [state.status, validDifficulty, isDaily, navigate, state.elapsedMs, state.level, state.board])
 
-  const handleCellClick = useCallback((row: number, col: number) => {
-    dispatch({ type: 'CELL_CLICK', row, col, now: Date.now() })
-  }, [])
+  const handleCellClick = useCallback(
+    (row: number, col: number) => {
+      playSound('tap')
+      buzz(10)
+      dispatch({ type: 'CELL_CLICK', row, col, now: Date.now() })
+    },
+    [playSound, buzz],
+  )
 
   const handleDragStart = useCallback(() => {
+    playSound('tap')
+    buzz(10)
     dispatch({ type: 'BEGIN_DRAG_MARK' })
-  }, [])
+  }, [playSound, buzz])
 
   const handleCellDragEnter = useCallback((row: number, col: number, mode: 'add' | 'erase') => {
     dispatch({ type: 'DRAG_MARK_CELL', row, col, mode })
@@ -170,6 +236,7 @@ export default function GamePage() {
       const ok = await spendCoins(price)
       if (!ok) return
       setCoins((c) => c - price)
+      playSound('hint')
 
       if (id === 'check') {
         const wrong = getWrongQueens(state)
@@ -183,7 +250,7 @@ export default function GamePage() {
       else if (id === 'solve-region') dispatch({ type: 'HINT_SOLVE_REGION', now: Date.now() })
       setHintsOpen(false)
     },
-    [state],
+    [state, playSound],
   )
 
   const conflicts = useMemo(() => {
@@ -196,7 +263,7 @@ export default function GamePage() {
     return getConflicts(queens, state.level.regions)
   }, [state.board, state.level])
 
-  if (!validDifficulty) {
+  if (!validDifficulty && !isDaily) {
     return <ErrorScreen message="Unknown difficulty." onBack={() => navigate('/queens')} />
   }
   if (error) {
@@ -214,13 +281,17 @@ export default function GamePage() {
         runStartedAt={state.runStartedAt}
         coins={coins}
         right={
-          <span
-            className={`rounded-full px-3 py-1.5 text-xs font-semibold ${
-              state.autoPlaceX ? 'bg-accent-tint text-accent' : 'text-ink-muted'
-            }`}
-          >
-            Auto X {state.autoPlaceX ? 'on' : 'off'}
-          </span>
+          isDaily ? (
+            <span className="rounded-full bg-accent-tint px-3 py-1.5 text-xs font-semibold text-accent">Daily Challenge</span>
+          ) : (
+            <span
+              className={`rounded-full px-3 py-1.5 text-xs font-semibold ${
+                state.autoPlaceX ? 'bg-accent-tint text-accent' : 'text-ink-muted'
+              }`}
+            >
+              Auto X {state.autoPlaceX ? 'on' : 'off'}
+            </span>
+          )
         }
       />
 

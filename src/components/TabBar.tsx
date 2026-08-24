@@ -4,13 +4,14 @@ const TABS = [
   { key: 'play', label: 'Play', icon: '▦', to: '/' },
   { key: 'shop', label: 'Shop', icon: '✦', to: '/shop' },
   { key: 'stats', label: 'Stats', icon: '◷', to: '/stats' },
+  { key: 'awards', label: 'Awards', icon: '🏆', to: '/achievements' },
 ] as const
 
 interface TabBarProps {
   active: (typeof TABS)[number]['key']
 }
 
-/** iOS-pill bottom tab bar shown on the three top-level screens (Home/Shop/Stats) —
+/** iOS-pill bottom tab bar shown on the four top-level screens (Home/Shop/Stats/Awards) —
  *  not during the Difficulty/Game/Complete push-navigation flow, matching the design. */
 export function TabBar({ active }: TabBarProps) {
   return (

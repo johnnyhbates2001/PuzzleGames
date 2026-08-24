@@ -8,11 +8,13 @@ import { CompleteSheet } from '../components/CompleteSheet'
 
 interface CompleteLocationState {
   timeMs: number
-  levelNumber: number
+  levelNumber?: number
   level: PatchesLevelRecord
   placed: PlacedRect[]
   coinsAwarded: number
-  isPersonalBest: boolean
+  isPersonalBest?: boolean
+  dailyBonusApplied?: boolean
+  dailyStreak?: number
 }
 
 const LABELS: Record<Difficulty, string> = { easy: 'Easy', medium: 'Medium', hard: 'Hard' }
@@ -28,6 +30,7 @@ export default function PatchesCompletePage() {
   const [avgMs, setAvgMs] = useState<number | null>(null)
   const [bestMs, setBestMs] = useState<number | null>(null)
 
+  const isDaily = difficulty === 'daily'
   const validDifficulty = isValidDifficulty(difficulty) ? difficulty : null
   const completion = location.state as CompleteLocationState | null
 
@@ -45,7 +48,7 @@ export default function PatchesCompletePage() {
     }
   }, [validDifficulty])
 
-  if (!validDifficulty || !completion) {
+  if ((!validDifficulty && !isDaily) || !completion) {
     return (
       <main
         data-game="patches"
@@ -59,7 +62,7 @@ export default function PatchesCompletePage() {
     )
   }
 
-  const { timeMs, levelNumber, level, placed, coinsAwarded, isPersonalBest } = completion
+  const { timeMs, levelNumber, level, placed, coinsAwarded, isPersonalBest, dailyBonusApplied, dailyStreak } = completion
 
   return (
     <main data-game="patches" className="fixed inset-0 overflow-hidden bg-bg">
@@ -75,15 +78,20 @@ export default function PatchesCompletePage() {
             className="pointer-events-none absolute inset-x-4 top-[max(1.5rem,env(safe-area-inset-top))] max-w-lg opacity-65 blur-[3px] sm:mx-auto sm:inset-x-0"
           />
         }
-        difficultyLabel={LABELS[validDifficulty]}
-        levelNumber={levelNumber}
+        difficultyLabel={isDaily ? 'Daily Challenge' : LABELS[validDifficulty as Difficulty]}
+        levelNumber={isDaily ? undefined : levelNumber}
         timeMs={timeMs}
         bestMs={bestMs}
         avgMs={avgMs}
         coinsAwarded={coinsAwarded}
-        isPersonalBest={isPersonalBest}
+        isPersonalBest={!!isPersonalBest}
+        dailyBonusApplied={dailyBonusApplied}
+        isDaily={isDaily}
+        dailyStreak={dailyStreak}
         onNextLevel={() => navigate(`/patches/${validDifficulty}`, { replace: true })}
-        onReplay={() => navigate(`/patches/${validDifficulty}`, { state: { replayLevel: level }, replace: true })}
+        onReplay={() =>
+          navigate(isDaily ? '/patches/daily' : `/patches/${validDifficulty}`, { state: { replayLevel: level }, replace: true })
+        }
       />
     </main>
   )

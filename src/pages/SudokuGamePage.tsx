@@ -4,9 +4,20 @@ import { SUDOKU_SIZE, type Difficulty, type SudokuLevelRecord } from '../engine/
 import { getConflicts } from '../engine/sudoku/validator'
 import { createInitialState, getWrongCells, sudokuReducer } from '../state/sudokuReducer'
 import { boardValues } from '../state/sudokuTypes'
-import { getSettings, getSudokuInProgress, recordSudokuCompletion, saveSudokuInProgress, spendCoins } from '../storage/db'
+import {
+  getDailyChallenge,
+  getDailyStreak,
+  getSettings,
+  getSudokuInProgress,
+  recordDailyChallengeCompletion,
+  recordSudokuCompletion,
+  saveSudokuInProgress,
+  spendCoins,
+} from '../storage/db'
 import { getNextSudokuLevel } from '../games/sudokuLevels'
+import { getDailySudokuLevel, todayDateKey } from '../games/dailyChallenge'
 import { useAppLifecycle } from '../hooks/useAppLifecycle'
+import { useAudio } from '../hooks/useAudio'
 import { SudokuBoard } from '../components/SudokuBoard'
 import { SudokuKeypad } from '../components/SudokuKeypad'
 import { SudokuControls } from '../components/SudokuControls'
@@ -43,7 +54,9 @@ export default function SudokuGamePage() {
   const { difficulty } = useParams<{ difficulty: string }>()
   const navigate = useNavigate()
   const location = useLocation()
+  const isDaily = difficulty === 'daily'
   const validDifficulty = isValidDifficulty(difficulty) ? difficulty : null
+  const { playSound, buzz } = useAudio()
 
   const [state, dispatch] = useReducer(sudokuReducer, PLACEHOLDER_LEVEL, (level) => createInitialState(level))
   const [loading, setLoading] = useState(true)
@@ -52,10 +65,14 @@ export default function SudokuGamePage() {
   const [hintsOpen, setHintsOpen] = useState(false)
   const [checkMessage, setCheckMessage] = useState<string | null>(null)
   const sourceRef = useRef<{ source: 'bank' | 'generated'; bankIndex?: number }>({ source: 'generated' })
+  // Set during load if today's Daily Challenge was already completed — the win effect
+  // reads this to skip re-awarding coins on a replay (recordDailyChallengeCompletion
+  // would otherwise let a player farm coins by re-solving the same puzzle all day).
+  const dailyAlreadyCompletedRef = useRef(false)
   const initialReplayLevelRef = useRef((location.state as ReplayLocationState | null)?.replayLevel)
 
   useEffect(() => {
-    if (!validDifficulty) return
+    if (!validDifficulty && !isDaily) return
     let cancelled = false
 
     async function init() {
@@ -66,6 +83,18 @@ export default function SudokuGamePage() {
         if (replayLevel) {
           getSettings().then((s) => !cancelled && setCoins(s.coins))
           dispatch({ type: 'LOAD', level: replayLevel })
+          return
+        }
+
+        if (isDaily) {
+          const dateKey = todayDateKey()
+          const [settings, existing] = await Promise.all([getSettings(), getDailyChallenge(dateKey)])
+          if (cancelled) return
+          setCoins(settings.coins)
+          sourceRef.current = { source: 'generated' }
+          dailyAlreadyCompletedRef.current = !!existing
+          const level = getDailySudokuLevel(dateKey)
+          dispatch({ type: 'LOAD', level })
           return
         }
 
@@ -97,7 +126,7 @@ export default function SudokuGamePage() {
     return () => {
       cancelled = true
     }
-  }, [validDifficulty])
+  }, [validDifficulty, isDaily])
 
   useEffect(() => {
     if (!loading && !error && state.status === 'playing') {
@@ -112,8 +141,11 @@ export default function SudokuGamePage() {
     },
   )
 
+  // Autosave in-progress state so leaving and returning resumes this exact board.
+  // Daily Challenge intentionally skips this (see src/games/dailyChallenge.ts) — it
+  // always restarts fresh from the same deterministic puzzle within a day.
   useEffect(() => {
-    if (loading || !validDifficulty || state.status !== 'playing') return
+    if (loading || !validDifficulty || isDaily || state.status !== 'playing') return
     saveSudokuInProgress({
       difficulty: validDifficulty as Difficulty,
       level: state.level,
@@ -123,38 +155,73 @@ export default function SudokuGamePage() {
       elapsedMs: state.elapsedMs,
       savedAt: Date.now(),
     })
-  }, [state.board, state.elapsedMs, state.level, state.status, loading, validDifficulty])
+  }, [state.board, state.elapsedMs, state.level, state.status, loading, validDifficulty, isDaily])
 
+  // On win: record completion, then hand off to the completion screen.
   useEffect(() => {
-    if (state.status !== 'won' || !validDifficulty) return
+    if (state.status !== 'won' || (!validDifficulty && !isDaily)) return
     let cancelled = false
-    recordSudokuCompletion(validDifficulty as Difficulty, state.elapsedMs, state.hintsUsed > 0).then((result) => {
-      if (!cancelled) {
-        navigate(`/sudoku/${validDifficulty}/complete`, {
-          state: {
-            timeMs: state.elapsedMs,
-            levelNumber: result.progress.completedCount,
-            level: state.level,
-            board: state.board,
-            coinsAwarded: result.coinsAwarded,
-            isPersonalBest: result.isPersonalBest,
-          },
-          replace: true,
-        })
-      }
-    })
+    playSound('success')
+    buzz([20, 40, 20, 40, 60])
+
+    if (isDaily) {
+      const finish = dailyAlreadyCompletedRef.current
+        ? getDailyStreak().then((streak) => ({ coinsAwarded: 0, streak }))
+        : recordDailyChallengeCompletion('sudoku', state.elapsedMs, state.hintsUsed > 0)
+      finish.then((result) => {
+        if (!cancelled) {
+          navigate('/sudoku/daily/complete', {
+            state: {
+              timeMs: state.elapsedMs,
+              level: state.level,
+              board: state.board,
+              coinsAwarded: result.coinsAwarded,
+              dailyStreak: result.streak,
+            },
+            replace: true,
+          })
+        }
+      })
+    } else {
+      recordSudokuCompletion(validDifficulty as Difficulty, state.elapsedMs, state.hintsUsed > 0).then((result) => {
+        if (!cancelled) {
+          navigate(`/sudoku/${validDifficulty}/complete`, {
+            state: {
+              timeMs: state.elapsedMs,
+              levelNumber: result.progress.completedCount,
+              level: state.level,
+              board: state.board,
+              coinsAwarded: result.coinsAwarded,
+              isPersonalBest: result.isPersonalBest,
+              dailyBonusApplied: result.dailyBonusApplied,
+            },
+            replace: true,
+          })
+        }
+      })
+    }
     return () => {
       cancelled = true
     }
-  }, [state.status, validDifficulty, navigate, state.elapsedMs, state.level, state.board])
+  }, [state.status, validDifficulty, isDaily, navigate, state.elapsedMs, state.level, state.board])
 
-  const handleCellClick = useCallback((row: number, col: number) => {
-    dispatch({ type: 'SELECT_CELL', row, col })
-  }, [])
+  const handleCellClick = useCallback(
+    (row: number, col: number) => {
+      playSound('tap')
+      buzz(10)
+      dispatch({ type: 'SELECT_CELL', row, col })
+    },
+    [playSound, buzz],
+  )
 
-  const handleDigit = useCallback((digit: number) => {
-    dispatch({ type: 'INPUT_DIGIT', digit, now: Date.now() })
-  }, [])
+  const handleDigit = useCallback(
+    (digit: number) => {
+      playSound('tap')
+      buzz(10)
+      dispatch({ type: 'INPUT_DIGIT', digit, now: Date.now() })
+    },
+    [playSound, buzz],
+  )
 
   const handleErase = useCallback(() => {
     dispatch({ type: 'ERASE', now: Date.now() })
@@ -169,6 +236,7 @@ export default function SudokuGamePage() {
       const ok = await spendCoins(price)
       if (!ok) return
       setCoins((c) => c - price)
+      playSound('hint')
 
       if (id === 'check') {
         const wrong = getWrongCells(state)
@@ -182,7 +250,7 @@ export default function SudokuGamePage() {
       else if (id === 'solve-box') dispatch({ type: 'HINT_SOLVE_BOX', now: Date.now() })
       setHintsOpen(false)
     },
-    [state],
+    [state, playSound],
   )
 
   useEffect(() => {
@@ -202,7 +270,7 @@ export default function SudokuGamePage() {
   const conflicts = useMemo(() => getConflicts(boardValues(state.board)), [state.board])
   const selectedValue = state.selected ? state.board[state.selected.row][state.selected.col].value || null : null
 
-  if (!validDifficulty) {
+  if (!validDifficulty && !isDaily) {
     return <ErrorScreen message="Unknown difficulty." onBack={() => navigate('/sudoku')} />
   }
   if (error) {
@@ -214,7 +282,17 @@ export default function SudokuGamePage() {
       data-game="sudoku"
       className="mx-auto flex min-h-svh max-w-lg flex-col items-center gap-6 bg-bg px-4 py-[max(1.5rem,env(safe-area-inset-top))] text-ink"
     >
-      <GameHeader backTo="/sudoku" elapsedMs={state.elapsedMs} runStartedAt={state.runStartedAt} coins={coins} />
+      <GameHeader
+        backTo="/sudoku"
+        elapsedMs={state.elapsedMs}
+        runStartedAt={state.runStartedAt}
+        coins={coins}
+        right={
+          isDaily ? (
+            <span className="rounded-full bg-accent-tint px-3 py-1.5 text-xs font-semibold text-accent">Daily Challenge</span>
+          ) : undefined
+        }
+      />
 
       <div className="flex w-full max-w-[420px] flex-col items-center gap-4">
         {loading ? (

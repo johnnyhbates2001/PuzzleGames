@@ -42,9 +42,9 @@ export default defineConfig({
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
       },
       manifest: {
-        name: 'Queens Puzzle',
-        short_name: 'Queens',
-        description: 'An offline-first colored-region Queens puzzle.',
+        name: 'Puzzle Box',
+        short_name: 'Puzzle Box',
+        description: 'An offline-first collection of daily puzzles: Queens, Sudoku, Zip, and Patches.',
         display: 'standalone',
         start_url: '/',
         theme_color: '#7C4DD6',

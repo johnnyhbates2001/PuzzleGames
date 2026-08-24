@@ -2,9 +2,20 @@ import { useCallback, useEffect, useReducer, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import type { Difficulty, PatchesLevelRecord } from '../engine/patches/types'
 import { createInitialState, getWrongCells, patchesReducer } from '../state/patchesReducer'
-import { getPatchesInProgress, getSettings, recordPatchesCompletion, savePatchesInProgress, spendCoins } from '../storage/db'
+import {
+  getDailyChallenge,
+  getDailyStreak,
+  getPatchesInProgress,
+  getSettings,
+  recordDailyChallengeCompletion,
+  recordPatchesCompletion,
+  savePatchesInProgress,
+  spendCoins,
+} from '../storage/db'
 import { getNextPatchesLevel } from '../games/patchesLevels'
+import { getDailyPatchesLevel, todayDateKey } from '../games/dailyChallenge'
 import { useAppLifecycle } from '../hooks/useAppLifecycle'
+import { useAudio } from '../hooks/useAudio'
 import { PatchesBoard } from '../components/PatchesBoard'
 import { PatchesControls } from '../components/PatchesControls'
 import { GameHeader } from '../components/GameHeader'
@@ -38,7 +49,9 @@ export default function PatchesGamePage() {
   const { difficulty } = useParams<{ difficulty: string }>()
   const navigate = useNavigate()
   const location = useLocation()
+  const isDaily = difficulty === 'daily'
   const validDifficulty = isValidDifficulty(difficulty) ? difficulty : null
+  const { playSound, buzz } = useAudio()
 
   const [state, dispatch] = useReducer(patchesReducer, PLACEHOLDER_LEVEL, (level) => createInitialState(level))
   const [loading, setLoading] = useState(true)
@@ -47,10 +60,14 @@ export default function PatchesGamePage() {
   const [hintsOpen, setHintsOpen] = useState(false)
   const [checkMessage, setCheckMessage] = useState<string | null>(null)
   const sourceRef = useRef<{ source: 'bank' | 'generated'; bankIndex?: number }>({ source: 'generated' })
+  // Set during load if today's Daily Challenge was already completed — the win effect
+  // reads this to skip re-awarding coins on a replay (recordDailyChallengeCompletion
+  // would otherwise let a player farm coins by re-solving the same puzzle all day).
+  const dailyAlreadyCompletedRef = useRef(false)
   const initialReplayLevelRef = useRef((location.state as ReplayLocationState | null)?.replayLevel)
 
   useEffect(() => {
-    if (!validDifficulty) return
+    if (!validDifficulty && !isDaily) return
     let cancelled = false
 
     async function init() {
@@ -61,6 +78,18 @@ export default function PatchesGamePage() {
         if (replayLevel) {
           getSettings().then((s) => !cancelled && setCoins(s.coins))
           dispatch({ type: 'LOAD', level: replayLevel })
+          return
+        }
+
+        if (isDaily) {
+          const dateKey = todayDateKey()
+          const [settings, existing] = await Promise.all([getSettings(), getDailyChallenge(dateKey)])
+          if (cancelled) return
+          setCoins(settings.coins)
+          sourceRef.current = { source: 'generated' }
+          dailyAlreadyCompletedRef.current = !!existing
+          const level = getDailyPatchesLevel(dateKey)
+          dispatch({ type: 'LOAD', level })
           return
         }
 
@@ -92,7 +121,7 @@ export default function PatchesGamePage() {
     return () => {
       cancelled = true
     }
-  }, [validDifficulty])
+  }, [validDifficulty, isDaily])
 
   useEffect(() => {
     if (!loading && !error && state.status === 'playing') {
@@ -107,8 +136,11 @@ export default function PatchesGamePage() {
     },
   )
 
+  // Autosave in-progress state so leaving and returning resumes this exact board.
+  // Daily Challenge intentionally skips this (see src/games/dailyChallenge.ts) — it
+  // always restarts fresh from the same deterministic puzzle within a day.
   useEffect(() => {
-    if (loading || !validDifficulty || state.status !== 'playing') return
+    if (loading || !validDifficulty || isDaily || state.status !== 'playing') return
     savePatchesInProgress({
       difficulty: validDifficulty as Difficulty,
       level: state.level,
@@ -118,34 +150,64 @@ export default function PatchesGamePage() {
       elapsedMs: state.elapsedMs,
       savedAt: Date.now(),
     })
-  }, [state.placed, state.elapsedMs, state.level, state.status, loading, validDifficulty])
+  }, [state.placed, state.elapsedMs, state.level, state.status, loading, validDifficulty, isDaily])
 
+  // On win: record completion, then hand off to the completion screen.
   useEffect(() => {
-    if (state.status !== 'won' || !validDifficulty) return
+    if (state.status !== 'won' || (!validDifficulty && !isDaily)) return
     let cancelled = false
-    recordPatchesCompletion(validDifficulty as Difficulty, state.elapsedMs, state.hintsUsed > 0).then((result) => {
-      if (!cancelled) {
-        navigate(`/patches/${validDifficulty}/complete`, {
-          state: {
-            timeMs: state.elapsedMs,
-            levelNumber: result.progress.completedCount,
-            level: state.level,
-            placed: state.placed,
-            coinsAwarded: result.coinsAwarded,
-            isPersonalBest: result.isPersonalBest,
-          },
-          replace: true,
-        })
-      }
-    })
+    playSound('success')
+    buzz([20, 40, 20, 40, 60])
+
+    if (isDaily) {
+      const finish = dailyAlreadyCompletedRef.current
+        ? getDailyStreak().then((streak) => ({ coinsAwarded: 0, streak }))
+        : recordDailyChallengeCompletion('patches', state.elapsedMs, state.hintsUsed > 0)
+      finish.then((result) => {
+        if (!cancelled) {
+          navigate('/patches/daily/complete', {
+            state: {
+              timeMs: state.elapsedMs,
+              level: state.level,
+              placed: state.placed,
+              coinsAwarded: result.coinsAwarded,
+              dailyStreak: result.streak,
+            },
+            replace: true,
+          })
+        }
+      })
+    } else {
+      recordPatchesCompletion(validDifficulty as Difficulty, state.elapsedMs, state.hintsUsed > 0).then((result) => {
+        if (!cancelled) {
+          navigate(`/patches/${validDifficulty}/complete`, {
+            state: {
+              timeMs: state.elapsedMs,
+              levelNumber: result.progress.completedCount,
+              level: state.level,
+              placed: state.placed,
+              coinsAwarded: result.coinsAwarded,
+              isPersonalBest: result.isPersonalBest,
+              dailyBonusApplied: result.dailyBonusApplied,
+            },
+            replace: true,
+          })
+        }
+      })
+    }
     return () => {
       cancelled = true
     }
-  }, [state.status, validDifficulty, navigate, state.elapsedMs, state.level, state.placed])
+  }, [state.status, validDifficulty, isDaily, navigate, state.elapsedMs, state.level, state.placed])
 
-  const handleStartDrag = useCallback((row: number, col: number) => {
-    dispatch({ type: 'START_DRAG', row, col })
-  }, [])
+  const handleStartDrag = useCallback(
+    (row: number, col: number) => {
+      playSound('tap')
+      buzz(10)
+      dispatch({ type: 'START_DRAG', row, col })
+    },
+    [playSound, buzz],
+  )
 
   const handleCommitDrag = useCallback((row: number, col: number) => {
     dispatch({ type: 'COMMIT_DRAG', row, col, now: Date.now() })
@@ -164,6 +226,7 @@ export default function PatchesGamePage() {
       const ok = await spendCoins(price)
       if (!ok) return
       setCoins((c) => c - price)
+      playSound('hint')
 
       if (id === 'check') {
         const wrong = getWrongCells(state)
@@ -176,10 +239,10 @@ export default function PatchesGamePage() {
       if (id === 'reveal-clue') dispatch({ type: 'HINT_REVEAL_CLUE', now: Date.now() })
       setHintsOpen(false)
     },
-    [state],
+    [state, playSound],
   )
 
-  if (!validDifficulty) {
+  if (!validDifficulty && !isDaily) {
     return <ErrorScreen message="Unknown difficulty." onBack={() => navigate('/patches')} />
   }
   if (error) {
@@ -191,7 +254,17 @@ export default function PatchesGamePage() {
       data-game="patches"
       className="mx-auto flex min-h-svh max-w-lg flex-col items-center gap-6 bg-bg px-4 py-[max(1.5rem,env(safe-area-inset-top))] text-ink"
     >
-      <GameHeader backTo="/patches" elapsedMs={state.elapsedMs} runStartedAt={state.runStartedAt} coins={coins} />
+      <GameHeader
+        backTo="/patches"
+        elapsedMs={state.elapsedMs}
+        runStartedAt={state.runStartedAt}
+        coins={coins}
+        right={
+          isDaily ? (
+            <span className="rounded-full bg-accent-tint px-3 py-1.5 text-xs font-semibold text-accent">Daily Challenge</span>
+          ) : undefined
+        }
+      />
 
       <div className="flex w-full max-w-[420px] flex-col items-center gap-6">
         {loading ? (

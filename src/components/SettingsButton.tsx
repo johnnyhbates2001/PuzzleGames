@@ -1,5 +1,8 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useTheme, type ThemePreference } from '../hooks/useTheme'
+import { useAudio } from '../hooks/useAudio'
+import { ToggleRow } from './ToggleRow'
+import { getSettings, setAutoPlaceX as setAutoPlaceXDb } from '../storage/db'
 
 const THEME_OPTIONS: { value: ThemePreference; label: string }[] = [
   { value: 'system', label: 'System' },
@@ -10,6 +13,16 @@ const THEME_OPTIONS: { value: ThemePreference; label: string }[] = [
 export function SettingsButton() {
   const [open, setOpen] = useState(false)
   const [theme, setTheme] = useTheme()
+  const { soundEnabled, hapticsEnabled, setSoundEnabled, setHapticsEnabled } = useAudio()
+  const [autoPlaceX, setAutoPlaceX] = useState(true)
+
+  useEffect(() => {
+    let cancelled = false
+    getSettings().then((s) => !cancelled && setAutoPlaceX(s.autoPlaceX))
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   return (
     <>
@@ -44,7 +57,7 @@ export function SettingsButton() {
             </div>
 
             <p className="mb-2 text-sm font-medium text-ink-muted">Appearance</p>
-            <div className="flex gap-1 rounded-2xl bg-bg p-1">
+            <div className="mb-4 flex gap-1 rounded-2xl bg-bg p-1">
               {THEME_OPTIONS.map((option) => (
                 <button
                   key={option.value}
@@ -58,6 +71,24 @@ export function SettingsButton() {
                   {option.label}
                 </button>
               ))}
+            </div>
+
+            <p className="mb-2 text-sm font-medium text-ink-muted">Sound &amp; haptics</p>
+            <div className="mb-4 flex flex-col gap-2">
+              <ToggleRow label="Sound effects" checked={soundEnabled} onChange={setSoundEnabled} />
+              <ToggleRow label="Haptics" checked={hapticsEnabled} onChange={setHapticsEnabled} />
+            </div>
+
+            <p className="mb-2 text-sm font-medium text-ink-muted">Gameplay</p>
+            <div className="flex flex-col gap-2">
+              <ToggleRow
+                label="Auto-place X's (Queens)"
+                checked={autoPlaceX}
+                onChange={(enabled) => {
+                  setAutoPlaceX(enabled)
+                  void setAutoPlaceXDb(enabled)
+                }}
+              />
             </div>
           </div>
         </div>

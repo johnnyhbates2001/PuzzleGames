@@ -6,15 +6,22 @@ import type { PatchesLevelRecord } from '../engine/patches/types'
 import type { PlacedRect } from '../engine/patches/validator'
 import type { CellState } from '../state/types'
 import type { SudokuCellState } from '../state/sudokuTypes'
+import type { DailyGameId } from '../games/dailyChallenge'
 
 const DB_NAME = 'queens-pwa'
-const DB_VERSION = 5
+const DB_VERSION = 6
 
 export interface Settings {
   autoPlaceX: boolean
   coins: number
   ownedSkins: string[]
   equippedSkin: string
+  soundEnabled: boolean
+  hapticsEnabled: boolean
+  /** Completions with no hint used — feeds the "flawless solves" achievement. */
+  unassistedCompletions: number
+  /** Achievement ids the player has already seen the unlock toast for. */
+  seenAchievements: string[]
 }
 
 export interface DifficultyProgress {
@@ -77,6 +84,13 @@ export interface PatchesInProgressLevel {
   savedAt: number
 }
 
+export interface DailyChallengeRecord {
+  gameId: DailyGameId
+  completedAt: number
+  elapsedMs: number
+  assisted: boolean
+}
+
 // `Difficulty` above is imported from the Queens engine, but the literal set
 // ('easy'|'medium'|'hard') is identical to every other game's own Difficulty type, so
 // it doubles as the key type for their stores below without a second import.
@@ -93,9 +107,21 @@ interface QueensDB extends DBSchema {
   /** Key = local date string ('YYYY-MM-DD'). Value = number of levels completed that day,
    *  across every game — feeds the home-screen streak and the stats-page heatmap. */
   dailyActivity: { key: string; value: number }
+  /** Key = local date string ('YYYY-MM-DD'). One row per day, written only when that
+   *  day's featured Daily Challenge puzzle is completed. */
+  dailyChallenge: { key: string; value: DailyChallengeRecord }
 }
 
-const DEFAULT_SETTINGS: Settings = { autoPlaceX: true, coins: 0, ownedSkins: ['candy'], equippedSkin: 'candy' }
+const DEFAULT_SETTINGS: Settings = {
+  autoPlaceX: true,
+  coins: 0,
+  ownedSkins: ['candy'],
+  equippedSkin: 'candy',
+  soundEnabled: true,
+  hapticsEnabled: true,
+  unassistedCompletions: 0,
+  seenAchievements: [],
+}
 
 function defaultProgress(difficulty: Difficulty): DifficultyProgress {
   return { difficulty, completedCount: 0, totalTimeMs: 0, currentLevelIndex: 0, bestTimeMs: null }
@@ -127,6 +153,9 @@ function getDB(): Promise<IDBPDatabase<QueensDB>> {
         if (oldVersion < 5) {
           db.createObjectStore('dailyActivity')
         }
+        if (oldVersion < 6) {
+          db.createObjectStore('dailyChallenge')
+        }
       },
     })
   }
@@ -146,6 +175,27 @@ export async function setAutoPlaceX(autoPlaceX: boolean): Promise<void> {
   const db = await getDB()
   const current = await getSettings()
   await db.put('settings', { ...current, autoPlaceX }, 'global')
+}
+
+export async function setSoundEnabled(soundEnabled: boolean): Promise<void> {
+  const db = await getDB()
+  const current = await getSettings()
+  await db.put('settings', { ...current, soundEnabled }, 'global')
+}
+
+export async function setHapticsEnabled(hapticsEnabled: boolean): Promise<void> {
+  const db = await getDB()
+  const current = await getSettings()
+  await db.put('settings', { ...current, hapticsEnabled }, 'global')
+}
+
+/** Unions newly-seen achievement ids into the stored set — idempotent. */
+export async function markAchievementsSeen(ids: string[]): Promise<void> {
+  const db = await getDB()
+  const current = await getSettings()
+  const seen = new Set(current.seenAchievements)
+  ids.forEach((id) => seen.add(id))
+  await db.put('settings', { ...current, seenAchievements: [...seen] }, 'global')
 }
 
 export async function addCoins(delta: number): Promise<number> {
@@ -233,6 +283,7 @@ export interface CompletionResult {
   progress: DifficultyProgress
   coinsAwarded: number
   isPersonalBest: boolean
+  dailyBonusApplied: boolean
 }
 
 const COIN_BASE: Record<Difficulty, number> = { easy: 15, medium: 25, hard: 35 }
@@ -276,18 +327,28 @@ async function finishCompletion(
   await progressStore.put(next, difficulty)
   await tx.objectStore(inProgressStoreName).delete(difficulty)
 
-  const coinsAwarded = computeCoinAward(difficulty, isPersonalBest, assisted)
-  const settingsStore = tx.objectStore('settings')
-  const currentSettings = { ...DEFAULT_SETTINGS, ...(await settingsStore.get('global')) }
-  await settingsStore.put({ ...currentSettings, coins: currentSettings.coins + coinsAwarded }, 'global')
-
   const activityStore = tx.objectStore('dailyActivity')
   const key = dateKey(new Date())
   const activityCount = (await activityStore.get(key)) ?? 0
+  // First completion of the day (across every game) pays double — see ShopPage's
+  // "Daily bonus" copy, which this makes true rather than aspirational.
+  const dailyBonusApplied = activityCount === 0
+  const coinsAwarded = computeCoinAward(difficulty, isPersonalBest, assisted) * (dailyBonusApplied ? 2 : 1)
   await activityStore.put(activityCount + 1, key)
 
+  const settingsStore = tx.objectStore('settings')
+  const currentSettings = { ...DEFAULT_SETTINGS, ...(await settingsStore.get('global')) }
+  await settingsStore.put(
+    {
+      ...currentSettings,
+      coins: currentSettings.coins + coinsAwarded,
+      unassistedCompletions: currentSettings.unassistedCompletions + (assisted ? 0 : 1),
+    },
+    'global',
+  )
+
   await tx.done
-  return { progress: next, coinsAwarded, isPersonalBest }
+  return { progress: next, coinsAwarded, isPersonalBest, dailyBonusApplied }
 }
 
 /** Increments completion stats and advances the bank pointer. Clears any in-progress
@@ -419,4 +480,66 @@ export async function getTotalSolved(): Promise<number> {
     ALL_PROGRESS_GETTERS.flatMap((getter) => ALL_DIFFICULTIES.map((d) => getter(d))),
   )
   return results.reduce((sum, p) => sum + p.completedCount, 0)
+}
+
+const DAILY_COIN_AWARD = 30
+
+export async function getDailyChallenge(dateKeyStr: string): Promise<DailyChallengeRecord | undefined> {
+  const db = await getDB()
+  return db.get('dailyChallenge', dateKeyStr)
+}
+
+export interface DailyCompletionResult {
+  coinsAwarded: number
+  streak: number
+}
+
+/** Records today's Daily Challenge completion (one row per date, across every game since
+ *  only one game is featured per day), awards a flat coin bonus, and logs it toward the
+ *  regular streak/heatmap too — it's still a puzzle solved today. */
+export async function recordDailyChallengeCompletion(
+  gameId: DailyGameId,
+  elapsedMs: number,
+  assisted: boolean,
+): Promise<DailyCompletionResult> {
+  const db = await getDB()
+  const key = dateKey(new Date())
+  const tx = db.transaction(['dailyChallenge', 'settings', 'dailyActivity'], 'readwrite')
+
+  const record: DailyChallengeRecord = { gameId, completedAt: Date.now(), elapsedMs, assisted }
+  await tx.objectStore('dailyChallenge').put(record, key)
+
+  const settingsStore = tx.objectStore('settings')
+  const currentSettings = { ...DEFAULT_SETTINGS, ...(await settingsStore.get('global')) }
+  await settingsStore.put(
+    {
+      ...currentSettings,
+      coins: currentSettings.coins + DAILY_COIN_AWARD,
+      unassistedCompletions: currentSettings.unassistedCompletions + (assisted ? 0 : 1),
+    },
+    'global',
+  )
+
+  const activityStore = tx.objectStore('dailyActivity')
+  const activityCount = (await activityStore.get(key)) ?? 0
+  await activityStore.put(activityCount + 1, key)
+
+  await tx.done
+  const streak = await getDailyStreak()
+  return { coinsAwarded: DAILY_COIN_AWARD, streak }
+}
+
+/** Consecutive-day Daily Challenge streak, same "ending today or yesterday" rule as
+ *  getStreak so it doesn't read as broken before the player has solved today's. */
+export async function getDailyStreak(now: number = Date.now()): Promise<number> {
+  const db = await getDB()
+  const cursor = new Date(now)
+  const today = await db.get('dailyChallenge', dateKey(cursor))
+  if (!today) cursor.setDate(cursor.getDate() - 1)
+  let streak = 0
+  while (await db.get('dailyChallenge', dateKey(cursor))) {
+    streak++
+    cursor.setDate(cursor.getDate() - 1)
+  }
+  return streak
 }
