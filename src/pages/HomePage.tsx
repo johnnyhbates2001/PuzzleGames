@@ -103,7 +103,7 @@ export default function HomePage() {
   }, [dateKey])
 
   return (
-    <main className="mx-auto flex min-h-svh max-w-lg flex-col gap-6 bg-bg px-4 py-[max(2rem,env(safe-area-inset-top))] pb-[max(5.5rem,calc(env(safe-area-inset-bottom)+4.5rem))] text-ink">
+    <main className="mx-auto flex min-h-svh max-w-lg flex-col gap-6 bg-bg px-4 py-[max(2rem,env(safe-area-inset-top))] pb-[max(6.5rem,calc(env(safe-area-inset-bottom)+5.5rem))] text-ink">
       <div className="flex items-start justify-between gap-3">
         <div>
           <h1 className="font-display text-[34px] font-extrabold tracking-tight">Puzzles</h1>

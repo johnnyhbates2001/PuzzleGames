@@ -577,7 +577,14 @@ a {
 
 #root {
   min-height: 100svh;
+  /* height:100% (of the fixed, viewport-pinned body above) is the "should always work"
+     value, but iOS standalone PWAs have been observed under-sizing this percentage
+     chain, capping the scrollable area short of the real content height — the last bit
+     of a tall page (e.g. Home's Daily Challenges card) becomes unreachable no matter how
+     far you scroll. height:100dvh sizes #root directly off the live viewport instead of
+     through that chain; unsupported browsers just ignore the line and keep height:100%. */
   height: 100%;
+  height: 100dvh;
   overflow-y: auto;
   overscroll-behavior-y: contain;
   -webkit-overflow-scrolling: touch;
