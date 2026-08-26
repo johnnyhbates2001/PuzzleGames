@@ -1,7 +1,8 @@
-import type { ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { useAppNavigate as useNavigate } from '../hooks/useAppNavigate'
 import { Timer } from './Timer'
 import { CoinBalance } from './CoinBalance'
+import { getSettings } from '../storage/db'
 
 interface GameHeaderProps {
   backTo: string
@@ -15,6 +16,16 @@ interface GameHeaderProps {
 
 export function GameHeader({ backTo, elapsedMs, runStartedAt, coins, right }: GameHeaderProps) {
   const navigate = useNavigate()
+  const [zenMode, setZenMode] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+    getSettings().then((s) => !cancelled && setZenMode(s.zenMode))
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
   return (
     <div className="flex w-full items-center justify-between">
       <button
@@ -27,7 +38,11 @@ export function GameHeader({ backTo, elapsedMs, runStartedAt, coins, right }: Ga
           <path d="M8 1L1 7.5 8 14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
       </button>
-      <Timer elapsedMs={elapsedMs} runStartedAt={runStartedAt} />
+      {zenMode ? (
+        <span className="rounded-full bg-accent-tint px-3 py-1.5 text-xs font-semibold text-accent">🧘 Zen mode</span>
+      ) : (
+        <Timer elapsedMs={elapsedMs} runStartedAt={runStartedAt} />
+      )}
       {right ?? <CoinBalance amount={coins} />}
     </div>
   )

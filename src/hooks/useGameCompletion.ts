@@ -74,7 +74,7 @@ export function useGameCompletion<K extends string, V>({
 
     if (isDaily) {
       const finish = dailyAlreadyCompletedRef.current
-        ? getDailyStreak().then((streak) => ({ coinsAwarded: 0, streak }))
+        ? getDailyStreak(gameId).then((streak) => ({ coinsAwarded: 0, streak }))
         : recordDailyChallengeCompletion(gameId, elapsedMs, hintsUsed > 0)
       finish.then((result) => {
         if (cancelled) return

@@ -1,22 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { DAILY_GAMES, gameForDate, getDailyNonogramLevel, getDailyQueensLevel, hashSeed } from './dailyChallenge'
-
-describe('gameForDate', () => {
-  it('is deterministic for a given date', () => {
-    expect(gameForDate('2026-08-24')).toBe(gameForDate('2026-08-24'))
-  })
-
-  it('only ever returns a known game id', () => {
-    for (const d of ['2026-01-01', '2026-06-15', '2026-12-31']) {
-      expect(DAILY_GAMES).toContain(gameForDate(d))
-    }
-  })
-
-  it('rotates day over day (not the same game every day)', () => {
-    const games = ['2026-08-24', '2026-08-25', '2026-08-26', '2026-08-27'].map(gameForDate)
-    expect(new Set(games).size).toBeGreaterThan(1)
-  })
-})
+import { getDailyNonogramLevel, getDailyQueensLevel, hashSeed } from './dailyChallenge'
 
 describe('hashSeed', () => {
   it('is deterministic for the same input', () => {

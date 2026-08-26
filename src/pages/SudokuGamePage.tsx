@@ -89,7 +89,7 @@ export default function SudokuGamePage() {
 
         if (isDaily) {
           const dateKey = todayDateKey()
-          const [settings, existing] = await Promise.all([getSettings(), getDailyChallenge(dateKey)])
+          const [settings, existing] = await Promise.all([getSettings(), getDailyChallenge(dateKey, 'sudoku')])
           if (cancelled) return
           setCoins(settings.coins)
           sourceRef.current = { source: 'generated' }

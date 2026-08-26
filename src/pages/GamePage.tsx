@@ -93,7 +93,7 @@ export default function GamePage() {
 
         if (isDaily) {
           const dateKey = todayDateKey()
-          const [settings, existing] = await Promise.all([getSettings(), getDailyChallenge(dateKey)])
+          const [settings, existing] = await Promise.all([getSettings(), getDailyChallenge(dateKey, 'queens')])
           if (cancelled) return
           setCoins(settings.coins)
           sourceRef.current = { source: 'generated' }

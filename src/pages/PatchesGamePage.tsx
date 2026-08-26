@@ -83,7 +83,7 @@ export default function PatchesGamePage() {
 
         if (isDaily) {
           const dateKey = todayDateKey()
-          const [settings, existing] = await Promise.all([getSettings(), getDailyChallenge(dateKey)])
+          const [settings, existing] = await Promise.all([getSettings(), getDailyChallenge(dateKey, 'patches')])
           if (cancelled) return
           setCoins(settings.coins)
           sourceRef.current = { source: 'generated' }

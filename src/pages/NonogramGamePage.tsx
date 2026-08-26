@@ -85,7 +85,7 @@ export default function NonogramGamePage() {
 
         if (isDaily) {
           const dateKey = todayDateKey()
-          const [settings, existing] = await Promise.all([getSettings(), getDailyChallenge(dateKey)])
+          const [settings, existing] = await Promise.all([getSettings(), getDailyChallenge(dateKey, 'nonogram')])
           if (cancelled) return
           setCoins(settings.coins)
           sourceRef.current = { source: 'generated' }

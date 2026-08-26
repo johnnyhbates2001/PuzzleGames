@@ -22,7 +22,7 @@ import {
   setLastSeenStreak,
 } from '../storage/db'
 import type { Difficulty } from '../engine/types'
-import { gameForDate, todayDateKey } from '../games/dailyChallenge'
+import { todayDateKey, type DailyGameId } from '../games/dailyChallenge'
 
 const PREVIEW_BY_ID: Record<string, ReactNode> = {
   queens: <img src="/icons/source.svg" alt="" className="size-full rounded-xl" />,
@@ -53,15 +53,13 @@ export default function HomePage() {
   const [streak, setStreak] = useState(0)
   const [streakWeek, setStreakWeek] = useState<boolean[]>([])
   const [solvedByGame, setSolvedByGame] = useState<Record<string, number>>({})
-  const [dailyStreak, setDailyStreak] = useState(0)
-  const [dailyDoneToday, setDailyDoneToday] = useState(false)
+  const [dailyDoneByGame, setDailyDoneByGame] = useState<Record<string, boolean>>({})
+  const [dailyStreakByGame, setDailyStreakByGame] = useState<Record<string, number>>({})
   // True only for the first Home visit after the streak actually advances — gates the
   // pip-fill/flame-bounce below so it plays once per new streak day, not every visit.
   const [streakAdvanced, setStreakAdvanced] = useState(false)
 
   const dateKey = todayDateKey()
-  const dailyGameId = gameForDate(dateKey)
-  const dailyGame = GAMES.find((g) => g.id === dailyGameId)
 
   useEffect(() => {
     let cancelled = false
@@ -75,8 +73,22 @@ export default function HomePage() {
       }
     })
     getHeatmap(1).then((counts) => !cancelled && setStreakWeek(counts.map((c) => c > 0)))
-    getDailyStreak().then((s) => !cancelled && setDailyStreak(s))
-    getDailyChallenge(dateKey).then((record) => !cancelled && setDailyDoneToday(!!record))
+    Promise.all(GAMES.map((g) => getDailyChallenge(dateKey, g.id as DailyGameId))).then((records) => {
+      if (cancelled) return
+      const map: Record<string, boolean> = {}
+      GAMES.forEach((g, i) => {
+        map[g.id] = !!records[i]
+      })
+      setDailyDoneByGame(map)
+    })
+    Promise.all(GAMES.map((g) => getDailyStreak(g.id as DailyGameId))).then((streaks) => {
+      if (cancelled) return
+      const map: Record<string, number> = {}
+      GAMES.forEach((g, i) => {
+        map[g.id] = streaks[i]
+      })
+      setDailyStreakByGame(map)
+    })
     Promise.all(GAMES.map((g) => totalSolved(g.id))).then((totals) => {
       if (cancelled) return
       const map: Record<string, number> = {}
@@ -156,32 +168,32 @@ export default function HomePage() {
             <span className="shrink-0 text-lg text-ink-muted">›</span>
           </Link>
         ))}
-        {dailyGame && (
-          <Link
-            to={`${dailyGame.route}/daily`}
-            className="anim-rise flex items-center gap-4 rounded-3xl bg-[oklch(20%_0.02_260)] p-4 shadow-card transition hover:shadow-md"
-            style={{ animationDelay: `${Math.min(GAMES.length, 6) * 45}ms` }}
-          >
-            <div className="flex size-14 shrink-0 items-center justify-center rounded-2xl bg-white/10 p-2.5">
-              {PREVIEW_BY_ID[dailyGame.id]}
-            </div>
-            <div className="flex-1">
-              <div className="flex items-center gap-1.5">
-                <h2 className="text-[20px] font-bold text-white">Daily Challenge</h2>
-                {dailyDoneToday && (
-                  <span className="rounded-full bg-white/15 px-1.5 py-0.5 text-[10px] font-bold tracking-wide text-white uppercase">
-                    Solved ✓
+        <div
+          className="anim-rise rounded-3xl bg-[oklch(20%_0.02_260)] p-4 shadow-card"
+          style={{ animationDelay: `${Math.min(GAMES.length, 6) * 45}ms` }}
+        >
+          <h2 className="text-[15px] font-bold text-white">Daily Challenges</h2>
+          <div className="mt-3 grid grid-cols-5 gap-2">
+            {GAMES.map((game) => {
+              const done = dailyDoneByGame[game.id]
+              const gameStreak = dailyStreakByGame[game.id] ?? 0
+              return (
+                <Link key={game.id} to={`${game.route}/daily`} className="flex flex-col items-center gap-1">
+                  <span className="relative flex size-11 shrink-0 items-center justify-center rounded-2xl bg-white/10 p-2">
+                    {PREVIEW_BY_ID[game.id]}
+                    {done && (
+                      <span className="absolute -top-1 -right-1 flex size-4 items-center justify-center rounded-full bg-accent text-[9px] font-bold text-white">
+                        ✓
+                      </span>
+                    )}
                   </span>
-                )}
-              </div>
-              <p className="mt-1 text-sm text-white/60">
-                Today: {dailyGame.title}
-                {dailyStreak > 0 ? ` · 🔥 ${dailyStreak} day streak` : ''}
-              </p>
-            </div>
-            <span className="shrink-0 text-lg text-white/60">›</span>
-          </Link>
-        )}
+                  <span className="max-w-full truncate text-[10px] font-medium text-white/70">{game.title}</span>
+                  {gameStreak > 0 && <span className="text-[9px] font-bold text-white/50">🔥{gameStreak}</span>}
+                </Link>
+              )
+            })}
+          </div>
+        </div>
       </div>
 
       <TabBar active="play" />

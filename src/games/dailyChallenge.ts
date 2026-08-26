@@ -30,15 +30,6 @@ export function todayDateKey(now: number = Date.now()): string {
   return `${y}-${m}-${day}`
 }
 
-/** Which game is featured on a given date — a simple rotation through DAILY_GAMES keyed
- *  off days-since-epoch, so it's stable for any date without needing storage. */
-export function gameForDate(dateKey: string): DailyGameId {
-  const [y, m, d] = dateKey.split('-').map(Number)
-  const daysSinceEpoch = Math.floor(Date.UTC(y, m - 1, d) / 86_400_000)
-  const index = ((daysSinceEpoch % DAILY_GAMES.length) + DAILY_GAMES.length) % DAILY_GAMES.length
-  return DAILY_GAMES[index]
-}
-
 /** FNV-1a string hash — small, fast, and deterministic, feeding mulberry32 so every
  *  player generates the identical puzzle for a given (gameId, dateKey) with no server. */
 export function hashSeed(str: string): number {

@@ -2,7 +2,10 @@ export interface AchievementContext {
   totalSolved: number
   solvedByGame: Record<string, number>
   streak: number
-  dailyStreak: number
+  /** The longest current Daily Challenge streak across the 5 games — each game now has
+   *  its own daily puzzle and its own streak, so this achievement context tracks the best
+   *  one rather than one shared number. */
+  maxDailyStreak: number
   unassistedCompletions: number
   ownedSkinCount: number
   totalSkinCount: number
@@ -109,15 +112,15 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   {
     id: 'daily-devotee',
     title: 'Daily Devotee',
-    description: 'Reach a 7-day Daily Challenge streak.',
+    description: 'Reach a 7-day Daily Challenge streak in any one game.',
     icon: '📅',
-    check: (ctx) => ctx.dailyStreak >= 7,
+    check: (ctx) => ctx.maxDailyStreak >= 7,
   },
   {
     id: 'dedicated',
     title: 'Dedicated',
-    description: 'Reach a 30-day Daily Challenge streak.',
+    description: 'Reach a 30-day Daily Challenge streak in any one game.',
     icon: '🏅',
-    check: (ctx) => ctx.dailyStreak >= 30,
+    check: (ctx) => ctx.maxDailyStreak >= 30,
   },
 ]

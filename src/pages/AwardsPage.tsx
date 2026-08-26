@@ -16,6 +16,7 @@ import {
   type DifficultyProgress,
 } from '../storage/db'
 import type { Difficulty } from '../engine/types'
+import type { DailyGameId } from '../games/dailyChallenge'
 
 const DIFFICULTIES: Difficulty[] = ['easy', 'medium', 'hard']
 
@@ -34,19 +35,20 @@ async function solvedForGame(gameId: string): Promise<number> {
 }
 
 async function buildContext(): Promise<AchievementContext> {
-  const [settings, streak, dailyStreak, solvedEntries] = await Promise.all([
+  const [settings, streak, dailyStreaks, solvedEntries] = await Promise.all([
     getSettings(),
     getStreak(),
-    getDailyStreak(),
+    Promise.all(GAMES.map((g) => getDailyStreak(g.id as DailyGameId))),
     Promise.all(GAMES.map(async (g) => [g.id, await solvedForGame(g.id)] as const)),
   ])
   const solvedByGame = Object.fromEntries(solvedEntries)
   const totalSolved = solvedEntries.reduce((sum, [, n]) => sum + n, 0)
+  const maxDailyStreak = dailyStreaks.length > 0 ? Math.max(...dailyStreaks) : 0
   return {
     totalSolved,
     solvedByGame,
     streak,
-    dailyStreak,
+    maxDailyStreak,
     unassistedCompletions: settings.unassistedCompletions,
     ownedSkinCount: settings.ownedSkins.length,
     totalSkinCount: SKINS.length,

@@ -72,6 +72,7 @@ export function CompleteSheet({
   const balanceRef = useRef<HTMLDivElement>(null)
   const [balance, setBalance] = useState<number | null>(null)
   const [displayBalance, setDisplayBalance] = useState<number | null>(null)
+  const [zenMode, setZenMode] = useState(false)
   const [bump, setBump] = useState(false)
   const [flightOrigin, setFlightOrigin] = useState<{ left: number; top: number } | null>(null)
   const [flights, setFlights] = useState<Flight[] | null>(null)
@@ -89,7 +90,11 @@ export function CompleteSheet({
   // the pre-award "start" value below is simply that total minus the award.
   useEffect(() => {
     let cancelled = false
-    getSettings().then((s) => !cancelled && setBalance(s.coins))
+    getSettings().then((s) => {
+      if (cancelled) return
+      setBalance(s.coins)
+      setZenMode(s.zenMode)
+    })
     return () => {
       cancelled = true
     }
@@ -199,12 +204,14 @@ export function CompleteSheet({
           </p>
         </div>
 
-        <p
-          className="anim-rise font-mono text-[52px] font-extrabold leading-none tabular-nums text-ink"
-          style={{ animationDelay: '320ms' }}
-        >
-          {formatElapsed(timeMs)}
-        </p>
+        {!zenMode && (
+          <p
+            className="anim-rise font-mono text-[52px] font-extrabold leading-none tabular-nums text-ink"
+            style={{ animationDelay: '320ms' }}
+          >
+            {formatElapsed(timeMs)}
+          </p>
+        )}
 
         {coinsAwarded > 0 && (
           <div
@@ -227,20 +234,22 @@ export function CompleteSheet({
             <span className="text-[15px] font-bold text-ink">{dailyStreak ?? 0} day streak</span>
           </div>
         ) : (
-          <div className="anim-rise flex w-full rounded-2xl bg-accent-tint py-3" style={{ animationDelay: '420ms' }}>
-            <div className="flex flex-1 flex-col items-center gap-0.5">
-              <span className="font-mono text-[15px] font-bold text-accent">
-                {bestMs !== null ? formatElapsed(bestMs) : '—'}
-              </span>
-              <span className="text-[10px] font-semibold uppercase tracking-wide text-ink-muted">Best</span>
+          !zenMode && (
+            <div className="anim-rise flex w-full rounded-2xl bg-accent-tint py-3" style={{ animationDelay: '420ms' }}>
+              <div className="flex flex-1 flex-col items-center gap-0.5">
+                <span className="font-mono text-[15px] font-bold text-accent">
+                  {bestMs !== null ? formatElapsed(bestMs) : '—'}
+                </span>
+                <span className="text-[10px] font-semibold uppercase tracking-wide text-ink-muted">Best</span>
+              </div>
+              <div className="flex flex-1 flex-col items-center gap-0.5">
+                <span className="font-mono text-[15px] font-bold text-ink">
+                  {avgMs !== null ? formatElapsed(avgMs) : '—'}
+                </span>
+                <span className="text-[10px] font-semibold uppercase tracking-wide text-ink-muted">Average</span>
+              </div>
             </div>
-            <div className="flex flex-1 flex-col items-center gap-0.5">
-              <span className="font-mono text-[15px] font-bold text-ink">
-                {avgMs !== null ? formatElapsed(avgMs) : '—'}
-              </span>
-              <span className="text-[10px] font-semibold uppercase tracking-wide text-ink-muted">Average</span>
-            </div>
-          </div>
+          )
         )}
 
         <div className="anim-rise flex w-full flex-col gap-2" style={{ animationDelay: '500ms' }}>

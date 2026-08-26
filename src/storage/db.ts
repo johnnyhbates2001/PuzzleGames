@@ -11,7 +11,7 @@ import type { SudokuCellState } from '../state/sudokuTypes'
 import type { DailyGameId } from '../games/dailyChallenge'
 
 const DB_NAME = 'queens-pwa'
-const DB_VERSION = 7
+const DB_VERSION = 8
 
 export interface Settings {
   autoPlaceX: boolean
@@ -28,6 +28,13 @@ export interface Settings {
    *  animation for — lets it fire only the visit a streak actually advances, not every
    *  time Home mounts. */
   lastSeenStreak: number
+  /** Hides time-pressure UI (the live in-game timer, and the completion screen's
+   *  elapsed-time/Best-Average readout) for players who'd rather solve without a clock. */
+  zenMode: boolean
+  /** Game ids whose "How to play" sheet has already auto-opened once — see
+   *  useAutoOpenRulesOnce, which reads/writes this so the sheet only self-opens the
+   *  player's first visit to each game's Difficulty page. */
+  tutorialSeen: string[]
 }
 
 export interface DifficultyProgress {
@@ -128,8 +135,8 @@ interface QueensDB extends DBSchema {
   /** Key = local date string ('YYYY-MM-DD'). Value = number of levels completed that day,
    *  across every game — feeds the home-screen streak and the stats-page heatmap. */
   dailyActivity: { key: string; value: number }
-  /** Key = local date string ('YYYY-MM-DD'). One row per day, written only when that
-   *  day's featured Daily Challenge puzzle is completed. */
+  /** Key = `${dateKey}:${gameId}` — every game has its own Daily Challenge every day, so
+   *  each gets its own row once that game's daily puzzle is completed that date. */
   dailyChallenge: { key: string; value: DailyChallengeRecord }
 }
 
@@ -143,6 +150,8 @@ const DEFAULT_SETTINGS: Settings = {
   unassistedCompletions: 0,
   seenAchievements: [],
   lastSeenStreak: 0,
+  zenMode: false,
+  tutorialSeen: [],
 }
 
 function defaultProgress(difficulty: Difficulty): DifficultyProgress {
@@ -182,6 +191,14 @@ function getDB(): Promise<IDBPDatabase<QueensDB>> {
           db.createObjectStore('nonogramProgress')
           db.createObjectStore('nonogramInProgress')
         }
+        if (oldVersion < 8) {
+          // The Daily Challenge key changed from a bare date to `${dateKey}:${gameId}`
+          // (every game now has its own daily puzzle instead of one shared/rotating
+          // one) — old date-only rows are incompatible with the new key shape, so this
+          // resets Daily Challenge history rather than trying to migrate it.
+          db.deleteObjectStore('dailyChallenge')
+          db.createObjectStore('dailyChallenge')
+        }
       },
     })
   }
@@ -213,6 +230,20 @@ export async function setHapticsEnabled(hapticsEnabled: boolean): Promise<void> 
   const db = await getDB()
   const current = await getSettings()
   await db.put('settings', { ...current, hapticsEnabled }, 'global')
+}
+
+export async function setZenMode(zenMode: boolean): Promise<void> {
+  const db = await getDB()
+  const current = await getSettings()
+  await db.put('settings', { ...current, zenMode }, 'global')
+}
+
+/** Unions gameId into tutorialSeen — idempotent. See Settings.tutorialSeen. */
+export async function markTutorialSeen(gameId: string): Promise<void> {
+  const db = await getDB()
+  const current = await getSettings()
+  if (current.tutorialSeen.includes(gameId)) return
+  await db.put('settings', { ...current, tutorialSeen: [...current.tutorialSeen, gameId] }, 'global')
 }
 
 /** Unions newly-seen achievement ids into the stored set — idempotent. */
@@ -547,9 +578,14 @@ export async function getTotalSolved(): Promise<number> {
 
 const DAILY_COIN_AWARD = 30
 
-export async function getDailyChallenge(dateKeyStr: string): Promise<DailyChallengeRecord | undefined> {
+/** Compound key for the dailyChallenge store — see its DBSchema comment. */
+function dailyKey(dateKeyStr: string, gameId: DailyGameId): string {
+  return `${dateKeyStr}:${gameId}`
+}
+
+export async function getDailyChallenge(dateKeyStr: string, gameId: DailyGameId): Promise<DailyChallengeRecord | undefined> {
   const db = await getDB()
-  return db.get('dailyChallenge', dateKeyStr)
+  return db.get('dailyChallenge', dailyKey(dateKeyStr, gameId))
 }
 
 export interface DailyCompletionResult {
@@ -557,9 +593,10 @@ export interface DailyCompletionResult {
   streak: number
 }
 
-/** Records today's Daily Challenge completion (one row per date, across every game since
- *  only one game is featured per day), awards a flat coin bonus, and logs it toward the
- *  regular streak/heatmap too — it's still a puzzle solved today. */
+/** Records today's completion of gameId's Daily Challenge, awards a flat coin bonus, and
+ *  logs it toward the regular streak/heatmap too — it's still a puzzle solved today.
+ *  Each game has its own daily puzzle and its own streak (see getDailyStreak), so
+ *  completing several games' dailies in one day awards each independently. */
 export async function recordDailyChallengeCompletion(
   gameId: DailyGameId,
   elapsedMs: number,
@@ -570,7 +607,7 @@ export async function recordDailyChallengeCompletion(
   const tx = db.transaction(['dailyChallenge', 'settings', 'dailyActivity'], 'readwrite')
 
   const record: DailyChallengeRecord = { gameId, completedAt: Date.now(), elapsedMs, assisted }
-  await tx.objectStore('dailyChallenge').put(record, key)
+  await tx.objectStore('dailyChallenge').put(record, dailyKey(key, gameId))
 
   const settingsStore = tx.objectStore('settings')
   const currentSettings = { ...DEFAULT_SETTINGS, ...(await settingsStore.get('global')) }
@@ -588,19 +625,19 @@ export async function recordDailyChallengeCompletion(
   await activityStore.put(activityCount + 1, key)
 
   await tx.done
-  const streak = await getDailyStreak()
+  const streak = await getDailyStreak(gameId)
   return { coinsAwarded: DAILY_COIN_AWARD, streak }
 }
 
-/** Consecutive-day Daily Challenge streak, same "ending today or yesterday" rule as
- *  getStreak so it doesn't read as broken before the player has solved today's. */
-export async function getDailyStreak(now: number = Date.now()): Promise<number> {
+/** Consecutive-day Daily Challenge streak for one game, same "ending today or yesterday"
+ *  rule as getStreak so it doesn't read as broken before the player has solved today's. */
+export async function getDailyStreak(gameId: DailyGameId, now: number = Date.now()): Promise<number> {
   const db = await getDB()
   const cursor = new Date(now)
-  const today = await db.get('dailyChallenge', dateKey(cursor))
+  const today = await db.get('dailyChallenge', dailyKey(dateKey(cursor), gameId))
   if (!today) cursor.setDate(cursor.getDate() - 1)
   let streak = 0
-  while (await db.get('dailyChallenge', dateKey(cursor))) {
+  while (await db.get('dailyChallenge', dailyKey(dateKey(cursor), gameId))) {
     streak++
     cursor.setDate(cursor.getDate() - 1)
   }

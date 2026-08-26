@@ -5,6 +5,7 @@ import { averageTimeMs, getProgress, type DifficultyProgress } from '../storage/
 import { formatElapsed } from '../components/Timer'
 import { GridPreview } from '../components/GridPreview'
 import { useRegionColors } from '../hooks/useSkin'
+import { useAutoOpenRulesOnce } from '../hooks/useAutoOpenRulesOnce'
 import { RulesButton, RulesSheet } from '../components/RulesSheet'
 import { GAME_RULES } from '../games/rules'
 
@@ -24,6 +25,7 @@ export default function DifficultyPage() {
   const regionColors = useRegionColors()
   const [progress, setProgress] = useState<Partial<Record<Difficulty, DifficultyProgress>>>({})
   const [rulesOpen, setRulesOpen] = useState(false)
+  useAutoOpenRulesOnce('queens', setRulesOpen)
 
   useEffect(() => {
     let cancelled = false

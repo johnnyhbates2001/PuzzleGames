@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useTheme, type ThemePreference } from '../hooks/useTheme'
 import { useAudio } from '../hooks/useAudio'
 import { ToggleRow } from './ToggleRow'
-import { getSettings, setAutoPlaceX as setAutoPlaceXDb } from '../storage/db'
+import { getSettings, setAutoPlaceX as setAutoPlaceXDb, setZenMode as setZenModeDb } from '../storage/db'
 
 const THEME_OPTIONS: { value: ThemePreference; label: string }[] = [
   { value: 'system', label: 'System' },
@@ -15,10 +15,15 @@ export function SettingsButton() {
   const [theme, setTheme] = useTheme()
   const { soundEnabled, hapticsEnabled, setSoundEnabled, setHapticsEnabled } = useAudio()
   const [autoPlaceX, setAutoPlaceX] = useState(true)
+  const [zenMode, setZenMode] = useState(false)
 
   useEffect(() => {
     let cancelled = false
-    getSettings().then((s) => !cancelled && setAutoPlaceX(s.autoPlaceX))
+    getSettings().then((s) => {
+      if (cancelled) return
+      setAutoPlaceX(s.autoPlaceX)
+      setZenMode(s.zenMode)
+    })
     return () => {
       cancelled = true
     }
@@ -87,6 +92,14 @@ export function SettingsButton() {
                 onChange={(enabled) => {
                   setAutoPlaceX(enabled)
                   void setAutoPlaceXDb(enabled)
+                }}
+              />
+              <ToggleRow
+                label="Zen mode — hide timers"
+                checked={zenMode}
+                onChange={(enabled) => {
+                  setZenMode(enabled)
+                  void setZenModeDb(enabled)
                 }}
               />
             </div>

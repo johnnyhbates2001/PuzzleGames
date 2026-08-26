@@ -5,6 +5,7 @@ import { averageTimeMs, getSudokuProgress, type DifficultyProgress } from '../st
 import { formatElapsed } from '../components/Timer'
 import { SudokuGridPreview } from '../components/SudokuGridPreview'
 import { RulesButton, RulesSheet } from '../components/RulesSheet'
+import { useAutoOpenRulesOnce } from '../hooks/useAutoOpenRulesOnce'
 import { GAME_RULES } from '../games/rules'
 
 const DIFFICULTIES: Difficulty[] = ['easy', 'medium', 'hard']
@@ -18,6 +19,7 @@ const DOT_CLASS: Record<Difficulty, string> = {
 export default function SudokuDifficultyPage() {
   const [progress, setProgress] = useState<Partial<Record<Difficulty, DifficultyProgress>>>({})
   const [rulesOpen, setRulesOpen] = useState(false)
+  useAutoOpenRulesOnce('sudoku', setRulesOpen)
 
   useEffect(() => {
     let cancelled = false

@@ -86,7 +86,7 @@ export default function ZipGamePage() {
 
         if (isDaily) {
           const dateKey = todayDateKey()
-          const [settings, existing] = await Promise.all([getSettings(), getDailyChallenge(dateKey)])
+          const [settings, existing] = await Promise.all([getSettings(), getDailyChallenge(dateKey, 'zip')])
           if (cancelled) return
           setCoins(settings.coins)
           dailyAlreadyCompletedRef.current = !!existing
