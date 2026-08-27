@@ -144,34 +144,7 @@ export default function HomePage() {
       )}
 
       <div className="flex flex-col gap-3">
-        {GAMES.map((game, i) => (
-          <Link
-            key={game.id}
-            to={game.route}
-            className="anim-rise flex items-center gap-4 rounded-3xl bg-surface p-4 shadow-card transition hover:shadow-md"
-            style={{ animationDelay: `${Math.min(i, 6) * 45}ms` }}
-          >
-            <div className="flex size-14 shrink-0 items-center justify-center rounded-2xl bg-accent-tint p-2.5">
-              {PREVIEW_BY_ID[game.id]}
-            </div>
-            <div className="flex-1">
-              <div className="flex items-center gap-1.5">
-                <h2 className="text-[20px] font-bold">{game.title}</h2>
-                {!!solvedByGame[game.id] && (
-                  <span className="anim-pop-in rounded-full bg-accent-tint px-1.5 py-0.5 text-[10px] font-bold tracking-wide text-accent uppercase">
-                    {solvedByGame[game.id]} solved
-                  </span>
-                )}
-              </div>
-              <p className="mt-1 text-sm text-ink-muted">{game.description}</p>
-            </div>
-            <span className="shrink-0 text-lg text-ink-muted">›</span>
-          </Link>
-        ))}
-        <div
-          className="anim-rise rounded-3xl bg-[oklch(20%_0.02_260)] p-4 shadow-card"
-          style={{ animationDelay: `${Math.min(GAMES.length, 6) * 45}ms` }}
-        >
+        <div className="anim-rise rounded-3xl bg-[oklch(20%_0.02_260)] p-4 shadow-card">
           <h2 className="text-[15px] font-bold text-white">Daily Challenges</h2>
           <div className="mt-3 grid grid-cols-5 gap-2">
             {GAMES.map((game) => {
@@ -194,6 +167,30 @@ export default function HomePage() {
             })}
           </div>
         </div>
+        {GAMES.map((game, i) => (
+          <Link
+            key={game.id}
+            to={game.route}
+            className="anim-rise flex items-center gap-4 rounded-3xl bg-surface p-4 shadow-card transition hover:shadow-md"
+            style={{ animationDelay: `${Math.min(i + 1, 6) * 45}ms` }}
+          >
+            <div className="flex size-14 shrink-0 items-center justify-center rounded-2xl bg-accent-tint p-2.5">
+              {PREVIEW_BY_ID[game.id]}
+            </div>
+            <div className="flex-1">
+              <div className="flex items-center gap-1.5">
+                <h2 className="text-[20px] font-bold">{game.title}</h2>
+                {!!solvedByGame[game.id] && (
+                  <span className="anim-pop-in rounded-full bg-accent-tint px-1.5 py-0.5 text-[10px] font-bold tracking-wide text-accent uppercase">
+                    {solvedByGame[game.id]} solved
+                  </span>
+                )}
+              </div>
+              <p className="mt-1 text-sm text-ink-muted">{game.description}</p>
+            </div>
+            <span className="shrink-0 text-lg text-ink-muted">›</span>
+          </Link>
+        ))}
       </div>
 
       <TabBar active="play" />
