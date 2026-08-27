@@ -54,11 +54,27 @@
   --grid-line-strong: oklch(62% 0.02 260);
 }
 
+/* Yellow palette — an explicit warm/gold theme option (see useTheme.ts), for users who'd
+   rather not have the app's default purple/pink accents. Self-contained like Light/Dark:
+   picking it opts out of the system-dark media query below regardless of OS preference. */
+:root[data-theme='yellow'] {
+  --bg: oklch(97% 0.02 95);
+  --surface: oklch(99% 0.01 95);
+  --ink: oklch(22% 0.02 80);
+  --ink-muted: oklch(46% 0.03 80);
+  --accent: oklch(66% 0.16 85);
+  --accent-tint: oklch(93% 0.05 90);
+  --danger: oklch(45% 0.18 25);
+  --border-dashed: oklch(65% 0.03 85 / 0.4);
+  --grid-gap: oklch(90% 0.02 90);
+  --grid-line-strong: oklch(60% 0.03 85);
+}
+
 /* Dark palette applies when the system prefers dark (and the user hasn't explicitly
-   forced light), or whenever the user has explicitly forced dark — see useTheme.ts,
-   which sets data-theme on <html> from the in-app Settings toggle. */
+   forced light or yellow), or whenever the user has explicitly forced dark — see
+   useTheme.ts, which sets data-theme on <html> from the in-app Settings toggle. */
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme='light']) {
+  :root:not([data-theme='light']):not([data-theme='yellow']) {
     --bg: oklch(18% 0.012 260);
     --surface: oklch(24% 0.014 260);
     --ink: oklch(96% 0.01 260);
@@ -106,6 +122,29 @@
   --color-border-dashed: oklch(60% 0.02 260 / 0.4);
   --color-grid-gap: oklch(32% 0.014 260);
   --color-grid-line-strong: oklch(55% 0.02 260);
+  /* StatsPage heatmap + streak number — same violet family as --color-accent above,
+     kept as separate tokens since they're 4 discrete swatches, not a single accent. */
+  --color-heat-1: oklch(26% 0.012 260);
+  --color-heat-2: oklch(38% 0.07 300);
+  --color-heat-3: oklch(55% 0.13 300);
+  --color-heat-4: oklch(72% 0.16 300);
+  --color-streak: oklch(76% 0.15 300);
+}
+
+/* Yellow theme reaching into the always-dark screens (Shop, Stats) and into Nonogram's
+   per-game accent — both hardcode a violet/pink hue outside the normal --accent flow
+   above, so the Yellow theme needs its own overrides for them specifically. */
+:root[data-theme='yellow'] [data-force-theme='dark'] {
+  --color-accent: oklch(74% 0.15 85);
+  --color-accent-tint: oklch(32% 0.06 85);
+  --color-heat-2: oklch(40% 0.09 85);
+  --color-heat-3: oklch(58% 0.14 85);
+  --color-heat-4: oklch(78% 0.15 85);
+  --color-streak: oklch(78% 0.15 85);
+}
+:root[data-theme='yellow'] [data-game='nonogram'] {
+  --color-accent: oklch(52% 0.14 205);
+  --color-accent-tint: oklch(93% 0.04 205);
 }
 
 /* Per-game accent identity — one CSS variable pair per game, set on each game's route
@@ -130,19 +169,19 @@
 }
 
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme='light']) [data-game='sudoku'] {
+  :root:not([data-theme='light']):not([data-theme='yellow']) [data-game='sudoku'] {
     --color-accent: oklch(64% 0.15 250);
     --color-accent-tint: oklch(29% 0.05 250);
   }
-  :root:not([data-theme='light']) [data-game='zip'] {
+  :root:not([data-theme='light']):not([data-theme='yellow']) [data-game='zip'] {
     --color-accent: oklch(62% 0.11 175);
     --color-accent-tint: oklch(29% 0.04 175);
   }
-  :root:not([data-theme='light']) [data-game='patches'] {
+  :root:not([data-theme='light']):not([data-theme='yellow']) [data-game='patches'] {
     --color-accent: oklch(66% 0.14 45);
     --color-accent-tint: oklch(30% 0.045 45);
   }
-  :root:not([data-theme='light']) [data-game='nonogram'] {
+  :root:not([data-theme='light']):not([data-theme='yellow']) [data-game='nonogram'] {
     --color-accent: oklch(68% 0.16 340);
     --color-accent-tint: oklch(31% 0.05 340);
   }

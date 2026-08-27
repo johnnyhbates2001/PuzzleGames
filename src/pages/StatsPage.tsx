@@ -42,7 +42,7 @@ async function summarizeGame(gameId: string, title: string): Promise<GameSummary
   return { id: gameId, title, solved, bestMs }
 }
 
-const HEAT_LEVELS = ['oklch(26% 0.012 260)', 'oklch(38% 0.07 300)', 'oklch(55% 0.13 300)', 'oklch(72% 0.16 300)']
+const HEAT_LEVELS = ['var(--color-heat-1)', 'var(--color-heat-2)', 'var(--color-heat-3)', 'var(--color-heat-4)']
 
 function heatLevel(count: number): string {
   if (count === 0) return HEAT_LEVELS[0]
@@ -79,7 +79,7 @@ export default function StatsPage() {
 
       <div className="flex gap-2.5">
         <StatTile value={String(totalSolved)} label="Solved" color="oklch(96% 0.01 260)" />
-        <StatTile value={String(streak)} label="Streak" color="oklch(76% 0.15 300)" />
+        <StatTile value={String(streak)} label="Streak" color="var(--color-streak)" />
         <StatTile value={String(coins)} label="Coins" color="oklch(80% 0.14 85)" />
       </div>
 

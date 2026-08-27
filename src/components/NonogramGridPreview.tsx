@@ -6,7 +6,7 @@ export function NonogramGridPreview() {
   return (
     <div className="grid size-full grid-cols-5 grid-rows-5 gap-0.5">
       {Array.from({ length: 25 }, (_, i) => (
-        <div key={i} className={`aspect-square rounded-[2px] ${FILLED.has(i) ? 'bg-ink' : 'bg-bg'}`} />
+        <div key={i} className={`aspect-square rounded-[2px] border border-border-dashed ${FILLED.has(i) ? 'bg-ink' : 'bg-bg'}`} />
       ))}
     </div>
   )

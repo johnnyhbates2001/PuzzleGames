@@ -1,13 +1,13 @@
 import { useCallback, useState } from 'react'
 
-export type ThemePreference = 'system' | 'light' | 'dark'
+export type ThemePreference = 'system' | 'light' | 'dark' | 'yellow'
 
 const STORAGE_KEY = 'theme'
 
 function readStoredTheme(): ThemePreference {
   try {
     const stored = localStorage.getItem(STORAGE_KEY)
-    if (stored === 'light' || stored === 'dark') return stored
+    if (stored === 'light' || stored === 'dark' || stored === 'yellow') return stored
   } catch {
     // localStorage unavailable (private mode, etc.) — fall back to system
   }

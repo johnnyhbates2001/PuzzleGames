@@ -8,6 +8,7 @@ const THEME_OPTIONS: { value: ThemePreference; label: string }[] = [
   { value: 'system', label: 'System' },
   { value: 'light', label: 'Light' },
   { value: 'dark', label: 'Dark' },
+  { value: 'yellow', label: 'Yellow' },
 ]
 
 export function SettingsButton() {

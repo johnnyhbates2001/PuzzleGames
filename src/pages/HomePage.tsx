@@ -144,15 +144,15 @@ export default function HomePage() {
       )}
 
       <div className="flex flex-col gap-3">
-        <div className="anim-rise rounded-3xl bg-[oklch(20%_0.02_260)] p-4 shadow-card">
-          <h2 className="text-[15px] font-bold text-white">Daily Challenges</h2>
+        <div className="anim-rise rounded-3xl bg-accent-tint p-4 shadow-card">
+          <h2 className="text-[15px] font-bold text-ink">Daily Challenges</h2>
           <div className="mt-3 grid grid-cols-5 gap-2">
             {GAMES.map((game) => {
               const done = dailyDoneByGame[game.id]
               const gameStreak = dailyStreakByGame[game.id] ?? 0
               return (
                 <Link key={game.id} to={`${game.route}/daily`} className="flex flex-col items-center gap-1">
-                  <span className="relative flex size-11 shrink-0 items-center justify-center rounded-2xl bg-white/10 p-2">
+                  <span className="relative flex size-11 shrink-0 items-center justify-center rounded-2xl bg-surface p-2 shadow-card">
                     {PREVIEW_BY_ID[game.id]}
                     {done && (
                       <span className="absolute -top-1 -right-1 flex size-4 items-center justify-center rounded-full bg-accent text-[9px] font-bold text-white">
@@ -160,8 +160,8 @@ export default function HomePage() {
                       </span>
                     )}
                   </span>
-                  <span className="max-w-full truncate text-[10px] font-medium text-white/70">{game.title}</span>
-                  {gameStreak > 0 && <span className="text-[9px] font-bold text-white/50">🔥{gameStreak}</span>}
+                  <span className="max-w-full truncate text-[10px] font-medium text-ink-muted">{game.title}</span>
+                  {gameStreak > 0 && <span className="text-[9px] font-bold text-accent">🔥{gameStreak}</span>}
                 </Link>
               )
             })}
