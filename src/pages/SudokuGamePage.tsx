@@ -9,12 +9,14 @@ import {
   getDailyChallenge,
   getSettings,
   getSudokuInProgress,
+  getSudokuProgress,
   recordSudokuCompletion,
   saveSudokuInProgress,
   spendCoins,
 } from '../storage/db'
 import { getNextSudokuLevel } from '../games/sudokuLevels'
 import { getDailySudokuLevel, todayDateKey } from '../games/dailyChallenge'
+import { endlessProgress, modifierLabel, modifiersForLevel, type LevelModifiers } from '../games/chapters'
 import { useGameLifecycle } from '../hooks/useGameLifecycle'
 import { useGameCompletion } from '../hooks/useGameCompletion'
 import { useAudio } from '../hooks/useAudio'
@@ -23,12 +25,17 @@ import { SudokuKeypad } from '../components/SudokuKeypad'
 import { SudokuControls } from '../components/SudokuControls'
 import { GameHeader } from '../components/GameHeader'
 import { HintSheet, type HintOption } from '../components/HintSheet'
+import { FailSheet } from '../components/FailSheet'
 
 const HINT_OPTIONS: HintOption[] = [
   { id: 'reveal-cell', icon: '👁', title: 'Reveal a cell', desc: 'Fills one correct square of your choice.', price: 25 },
   { id: 'check', icon: '⚑', title: 'Check my work', desc: 'Flags anything currently placed wrong.', price: 40 },
   { id: 'solve-box', icon: '✧', title: 'Solve a box', desc: 'Completes one whole 3×3 box.', price: 120 },
 ]
+
+// First-guess placeholder, not derived from real solve-time data — Sudoku's 9x9 takes
+// meaningfully longer to hand-solve than the other games' ~8x8 boards.
+const TIMED_BUDGET_MS = 180_000
 
 // Shape must be a real 9x9 grid — the validator/board components are hardcoded to
 // SUDOKU_SIZE (real Sudoku is always 9x9, unlike Queens' per-difficulty size), so an
@@ -65,6 +72,8 @@ export default function SudokuGamePage() {
   const [hintsOpen, setHintsOpen] = useState(false)
   const [checkMessage, setCheckMessage] = useState<string | null>(null)
   const [ripple, setRipple] = useState<{ row: number; col: number; seq: number } | null>(null)
+  const [modifiers, setModifiers] = useState<LevelModifiers | null>(null)
+  const [failed, setFailed] = useState<{ reason: 'timeout' | 'mistake' } | null>(null)
   const sourceRef = useRef<{ source: 'bank' | 'generated'; bankIndex?: number }>({ source: 'generated' })
   // Set during load if today's Daily Challenge was already completed — the win effect
   // reads this to skip re-awarding coins on a replay (recordDailyChallengeCompletion
@@ -79,6 +88,8 @@ export default function SudokuGamePage() {
     async function init() {
       setLoading(true)
       setError(null)
+      setModifiers(null)
+      setFailed(null)
       try {
         const replayLevel = initialReplayLevelRef.current
         if (replayLevel) {
@@ -99,9 +110,16 @@ export default function SudokuGamePage() {
           return
         }
 
-        const [settings, inProgress] = await Promise.all([getSettings(), getSudokuInProgress(validDifficulty as Difficulty)])
+        const [settings, inProgress, progress] = await Promise.all([
+          getSettings(),
+          getSudokuInProgress(validDifficulty as Difficulty),
+          getSudokuProgress(validDifficulty as Difficulty),
+        ])
         if (cancelled) return
         setCoins(settings.coins)
+        if (validDifficulty === 'hard') {
+          setModifiers(modifiersForLevel(endlessProgress(progress.currentLevelIndex)))
+        }
 
         if (inProgress) {
           sourceRef.current = { source: inProgress.levelSource, bankIndex: inProgress.bankIndex }
@@ -161,6 +179,31 @@ export default function SudokuGamePage() {
     dailyAlreadyCompletedRef,
     recordCompletion: recordSudokuCompletion,
   })
+
+  // Perfect Run: fails the instant a wrong digit appears, using the same non-mutating
+  // check the paid "check" hint already uses — just watched continuously instead of
+  // on demand, and only while the modifier is actually active.
+  useEffect(() => {
+    if (!modifiers?.perfectRun || failed || state.status !== 'playing') return
+    if (getWrongCells(state).size > 0) {
+      dispatch({ type: 'PAUSE', now: Date.now() })
+      setFailed({ reason: 'mistake' })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.board, modifiers, failed, state.status])
+
+  const handleTryAgain = useCallback(async () => {
+    if (!validDifficulty) return
+    setFailed(null)
+    setLoading(true)
+    try {
+      const next = await getNextSudokuLevel(validDifficulty)
+      sourceRef.current = { source: next.source, bankIndex: next.bankIndex }
+      dispatch({ type: 'LOAD', level: next.level })
+    } finally {
+      setLoading(false)
+    }
+  }, [validDifficulty])
 
   const handleCellClick = useCallback(
     (row: number, col: number) => {
@@ -259,10 +302,15 @@ export default function SudokuGamePage() {
       className="mx-auto flex min-h-svh max-w-lg flex-col items-center gap-6 bg-bg px-4 py-[max(1.5rem,env(safe-area-inset-top))] text-ink"
     >
       <GameHeader
-        backTo="/sudoku"
         elapsedMs={state.elapsedMs}
         runStartedAt={state.runStartedAt}
         coins={coins}
+        timerKey={state.level.id}
+        budgetMs={modifiers?.timed ? TIMED_BUDGET_MS : undefined}
+        onTimerExpire={() => {
+          dispatch({ type: 'PAUSE', now: Date.now() })
+          setFailed({ reason: 'timeout' })
+        }}
         right={
           isDaily ? (
             <span className="rounded-full bg-accent-tint px-3 py-1.5 text-xs font-semibold text-accent">Daily Challenge</span>
@@ -271,6 +319,12 @@ export default function SudokuGamePage() {
       />
 
       <div className="flex w-full max-w-[420px] flex-col items-center gap-4">
+        {modifiers && (
+          <p className="w-full rounded-2xl bg-accent-tint px-4 py-2.5 text-center text-[13px] font-bold text-accent">
+            ⚡ Boss level · {modifierLabel(modifiers)}
+          </p>
+        )}
+
         {loading ? (
           <p className="text-ink-muted">Loading level…</p>
         ) : (
@@ -295,7 +349,7 @@ export default function SudokuGamePage() {
 
         <SudokuControls
           canErase={state.selected !== null}
-          canUndo={state.history.length > 0}
+          canUndo={!modifiers?.noUndo && state.history.length > 0}
           onErase={handleErase}
           onUndo={() => dispatch({ type: 'UNDO' })}
           onClear={() => dispatch({ type: 'CLEAR', now: Date.now() })}
@@ -304,6 +358,7 @@ export default function SudokuGamePage() {
             setHintsOpen(true)
           }}
           hintPrice={HINT_OPTIONS[0].price}
+          hintsDisabled={modifiers?.noHints}
         />
       </div>
 
@@ -315,6 +370,8 @@ export default function SudokuGamePage() {
         onUseHint={handleUseHint}
         checkMessage={checkMessage}
       />
+
+      {failed && <FailSheet reason={failed.reason} onTryAgain={handleTryAgain} />}
     </main>
   )
 }

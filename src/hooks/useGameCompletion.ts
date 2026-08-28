@@ -2,9 +2,33 @@ import { useEffect, type MutableRefObject } from 'react'
 import { useAppNavigate as useNavigate } from './useAppNavigate'
 import { useAudio } from './useAudio'
 import { useReducedMotion } from './useReducedMotion'
-import { getDailyStreak, recordDailyChallengeCompletion, type CompletionResult } from '../storage/db'
+import { getDailyStreak, grantSkin, recordDailyChallengeCompletion, type CompletionResult } from '../storage/db'
 import type { Difficulty } from '../engine/types'
 import type { DailyGameId } from '../games/dailyChallenge'
+import { CHAPTER_META, LEVELS_PER_CHAPTER, STORY_LEVELS_PER_TIER, chapterForIndex } from '../games/chapters'
+
+export interface ChapterCompleteInfo {
+  chapterNumber: number
+  chapterName: string
+  skinUnlocked?: string
+}
+
+/** If `currentLevelIndex` (the count of completed levels, post-increment) just crossed a
+ *  chapter boundary within the story range, derives that chapter and grants its reward
+ *  skin (if any) — idempotent via grantSkin, so re-crossing (shouldn't happen; the
+ *  counter only grows) never double-grants. Returns undefined once past the story's 200
+ *  levels/tier (Endless territory), where chapter boundaries are no longer meaningful. */
+async function checkChapterComplete(
+  currentLevelIndex: number,
+  difficulty: Difficulty,
+): Promise<ChapterCompleteInfo | undefined> {
+  if (currentLevelIndex > STORY_LEVELS_PER_TIER || currentLevelIndex % LEVELS_PER_CHAPTER !== 0) return undefined
+  const { chapterNumber } = chapterForIndex(currentLevelIndex - 1, difficulty)
+  const meta = CHAPTER_META[chapterNumber - 1]
+  if (!meta) return undefined
+  if (meta.skinId) await grantSkin(meta.skinId)
+  return { chapterNumber, chapterName: meta.name, skinUnlocked: meta.skinId }
+}
 
 interface UseGameCompletionOptions<K extends string, V> {
   gameId: DailyGameId
@@ -87,7 +111,9 @@ export function useGameCompletion<K extends string, V>({
         })
       })
     } else {
-      recordCompletion(validDifficulty as Difficulty, elapsedMs, hintsUsed > 0).then((result) => {
+      recordCompletion(validDifficulty as Difficulty, elapsedMs, hintsUsed > 0).then(async (result) => {
+        if (cancelled) return
+        const chapterComplete = await checkChapterComplete(result.progress.currentLevelIndex, validDifficulty as Difficulty)
         if (cancelled) return
         scheduleNavigate(`${basePath}/${validDifficulty}/complete`, {
           timeMs: elapsedMs,
@@ -97,6 +123,7 @@ export function useGameCompletion<K extends string, V>({
           coinsAwarded: result.coinsAwarded,
           isPersonalBest: result.isPersonalBest,
           dailyBonusApplied: result.dailyBonusApplied,
+          chapterComplete,
         })
       })
     }

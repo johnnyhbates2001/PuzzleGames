@@ -23,10 +23,14 @@ async function loadBank(difficulty: Difficulty): Promise<NonogramLevelRecord[]> 
   }
 }
 
-const GENERATE_RETRIES = 5
+const GENERATE_RETRIES = 30
 
 /** Picks the next level for a difficulty: the bank entry at the player's current index,
- *  falling back to runtime generation (via the same engine) once the bank is exhausted. */
+ *  falling back to runtime generation (via the same engine) once the bank is exhausted —
+ *  this is what powers Endless mode (see games/chapters.ts), so this fallback needs to
+ *  hold up under indefinite, repeated use, not just an occasional edge case. Nonogram's
+ *  generator is rejection-sampling based and has the lowest per-attempt hit rate of the
+ *  five engines, which is exactly why this path needs a guaranteed-safe last resort. */
 export async function getNextNonogramLevel(difficulty: Difficulty): Promise<NextNonogramLevelResult> {
   const [progress, bank] = await Promise.all([getNonogramProgress(difficulty), loadBank(difficulty)])
 
@@ -38,5 +42,8 @@ export async function getNextNonogramLevel(difficulty: Difficulty): Promise<Next
     const level = generateLevel(difficulty, Math.random)
     if (level) return { level, source: 'generated' }
   }
-  throw new Error(`Failed to generate a ${difficulty} nonogram level`)
+  // Endless mode must never throw a player out mid-session — on the chance every
+  // attempt fails at this already-verified difficulty size, fall back to replaying a
+  // random bank level rather than crashing.
+  return { level: bank[Math.floor(Math.random() * bank.length)], source: 'bank' }
 }

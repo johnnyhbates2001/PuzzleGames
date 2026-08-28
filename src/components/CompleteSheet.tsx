@@ -4,7 +4,9 @@ import { formatElapsed } from './Timer'
 import { useAudio } from '../hooks/useAudio'
 import { useReducedMotion } from '../hooks/useReducedMotion'
 import { getSettings } from '../storage/db'
+import { getSkin } from '../skins'
 import { Confetti } from './Confetti'
+import type { ChapterCompleteInfo } from '../hooks/useGameCompletion'
 
 interface CompleteSheetProps {
   /** The blurred, absolutely-positioned board preview — differs per game (Board /
@@ -25,6 +27,8 @@ interface CompleteSheetProps {
    *  regular difficulty run — swaps the Best/Average tile for the daily streak. */
   isDaily?: boolean
   dailyStreak?: number
+  /** Set when this completion also crossed a chapter boundary — see useGameCompletion. */
+  chapterComplete?: ChapterCompleteInfo
   onNextLevel: () => void
   onReplay: () => void
 }
@@ -83,6 +87,7 @@ export function CompleteSheet({
   dailyBonusApplied,
   isDaily,
   dailyStreak,
+  chapterComplete,
   onNextLevel,
   onReplay,
 }: CompleteSheetProps) {
@@ -247,6 +252,23 @@ export function CompleteSheet({
             <span className="text-[15px] font-extrabold text-[oklch(45%_0.11_75)]">+{coinsAwarded} coins</span>
             {isPersonalBest && <span className="text-xs font-semibold text-[oklch(55%_0.08_75)]">personal best</span>}
             {dailyBonusApplied && <span className="text-xs font-semibold text-[oklch(55%_0.08_75)]">🔥 daily bonus ×2</span>}
+          </div>
+        )}
+
+        {chapterComplete && (
+          <div
+            className="anim-rise flex w-full flex-col items-center gap-1 rounded-2xl bg-accent py-3.5 text-white"
+            style={{ animationDelay: '400ms' }}
+          >
+            <span className="text-[11px] font-bold tracking-wide uppercase opacity-80">
+              Chapter {chapterComplete.chapterNumber} complete
+            </span>
+            <span className="text-[15px] font-bold">{chapterComplete.chapterName}</span>
+            {chapterComplete.skinUnlocked && (
+              <span className="mt-1 text-[12.5px] font-semibold opacity-90">
+                New skin unlocked: {getSkin(chapterComplete.skinUnlocked).name}
+              </span>
+            )}
           </div>
         )}
 

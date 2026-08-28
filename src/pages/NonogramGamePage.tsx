@@ -6,6 +6,7 @@ import { createInitialState, getWrongCells, nonogramReducer } from '../state/non
 import {
   getDailyChallenge,
   getNonogramInProgress,
+  getNonogramProgress,
   getSettings,
   recordNonogramCompletion,
   saveNonogramInProgress,
@@ -13,6 +14,7 @@ import {
 } from '../storage/db'
 import { getNextNonogramLevel } from '../games/nonogramLevels'
 import { getDailyNonogramLevel, todayDateKey } from '../games/dailyChallenge'
+import { endlessProgress, modifierLabel, modifiersForLevel, type LevelModifiers } from '../games/chapters'
 import { useGameLifecycle } from '../hooks/useGameLifecycle'
 import { useGameCompletion } from '../hooks/useGameCompletion'
 import { useAudio } from '../hooks/useAudio'
@@ -20,12 +22,17 @@ import { NonogramBoard } from '../components/NonogramBoard'
 import { NonogramControls } from '../components/NonogramControls'
 import { GameHeader } from '../components/GameHeader'
 import { HintSheet, type HintOption } from '../components/HintSheet'
+import { FailSheet } from '../components/FailSheet'
 
 const HINT_OPTIONS: HintOption[] = [
   { id: 'reveal-cell', icon: '👁', title: 'Reveal a cell', desc: 'Fills or X-marks one correct square.', price: 25 },
   { id: 'check', icon: '⚑', title: 'Check my work', desc: 'Flags anything currently marked wrong.', price: 40 },
   { id: 'reveal-line', icon: '✧', title: 'Reveal a line', desc: 'Completes one whole row or column.', price: 120 },
 ]
+
+// First-guess placeholder, not derived from real solve-time data — tune once the user
+// has actually played a few Timed boss levels.
+const TIMED_BUDGET_MS = 90_000
 
 // Content doesn't matter — this state is replaced by LOAD before the player can
 // interact, and (like Zip/Patches) Nonogram's engine is fully parameterized by
@@ -61,6 +68,8 @@ export default function NonogramGamePage() {
   const [coins, setCoins] = useState(0)
   const [hintsOpen, setHintsOpen] = useState(false)
   const [checkMessage, setCheckMessage] = useState<string | null>(null)
+  const [modifiers, setModifiers] = useState<LevelModifiers | null>(null)
+  const [failed, setFailed] = useState<{ reason: 'timeout' | 'mistake' } | null>(null)
   const sourceRef = useRef<{ source: 'bank' | 'generated'; bankIndex?: number }>({ source: 'generated' })
   // Set during load if today's Daily Challenge was already completed — the win effect
   // reads this to skip re-awarding coins on a replay (recordDailyChallengeCompletion
@@ -75,6 +84,8 @@ export default function NonogramGamePage() {
     async function init() {
       setLoading(true)
       setError(null)
+      setModifiers(null)
+      setFailed(null)
       try {
         const replayLevel = initialReplayLevelRef.current
         if (replayLevel) {
@@ -95,9 +106,16 @@ export default function NonogramGamePage() {
           return
         }
 
-        const [settings, inProgress] = await Promise.all([getSettings(), getNonogramInProgress(validDifficulty as Difficulty)])
+        const [settings, inProgress, progress] = await Promise.all([
+          getSettings(),
+          getNonogramInProgress(validDifficulty as Difficulty),
+          getNonogramProgress(validDifficulty as Difficulty),
+        ])
         if (cancelled) return
         setCoins(settings.coins)
+        if (validDifficulty === 'hard') {
+          setModifiers(modifiersForLevel(endlessProgress(progress.currentLevelIndex)))
+        }
 
         if (inProgress) {
           sourceRef.current = { source: inProgress.levelSource, bankIndex: inProgress.bankIndex }
@@ -158,6 +176,31 @@ export default function NonogramGamePage() {
     recordCompletion: recordNonogramCompletion,
   })
 
+  // Perfect Run: fails the instant a wrong mark appears, using the same non-mutating
+  // check the paid "check" hint already uses — just watched continuously instead of
+  // on demand, and only while the modifier is actually active.
+  useEffect(() => {
+    if (!modifiers?.perfectRun || failed || state.status !== 'playing') return
+    if (getWrongCells(state).size > 0) {
+      dispatch({ type: 'PAUSE', now: Date.now() })
+      setFailed({ reason: 'mistake' })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.grid, modifiers, failed, state.status])
+
+  const handleTryAgain = useCallback(async () => {
+    if (!validDifficulty) return
+    setFailed(null)
+    setLoading(true)
+    try {
+      const next = await getNextNonogramLevel(validDifficulty)
+      sourceRef.current = { source: next.source, bankIndex: next.bankIndex }
+      dispatch({ type: 'LOAD', level: next.level })
+    } finally {
+      setLoading(false)
+    }
+  }, [validDifficulty])
+
   const handleCellClick = useCallback(
     (row: number, col: number) => {
       playSound('tap')
@@ -216,10 +259,15 @@ export default function NonogramGamePage() {
       className="mx-auto flex min-h-svh max-w-lg flex-col items-center gap-6 bg-bg px-4 py-[max(1.5rem,env(safe-area-inset-top))] text-ink"
     >
       <GameHeader
-        backTo="/nonogram"
         elapsedMs={state.elapsedMs}
         runStartedAt={state.runStartedAt}
         coins={coins}
+        timerKey={state.level.id}
+        budgetMs={modifiers?.timed ? TIMED_BUDGET_MS : undefined}
+        onTimerExpire={() => {
+          dispatch({ type: 'PAUSE', now: Date.now() })
+          setFailed({ reason: 'timeout' })
+        }}
         right={
           isDaily ? (
             <span className="rounded-full bg-accent-tint px-3 py-1.5 text-xs font-semibold text-accent">Daily Challenge</span>
@@ -228,6 +276,12 @@ export default function NonogramGamePage() {
       />
 
       <div className="flex w-full max-w-[420px] flex-col items-center gap-6">
+        {modifiers && (
+          <p className="w-full rounded-2xl bg-accent-tint px-4 py-2.5 text-center text-[13px] font-bold text-accent">
+            ⚡ Boss level · {modifierLabel(modifiers)}
+          </p>
+        )}
+
         {loading ? (
           <p className="text-ink-muted">Loading level…</p>
         ) : (
@@ -243,7 +297,7 @@ export default function NonogramGamePage() {
         )}
 
         <NonogramControls
-          canUndo={state.history.length > 0}
+          canUndo={!modifiers?.noUndo && state.history.length > 0}
           canClear={state.grid.some((row) => row.some((mark) => mark !== 'empty'))}
           markMode={state.markMode}
           onUndo={() => dispatch({ type: 'UNDO' })}
@@ -254,6 +308,7 @@ export default function NonogramGamePage() {
             setHintsOpen(true)
           }}
           hintPrice={HINT_OPTIONS[0].price}
+          hintsDisabled={modifiers?.noHints}
         />
       </div>
 
@@ -265,6 +320,8 @@ export default function NonogramGamePage() {
         onUseHint={handleUseHint}
         checkMessage={checkMessage}
       />
+
+      {failed && <FailSheet reason={failed.reason} onTryAgain={handleTryAgain} />}
     </main>
   )
 }

@@ -6,9 +6,20 @@ interface ControlsProps {
   onToggleAutoX: (enabled: boolean) => void
   onOpenHints: () => void
   hintPrice: number
+  /** Set by an active endless-boss "No Hints" modifier — see games/chapters.ts. */
+  hintsDisabled?: boolean
 }
 
-export function Controls({ autoPlaceX, canUndo, onClear, onUndo, onToggleAutoX, onOpenHints, hintPrice }: ControlsProps) {
+export function Controls({
+  autoPlaceX,
+  canUndo,
+  onClear,
+  onUndo,
+  onToggleAutoX,
+  onOpenHints,
+  hintPrice,
+  hintsDisabled,
+}: ControlsProps) {
   return (
     <div className="flex items-center gap-1 rounded-full bg-surface p-2 shadow-card">
       <button
@@ -41,10 +52,13 @@ export function Controls({ autoPlaceX, canUndo, onClear, onUndo, onToggleAutoX, 
       <button
         type="button"
         onClick={onOpenHints}
-        className="flex items-center gap-1.5 rounded-full bg-accent-tint px-3 py-1.5 text-sm font-semibold text-accent"
+        disabled={hintsDisabled}
+        className="flex items-center gap-1.5 rounded-full bg-accent-tint px-3 py-1.5 text-sm font-semibold text-accent disabled:opacity-40"
       >
         Hint
-        <span className="rounded-full bg-accent px-1.5 py-0.5 text-[10px] font-bold text-white">{hintPrice}</span>
+        <span className="rounded-full bg-accent px-1.5 py-0.5 text-[10px] font-bold text-white">
+          {hintsDisabled ? '🔒' : hintPrice}
+        </span>
       </button>
     </div>
   )

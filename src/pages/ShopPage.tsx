@@ -2,8 +2,17 @@ import { useEffect, useRef, useState } from 'react'
 import { CoinBalance } from '../components/CoinBalance'
 import { TabBar } from '../components/TabBar'
 import { useSkin } from '../hooks/useSkin'
-import { SKINS } from '../skins'
+import { SKINS, type Skin } from '../skins'
 import { getSettings, getTotalSolved } from '../storage/db'
+import { getHighestChapterCompleted } from '../games/chapters'
+
+function lockLabel(locked: NonNullable<Skin['locked']>): string {
+  return 'solvesNeeded' in locked ? `Locked · ${locked.solvesNeeded} solves` : `Locked · Chapter ${locked.chapterNeeded}`
+}
+
+function isSkinLocked(locked: NonNullable<Skin['locked']>, totalSolved: number, highestChapter: number): boolean {
+  return 'solvesNeeded' in locked ? totalSolved < locked.solvesNeeded : highestChapter < locked.chapterNeeded
+}
 
 function swatches16(colors: string[]): string[] {
   return Array.from({ length: 16 }, (_, i) => colors[i % colors.length])
@@ -19,6 +28,7 @@ export default function ShopPage() {
   const { skin: equippedSkin, ownedSkins, buyAndEquip } = useSkin()
   const [coins, setCoins] = useState(0)
   const [totalSolved, setTotalSolved] = useState(0)
+  const [highestChapter, setHighestChapter] = useState(0)
   // The skin whose swatches should be playing the equip-flip right now — set the
   // instant a tap successfully equips a skin, cleared once every staggered swatch has
   // finished, so the flip only ever plays for the tile that was just tapped, never for
@@ -30,6 +40,7 @@ export default function ShopPage() {
     let cancelled = false
     getSettings().then((s) => !cancelled && setCoins(s.coins))
     getTotalSolved().then((n) => !cancelled && setTotalSolved(n))
+    getHighestChapterCompleted().then((n) => !cancelled && setHighestChapter(n))
     return () => {
       cancelled = true
     }
@@ -52,7 +63,7 @@ export default function ShopPage() {
         {SKINS.map((s) => {
           const owned = ownedSkins.includes(s.id)
           const isEquipped = equippedSkin.id === s.id
-          const isLocked = !!s.locked && !owned && totalSolved < s.locked.solvesNeeded
+          const isLocked = !!s.locked && !owned && isSkinLocked(s.locked, totalSolved, highestChapter)
           // Sunset/Mono Ink/Forest cost coins; Candy/Midnight/an unlocked Neon are free
           // to claim (first tap just equips them at 0 cost, marking them owned).
           const needsPurchase = !owned && !isLocked && s.price !== null
@@ -87,7 +98,7 @@ export default function ShopPage() {
               <div>
                 <p className="text-[12.5px] font-bold text-ink">{s.name}</p>
                 <p className="mt-0.5 text-[10px] leading-tight text-ink-muted">
-                  {isLocked ? `Locked · ${s.locked!.solvesNeeded} solves` : s.tag}
+                  {isLocked ? lockLabel(s.locked!) : s.tag}
                 </p>
               </div>
               <button

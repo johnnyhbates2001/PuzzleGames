@@ -1,0 +1,42 @@
+import { AppLink as Link } from './AppLink'
+
+interface FailSheetProps {
+  reason: 'timeout' | 'mistake'
+  onTryAgain: () => void
+}
+
+const COPY: Record<FailSheetProps['reason'], { headline: string; body: string }> = {
+  timeout: { headline: "Time's up!", body: 'The clock ran out on this boss level.' },
+  mistake: { headline: 'Wrong move!', body: 'Perfect Run ends on the first mistake.' },
+}
+
+/** Rendered directly inside a Game*Page (not a route change — nothing here gets
+ *  persisted to storage/db.ts, unlike the win path via CompletePage/CompleteSheet) when
+ *  a Timed or Perfect Run boss-level modifier ends the level early. Its full-viewport
+ *  overlay is what actually blocks further board/Controls interaction — no per-handler
+ *  guards needed in the page itself. */
+export function FailSheet({ reason, onTryAgain }: FailSheetProps) {
+  const { headline, body } = COPY[reason]
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-ink/40">
+      <div className="anim-sheet-up flex w-full max-w-lg flex-col items-center gap-4 rounded-t-[32px] bg-surface p-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] text-center shadow-card">
+        <span className="flex size-16 items-center justify-center rounded-full border-4 border-surface bg-danger text-2xl font-bold text-white">
+          ✕
+        </span>
+        <div>
+          <h1 className="font-display text-[23px] font-extrabold text-ink">{headline}</h1>
+          <p className="mt-1 text-sm text-ink-muted">{body}</p>
+        </div>
+        <div className="flex w-full flex-col gap-2">
+          <button type="button" onClick={onTryAgain} className="w-full rounded-full bg-accent py-3 font-semibold text-white">
+            Try again
+          </button>
+          <Link to="/" className="w-full rounded-full bg-bg py-3 text-center font-semibold text-ink-muted">
+            Home
+          </Link>
+        </div>
+      </div>
+    </div>
+  )
+}

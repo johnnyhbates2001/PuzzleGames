@@ -294,6 +294,15 @@ export async function buySkin(skinId: string, price: number): Promise<boolean> {
   return true
 }
 
+/** Grants a skin for free, no coin deduction — used for chapter-completion rewards.
+ *  No-op if already owned, same idempotency as buySkin. */
+export async function grantSkin(skinId: string): Promise<void> {
+  const db = await getDB()
+  const current = await getSettings()
+  if (current.ownedSkins.includes(skinId)) return
+  await db.put('settings', { ...current, ownedSkins: [...current.ownedSkins, skinId] }, 'global')
+}
+
 export async function equipSkin(skinId: string): Promise<void> {
   const db = await getDB()
   const current = await getSettings()

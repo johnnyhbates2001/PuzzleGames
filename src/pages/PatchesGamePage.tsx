@@ -6,6 +6,7 @@ import { createInitialState, getWrongCells, patchesReducer } from '../state/patc
 import {
   getDailyChallenge,
   getPatchesInProgress,
+  getPatchesProgress,
   getSettings,
   recordPatchesCompletion,
   savePatchesInProgress,
@@ -13,6 +14,7 @@ import {
 } from '../storage/db'
 import { getNextPatchesLevel } from '../games/patchesLevels'
 import { getDailyPatchesLevel, todayDateKey } from '../games/dailyChallenge'
+import { endlessProgress, modifierLabel, modifiersForLevel, type LevelModifiers } from '../games/chapters'
 import { useGameLifecycle } from '../hooks/useGameLifecycle'
 import { useGameCompletion } from '../hooks/useGameCompletion'
 import { useAudio } from '../hooks/useAudio'
@@ -20,11 +22,16 @@ import { PatchesBoard } from '../components/PatchesBoard'
 import { PatchesControls } from '../components/PatchesControls'
 import { GameHeader } from '../components/GameHeader'
 import { HintSheet, type HintOption } from '../components/HintSheet'
+import { FailSheet } from '../components/FailSheet'
 
 const HINT_OPTIONS: HintOption[] = [
   { id: 'check', icon: '⚑', title: 'Check my work', desc: 'Flags any placed patch with the wrong size.', price: 40 },
   { id: 'reveal-clue', icon: '✧', title: 'Reveal a patch', desc: "Places one clue's correct rectangle.", price: 120 },
 ]
+
+// First-guess placeholder, not derived from real solve-time data — tune once the user
+// has actually played a few Timed boss levels.
+const TIMED_BUDGET_MS = 75_000
 
 // Content doesn't matter — this state is replaced by LOAD before the player can
 // interact, and (like Zip) Patches' engine is fully parameterized by level.size, so a
@@ -59,6 +66,8 @@ export default function PatchesGamePage() {
   const [coins, setCoins] = useState(0)
   const [hintsOpen, setHintsOpen] = useState(false)
   const [checkMessage, setCheckMessage] = useState<string | null>(null)
+  const [modifiers, setModifiers] = useState<LevelModifiers | null>(null)
+  const [failed, setFailed] = useState<{ reason: 'timeout' | 'mistake' } | null>(null)
   const sourceRef = useRef<{ source: 'bank' | 'generated'; bankIndex?: number }>({ source: 'generated' })
   // Set during load if today's Daily Challenge was already completed — the win effect
   // reads this to skip re-awarding coins on a replay (recordDailyChallengeCompletion
@@ -73,6 +82,8 @@ export default function PatchesGamePage() {
     async function init() {
       setLoading(true)
       setError(null)
+      setModifiers(null)
+      setFailed(null)
       try {
         const replayLevel = initialReplayLevelRef.current
         if (replayLevel) {
@@ -93,9 +104,16 @@ export default function PatchesGamePage() {
           return
         }
 
-        const [settings, inProgress] = await Promise.all([getSettings(), getPatchesInProgress(validDifficulty as Difficulty)])
+        const [settings, inProgress, progress] = await Promise.all([
+          getSettings(),
+          getPatchesInProgress(validDifficulty as Difficulty),
+          getPatchesProgress(validDifficulty as Difficulty),
+        ])
         if (cancelled) return
         setCoins(settings.coins)
+        if (validDifficulty === 'hard') {
+          setModifiers(modifiersForLevel(endlessProgress(progress.currentLevelIndex)))
+        }
 
         if (inProgress) {
           sourceRef.current = { source: inProgress.levelSource, bankIndex: inProgress.bankIndex }
@@ -156,6 +174,31 @@ export default function PatchesGamePage() {
     recordCompletion: recordPatchesCompletion,
   })
 
+  // Perfect Run: fails the instant a wrong patch appears, using the same non-mutating
+  // check the paid "check" hint already uses — just watched continuously instead of
+  // on demand, and only while the modifier is actually active.
+  useEffect(() => {
+    if (!modifiers?.perfectRun || failed || state.status !== 'playing') return
+    if (getWrongCells(state).size > 0) {
+      dispatch({ type: 'PAUSE', now: Date.now() })
+      setFailed({ reason: 'mistake' })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.placed, modifiers, failed, state.status])
+
+  const handleTryAgain = useCallback(async () => {
+    if (!validDifficulty) return
+    setFailed(null)
+    setLoading(true)
+    try {
+      const next = await getNextPatchesLevel(validDifficulty)
+      sourceRef.current = { source: next.source, bankIndex: next.bankIndex }
+      dispatch({ type: 'LOAD', level: next.level })
+    } finally {
+      setLoading(false)
+    }
+  }, [validDifficulty])
+
   const handleStartDrag = useCallback(
     (row: number, col: number) => {
       playSound('tap')
@@ -215,10 +258,15 @@ export default function PatchesGamePage() {
       className="mx-auto flex min-h-svh max-w-lg flex-col items-center gap-6 bg-bg px-4 py-[max(1.5rem,env(safe-area-inset-top))] text-ink"
     >
       <GameHeader
-        backTo="/patches"
         elapsedMs={state.elapsedMs}
         runStartedAt={state.runStartedAt}
         coins={coins}
+        timerKey={state.level.id}
+        budgetMs={modifiers?.timed ? TIMED_BUDGET_MS : undefined}
+        onTimerExpire={() => {
+          dispatch({ type: 'PAUSE', now: Date.now() })
+          setFailed({ reason: 'timeout' })
+        }}
         right={
           isDaily ? (
             <span className="rounded-full bg-accent-tint px-3 py-1.5 text-xs font-semibold text-accent">Daily Challenge</span>
@@ -227,6 +275,12 @@ export default function PatchesGamePage() {
       />
 
       <div className="flex w-full max-w-[420px] flex-col items-center gap-6">
+        {modifiers && (
+          <p className="w-full rounded-2xl bg-accent-tint px-4 py-2.5 text-center text-[13px] font-bold text-accent">
+            ⚡ Boss level · {modifierLabel(modifiers)}
+          </p>
+        )}
+
         {loading ? (
           <p className="text-ink-muted">Loading level…</p>
         ) : (
@@ -245,7 +299,7 @@ export default function PatchesGamePage() {
         )}
 
         <PatchesControls
-          canUndo={state.placed.length > 0}
+          canUndo={!modifiers?.noUndo && state.placed.length > 0}
           canClear={state.placed.length > 0}
           onUndo={() => dispatch({ type: 'UNDO' })}
           onClear={() => dispatch({ type: 'CLEAR' })}
@@ -254,6 +308,7 @@ export default function PatchesGamePage() {
             setHintsOpen(true)
           }}
           hintPrice={HINT_OPTIONS[0].price}
+          hintsDisabled={modifiers?.noHints}
         />
       </div>
 
@@ -265,6 +320,8 @@ export default function PatchesGamePage() {
         onUseHint={handleUseHint}
         checkMessage={checkMessage}
       />
+
+      {failed && <FailSheet reason={failed.reason} onTryAgain={handleTryAgain} />}
     </main>
   )
 }

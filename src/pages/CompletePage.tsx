@@ -7,6 +7,7 @@ import type { CellState } from '../state/types'
 import { averageTimeMs, getProgress } from '../storage/db'
 import { Board } from '../components/Board'
 import { CompleteSheet } from '../components/CompleteSheet'
+import type { ChapterCompleteInfo } from '../hooks/useGameCompletion'
 
 interface CompleteLocationState {
   timeMs: number
@@ -17,6 +18,7 @@ interface CompleteLocationState {
   isPersonalBest?: boolean
   dailyBonusApplied?: boolean
   dailyStreak?: number
+  chapterComplete?: ChapterCompleteInfo
 }
 
 const LABELS: Record<Difficulty, string> = { easy: 'Easy', medium: 'Medium', hard: 'Hard' }
@@ -64,7 +66,8 @@ export default function CompletePage() {
     )
   }
 
-  const { timeMs, levelNumber, level, board, coinsAwarded, isPersonalBest, dailyBonusApplied, dailyStreak } = completion
+  const { timeMs, levelNumber, level, board, coinsAwarded, isPersonalBest, dailyBonusApplied, dailyStreak, chapterComplete } =
+    completion
 
   return (
     <main data-game="queens" className="fixed inset-0 overflow-hidden bg-bg">
@@ -90,6 +93,7 @@ export default function CompletePage() {
         dailyBonusApplied={dailyBonusApplied}
         isDaily={isDaily}
         dailyStreak={dailyStreak}
+        chapterComplete={chapterComplete}
         onNextLevel={() => navigate(`/queens/${validDifficulty}`, { replace: true })}
         onReplay={() =>
           navigate(isDaily ? '/queens/daily' : `/queens/${validDifficulty}`, { state: { replayLevel: level }, replace: true })

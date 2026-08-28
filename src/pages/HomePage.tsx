@@ -34,6 +34,17 @@ const PREVIEW_BY_ID: Record<string, ReactNode> = {
 
 const DIFFICULTIES: Difficulty[] = ['easy', 'medium', 'hard']
 
+// Every game now has a chapter map, routed to as the primary entry point instead of
+// straight to the difficulty picker (still reachable from within the chapters page as
+// "Free play"). See games/chapters.ts.
+const PRIMARY_ROUTE_OVERRIDE: Record<string, string> = {
+  queens: '/queens/chapters',
+  sudoku: '/sudoku/chapters',
+  zip: '/zip/chapters',
+  patches: '/patches/chapters',
+  nonogram: '/nonogram/chapters',
+}
+
 const PROGRESS_GETTER: Record<string, (d: Difficulty) => ReturnType<typeof getProgress>> = {
   queens: getProgress,
   sudoku: getSudokuProgress,
@@ -170,7 +181,7 @@ export default function HomePage() {
         {GAMES.map((game, i) => (
           <Link
             key={game.id}
-            to={game.route}
+            to={PRIMARY_ROUTE_OVERRIDE[game.id] ?? game.route}
             className="anim-rise flex items-center gap-4 rounded-3xl bg-surface p-4 shadow-card transition hover:shadow-md"
             style={{ animationDelay: `${Math.min(i + 1, 6) * 45}ms` }}
           >

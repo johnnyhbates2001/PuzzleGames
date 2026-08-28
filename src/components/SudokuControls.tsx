@@ -6,6 +6,8 @@ interface SudokuControlsProps {
   onClear: () => void
   onOpenHints: () => void
   hintPrice: number
+  /** Set by an active endless-boss "No Hints" modifier — see games/chapters.ts. */
+  hintsDisabled?: boolean
 }
 
 export function SudokuControls({
@@ -16,6 +18,7 @@ export function SudokuControls({
   onClear,
   onOpenHints,
   hintPrice,
+  hintsDisabled,
 }: SudokuControlsProps) {
   return (
     <div className="flex items-center gap-1 rounded-full bg-surface p-2 shadow-card">
@@ -41,10 +44,13 @@ export function SudokuControls({
       <button
         type="button"
         onClick={onOpenHints}
-        className="flex items-center gap-1.5 rounded-full bg-accent-tint px-3 py-1.5 text-sm font-semibold text-accent"
+        disabled={hintsDisabled}
+        className="flex items-center gap-1.5 rounded-full bg-accent-tint px-3 py-1.5 text-sm font-semibold text-accent disabled:opacity-40"
       >
         Hint
-        <span className="rounded-full bg-accent px-1.5 py-0.5 text-[10px] font-bold text-white">{hintPrice}</span>
+        <span className="rounded-full bg-accent px-1.5 py-0.5 text-[10px] font-bold text-white">
+          {hintsDisabled ? '🔒' : hintPrice}
+        </span>
       </button>
     </div>
   )

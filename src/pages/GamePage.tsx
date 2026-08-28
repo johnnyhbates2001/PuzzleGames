@@ -7,6 +7,7 @@ import { createInitialState, gameReducer, getWrongQueens } from '../state/gameRe
 import {
   getDailyChallenge,
   getInProgress,
+  getProgress,
   getSettings,
   recordCompletion,
   saveInProgress,
@@ -15,6 +16,7 @@ import {
 } from '../storage/db'
 import { getNextLevel } from '../games/queensLevels'
 import { getDailyQueensLevel, todayDateKey } from '../games/dailyChallenge'
+import { endlessProgress, modifierLabel, modifiersForLevel, type LevelModifiers } from '../games/chapters'
 import { useGameLifecycle } from '../hooks/useGameLifecycle'
 import { useGameCompletion } from '../hooks/useGameCompletion'
 import { useAudio } from '../hooks/useAudio'
@@ -22,12 +24,17 @@ import { Board } from '../components/Board'
 import { Controls } from '../components/Controls'
 import { GameHeader } from '../components/GameHeader'
 import { HintSheet, type HintOption } from '../components/HintSheet'
+import { FailSheet } from '../components/FailSheet'
 
 const HINT_OPTIONS: HintOption[] = [
   { id: 'reveal-cell', icon: '👁', title: 'Reveal a cell', desc: 'Fills one correct square of your choice.', price: 25 },
   { id: 'check', icon: '⚑', title: 'Check my work', desc: 'Flags anything currently placed wrong.', price: 40 },
   { id: 'solve-region', icon: '✧', title: 'Solve a region', desc: 'Completes one whole colored region.', price: 120 },
 ]
+
+// First-guess placeholder, not derived from real solve-time data — tune once the user
+// has actually played a few Timed boss levels.
+const TIMED_BUDGET_MS = 60_000
 
 const PLACEHOLDER_LEVEL: LevelRecord = {
   id: 'placeholder',
@@ -59,6 +66,8 @@ export default function GamePage() {
   const [coins, setCoins] = useState(0)
   const [hintsOpen, setHintsOpen] = useState(false)
   const [checkMessage, setCheckMessage] = useState<string | null>(null)
+  const [modifiers, setModifiers] = useState<LevelModifiers | null>(null)
+  const [failed, setFailed] = useState<{ reason: 'timeout' | 'mistake' } | null>(null)
   const sourceRef = useRef<{ source: 'bank' | 'generated'; bankIndex?: number }>({ source: 'generated' })
   // Set during load if today's Daily Challenge was already completed — the win effect
   // reads this to skip re-awarding coins on a replay (recordDailyChallengeCompletion
@@ -80,6 +89,8 @@ export default function GamePage() {
     async function init() {
       setLoading(true)
       setError(null)
+      setModifiers(null)
+      setFailed(null)
       try {
         const replayLevel = initialReplayLevelRef.current
         if (replayLevel) {
@@ -103,9 +114,19 @@ export default function GamePage() {
           return
         }
 
-        const [settings, inProgress] = await Promise.all([getSettings(), getInProgress(validDifficulty as Difficulty)])
+        const [settings, inProgress, progress] = await Promise.all([
+          getSettings(),
+          getInProgress(validDifficulty as Difficulty),
+          getProgress(validDifficulty as Difficulty),
+        ])
         if (cancelled) return
         setCoins(settings.coins)
+        // currentLevelIndex doesn't change while a level is in progress (only on
+        // completion), so this is correct whether we're about to resume or load fresh —
+        // and it's how Endless boss levels (see games/chapters.ts) get their modifiers.
+        if (validDifficulty === 'hard') {
+          setModifiers(modifiersForLevel(endlessProgress(progress.currentLevelIndex)))
+        }
 
         if (inProgress) {
           sourceRef.current = { source: inProgress.levelSource, bankIndex: inProgress.bankIndex }
@@ -166,6 +187,31 @@ export default function GamePage() {
     dailyAlreadyCompletedRef,
     recordCompletion,
   })
+
+  // Perfect Run: fails the instant a wrong queen appears, using the same non-mutating
+  // check the paid "check" hint already uses — just watched continuously instead of
+  // on demand, and only while the modifier is actually active.
+  useEffect(() => {
+    if (!modifiers?.perfectRun || failed || state.status !== 'playing') return
+    if (getWrongQueens(state).size > 0) {
+      dispatch({ type: 'PAUSE', now: Date.now() })
+      setFailed({ reason: 'mistake' })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.board, modifiers, failed, state.status])
+
+  const handleTryAgain = useCallback(async () => {
+    if (!validDifficulty) return
+    setFailed(null)
+    setLoading(true)
+    try {
+      const next = await getNextLevel(validDifficulty)
+      sourceRef.current = { source: next.source, bankIndex: next.bankIndex }
+      dispatch({ type: 'LOAD', level: next.level, autoPlaceX: state.autoPlaceX })
+    } finally {
+      setLoading(false)
+    }
+  }, [validDifficulty, state.autoPlaceX])
 
   const handleCellClick = useCallback(
     (row: number, col: number) => {
@@ -231,10 +277,15 @@ export default function GamePage() {
       className="mx-auto flex min-h-svh max-w-lg flex-col items-center gap-6 bg-bg px-4 py-[max(1.5rem,env(safe-area-inset-top))] text-ink"
     >
       <GameHeader
-        backTo="/queens"
         elapsedMs={state.elapsedMs}
         runStartedAt={state.runStartedAt}
         coins={coins}
+        timerKey={state.level.id}
+        budgetMs={modifiers?.timed ? TIMED_BUDGET_MS : undefined}
+        onTimerExpire={() => {
+          dispatch({ type: 'PAUSE', now: Date.now() })
+          setFailed({ reason: 'timeout' })
+        }}
         right={
           isDaily ? (
             <span className="rounded-full bg-accent-tint px-3 py-1.5 text-xs font-semibold text-accent">Daily Challenge</span>
@@ -256,6 +307,12 @@ export default function GamePage() {
           unconditional (Undo/Clear/Auto-X available even while loading, as
           before) — only the board area itself swaps for the loading message. */}
       <div className="-mx-2 flex w-[calc(100%+1rem)] max-w-[560px] flex-col items-center gap-6">
+        {modifiers && (
+          <p className="w-full rounded-2xl bg-accent-tint px-4 py-2.5 text-center text-[13px] font-bold text-accent">
+            ⚡ Boss level · {modifierLabel(modifiers)}
+          </p>
+        )}
+
         {loading ? (
           <p className="text-ink-muted">Loading level…</p>
         ) : (
@@ -272,7 +329,7 @@ export default function GamePage() {
 
         <Controls
           autoPlaceX={state.autoPlaceX}
-          canUndo={state.history.length > 0}
+          canUndo={!modifiers?.noUndo && state.history.length > 0}
           onClear={() => dispatch({ type: 'CLEAR', now: Date.now() })}
           onUndo={() => dispatch({ type: 'UNDO' })}
           onToggleAutoX={(enabled) => {
@@ -284,6 +341,7 @@ export default function GamePage() {
             setHintsOpen(true)
           }}
           hintPrice={HINT_OPTIONS[0].price}
+          hintsDisabled={modifiers?.noHints}
         />
       </div>
 
@@ -295,6 +353,8 @@ export default function GamePage() {
         onUseHint={handleUseHint}
         checkMessage={checkMessage}
       />
+
+      {failed && <FailSheet reason={failed.reason} onTryAgain={handleTryAgain} />}
     </main>
   )
 }
