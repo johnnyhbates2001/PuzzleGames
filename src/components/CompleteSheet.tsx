@@ -41,6 +41,10 @@ const COUNT_UP_START_MS = FLIGHT_START_MS + FLIGHT_DURATION_MS
 const COUNT_UP_DURATION_MS = 480
 const BUMP_DELAY_MS = FLIGHT_START_MS + 760
 
+// "Solved" repeated so the personal lines read as an occasional treat rather than
+// showing up every single completion.
+const HEADLINES = ['Solved', 'Solved', 'Solved', 'Solved', 'Nailed it', 'Solved, dušo 🍷', 'Solved ❤️', 'Uncorked 🍷']
+
 function easeOutCubic(t: number): number {
   return 1 - (1 - t) ** 3
 }
@@ -67,6 +71,7 @@ export function CompleteSheet({
 }: CompleteSheetProps) {
   const { playSound } = useAudio()
   const reducedMotion = useReducedMotion()
+  const [headline] = useState(() => HEADLINES[Math.floor(Math.random() * HEADLINES.length)])
 
   const rewardCoinRef = useRef<HTMLSpanElement>(null)
   const balanceRef = useRef<HTMLDivElement>(null)
@@ -196,7 +201,7 @@ export function CompleteSheet({
 
         <div className="mt-4">
           <h1 className="anim-rise font-display text-[23px] font-extrabold text-ink" style={{ animationDelay: '220ms' }}>
-            Solved
+            {headline}
           </h1>
           <p className="anim-rise mt-1 text-sm text-ink-muted" style={{ animationDelay: '260ms' }}>
             {difficultyLabel}

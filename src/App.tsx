@@ -1,3 +1,4 @@
+import { useCallback, useState } from 'react'
 import { createBrowserRouter, Outlet, RouterProvider } from 'react-router-dom'
 import HomePage from './pages/HomePage'
 import ShopPage from './pages/ShopPage'
@@ -21,8 +22,11 @@ import NonogramCompletePage from './pages/NonogramCompletePage'
 import ErrorPage from './pages/ErrorPage'
 import { ScrollReset } from './components/ScrollReset'
 import { UpdateToast } from './components/UpdateToast'
+import { SplashScreen } from './components/SplashScreen'
 import { SkinProvider } from './hooks/useSkin'
 import { AudioProvider } from './hooks/useAudio'
+
+const SPLASH_SEEN_KEY = 'splashShown'
 
 function RootLayout() {
   return (
@@ -64,9 +68,29 @@ const router = createBrowserRouter([
 ])
 
 function App() {
+  // sessionStorage (not localStorage) so the splash reappears on the next cold
+  // launch/tab, but never again mid-session from an in-app navigation.
+  const [showSplash, setShowSplash] = useState(() => {
+    try {
+      return sessionStorage.getItem(SPLASH_SEEN_KEY) !== '1'
+    } catch {
+      return true
+    }
+  })
+
+  const dismissSplash = useCallback(() => {
+    try {
+      sessionStorage.setItem(SPLASH_SEEN_KEY, '1')
+    } catch {
+      // ignore
+    }
+    setShowSplash(false)
+  }, [])
+
   return (
     <SkinProvider>
       <AudioProvider>
+        {showSplash && <SplashScreen onDone={dismissSplash} />}
         <RouterProvider router={router} />
       </AudioProvider>
     </SkinProvider>

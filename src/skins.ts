@@ -51,6 +51,13 @@ export const SKINS: Skin[] = [
     colors: ['#86EFAC', '#4ADE80', '#A7F3D0', '#34D399', '#BBF7D0', '#6EE7B7'],
   },
   {
+    id: 'vino',
+    name: 'Vino',
+    tag: 'Croatian wine country',
+    price: 350,
+    colors: ['#7B1E3D', '#C9A227', '#5B6F55', '#2D5D7B', '#A63446', '#E8C170'],
+  },
+  {
     id: 'neon',
     name: 'Neon',
     tag: 'Locked · 30 solves',
