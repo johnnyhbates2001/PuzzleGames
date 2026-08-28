@@ -41,9 +41,26 @@ const COUNT_UP_START_MS = FLIGHT_START_MS + FLIGHT_DURATION_MS
 const COUNT_UP_DURATION_MS = 480
 const BUMP_DELAY_MS = FLIGHT_START_MS + 760
 
-// "Solved" repeated so the personal lines read as an occasional treat rather than
-// showing up every single completion.
-const HEADLINES = ['Solved', 'Solved', 'Solved', 'Solved', 'Nailed it', 'Solved, dušo 🍷', 'Solved ❤️', 'Uncorked 🍷']
+// Personal headlines show up only PERSONAL_CHANCE of the time so they read as an
+// occasional treat rather than showing up every single completion.
+const PERSONAL_CHANCE = 0.2 // 1 in 5
+const PLAIN_HEADLINES = ['Solved', 'Solved', 'Solved', 'Solved', 'Genius', 'Too easy', 'Uncorked 🍷', 'Prelako 😏']
+const PERSONAL_HEADLINES = [
+  'Solved, dušo',
+  'Solved ❤️',
+  'Bravo, ljubavi',
+  'Moja genijalka',
+  'Uspjela si',
+  'Bravo, zlato ✨',
+  'Svaka čast, ljubavi',
+  'To je moja cura! 💗',
+  'Pametnica 🧠',
+  'Znao sam da možeš ❤️',
+  'Moja pametna cura',
+  'Najbolja si ❤️',
+  'Riješeno, lijepa',
+  'Svaka čast, ljube',
+]
 
 function easeOutCubic(t: number): number {
   return 1 - (1 - t) ** 3
@@ -71,7 +88,10 @@ export function CompleteSheet({
 }: CompleteSheetProps) {
   const { playSound } = useAudio()
   const reducedMotion = useReducedMotion()
-  const [headline] = useState(() => HEADLINES[Math.floor(Math.random() * HEADLINES.length)])
+  const [headline] = useState(() => {
+    const pool = Math.random() < PERSONAL_CHANCE ? PERSONAL_HEADLINES : PLAIN_HEADLINES
+    return pool[Math.floor(Math.random() * pool.length)]
+  })
 
   const rewardCoinRef = useRef<HTMLSpanElement>(null)
   const balanceRef = useRef<HTMLDivElement>(null)

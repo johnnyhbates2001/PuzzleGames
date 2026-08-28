@@ -4,12 +4,18 @@ import { useReducedMotion } from '../hooks/useReducedMotion'
 // Rotates so it doesn't go stale from being seen every cold launch — see App.tsx for
 // the sessionStorage gate that keeps this to once per app open.
 const NOTES = [
-  'Volim te dušo 🍷',
-  'Za moju najdražu 📚',
-  'Napravljeno s ljubavlju',
-  'Zagonetke i vino te čekaju 🍷',
-  'Srce moje 🎨',
-  'Vrijeme za igru, ljubavi',
+  'Volim te, dušo',
+  'Srce moje',
+  'Volim te više svaki dan ❤️',
+  'Zauvijek tvoj',
+  'Sva sreća je u tebi',
+  'Za mog knjiškog moljca',
+  'Bok, zlato',
+  'Hej, ljepotice',
+  'Dobrodošla, ljubavi 👋',
+  'Spremna za igru, dušo? 🧩',
+  'Ti si moj najdraži dio dana',
+  'Ljube, ova igra je za tebe',
 ]
 
 const VISIBLE_MS = 1800
