@@ -1,6 +1,7 @@
 import type { Coord, Difficulty, LevelRecord, RegionGrid } from './types.ts'
 import { DIFFICULTY_SIZE, coordKey } from './types.ts'
 import { findAlternateSolution } from './solver.ts'
+import { solveByLogic } from './logicSolver.ts'
 import { type Rng, shuffle } from './rng.ts'
 
 /**
@@ -43,7 +44,11 @@ import { type Rng, shuffle } from './rng.ts'
  *    converge within a couple hundred iterations for boards up to 10x10.
  *
  * 4. generateLevel ties it together, retrying with a fresh seed (and fresh region
- *    growth) whenever repair fails to converge within its iteration budget.
+ *    growth) whenever repair fails to converge within its iteration budget. It also
+ *    rejects (and retries) any board that repair does converge on if solveByLogic
+ *    (logicSolver.ts) can't fully solve it — repair only ever proves the solution is
+ *    unique, not that a human can reach it without guessing, so this is a second,
+ *    independent filter on top of uniqueness.
  */
 
 const REPAIR_MAX_ITERS = 300
@@ -225,7 +230,7 @@ export function generateLevel(difficulty: Difficulty, rng: Rng): LevelRecord | n
     if (!seed) continue
 
     const regions = growRegions(seed, n, rng)
-    if (repairToUnique(regions, seed, n, rng, REPAIR_MAX_ITERS)) {
+    if (repairToUnique(regions, seed, n, rng, REPAIR_MAX_ITERS) && solveByLogic(regions).solved) {
       return {
         id: makeId(),
         difficulty,

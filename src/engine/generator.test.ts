@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { generateLevel, generateSolutionSeed, growRegions } from './generator'
 import { countSolutions } from './solver'
+import { solveByLogic } from './logicSolver'
 import { mulberry32, shuffle } from './rng'
 import { DIFFICULTY_SIZE, type Difficulty, type LevelRecord } from './types'
 import easyBank from '../data/banks/easy.json'
@@ -94,6 +95,9 @@ describe('generateLevel', () => {
         // exactly one solution
         expect(countSolutions(lvl.regions, 2)).toBe(1)
 
+        // solvable by pure deduction, with no guessing required
+        expect(solveByLogic(lvl.regions).solved).toBe(true)
+
         // exactly N regions, each containing exactly one solution queen
         const regionOfSolutionQueen = lvl.solution.map((q) => lvl.regions[q.row][q.col])
         expect(new Set(regionOfSolutionQueen).size).toBe(n)
@@ -122,6 +126,7 @@ describe('committed level banks', () => {
       const sample = shuffle(bank, rng).slice(0, SPOT_CHECK_COUNT)
       for (const level of sample) {
         expect(countSolutions(level.regions, 2)).toBe(1)
+        expect(solveByLogic(level.regions).solved).toBe(true)
       }
     })
   }
