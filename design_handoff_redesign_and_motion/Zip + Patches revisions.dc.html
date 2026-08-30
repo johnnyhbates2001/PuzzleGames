@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@500;600;700;800&family=Roboto+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+body { margin: 0; background: oklch(92% 0.004 260); }
+a { color: oklch(58% 0.19 300); }
+a:hover { color: oklch(48% 0.19 300); }
+</style>
+</helmet>
+
+<section style="--bg:oklch(95% 0.004 260);--sf:#fff;--ink:oklch(20% 0.02 260);--mut:oklch(46% 0.02 260);--ln:oklch(88% 0.01 260);--sh:0 1px 2px rgb(0 0 0/0.04), 0 8px 24px rgb(0 0 0/0.06);font-family:Poppins,system-ui,sans-serif;padding:56px 56px 120px;display:flex;flex-direction:column;gap:40px">
+
+  <div id="2a" style="max-width:760px;display:flex;flex-direction:column;gap:14px">
+    <div style="display:flex;align-items:center;gap:12px">
+      <span style="font:800 12px/1 Poppins;letter-spacing:0.14em;color:oklch(48% 0.12 175);background:oklch(93% 0.045 175);padding:7px 12px;border-radius:999px">2A</span>
+      <h1 style="margin:0;font:800 34px/1.05 Poppins;letter-spacing:-0.02em;color:var(--ink)">Zip &amp; Patches, revised</h1>
+    </div>
+    <p style="margin:0;font:500 15px/1.6 Poppins;color:var(--mut);text-wrap:pretty">Two fixes: Zip draws one continuous stroke across a gapless lattice with visited cells tinted, and Patches clue markers now carry the shape as well as the number.</p>
+  </div>
+
+  <div style="display:flex;flex-wrap:wrap;gap:56px;align-items:flex-start">
+
+    <div style="flex:none;width:390px">
+      <div style="display:flex;align-items:center;gap:9px;margin:0 0 12px 2px">
+        <span style="font:800 11px/1 Poppins;letter-spacing:0.14em;color:var(--mut)">10</span>
+        <span style="font:700 15px/1 Poppins;color:var(--ink)">Zip — continuous path</span>
+      </div>
+      <div style="--ac:oklch(48% 0.12 175);--tt:oklch(93% 0.045 175);width:390px;height:844px;border-radius:46px;overflow:hidden;position:relative;background:var(--bg);box-shadow:0 0 0 9px oklch(18% 0.012 260), 0 24px 60px -14px rgb(0 0 0/0.4);display:flex;flex-direction:column">
+        <div style="flex:none;height:50px;display:flex;align-items:flex-end;justify-content:space-between;padding:0 28px 8px;font:700 13px/1 Poppins;color:var(--ink)"><span>9:41</span><span style="width:17px;height:10px;border:1.4px solid currentColor;border-radius:3px;opacity:0.5"></span></div>
+        <div style="flex:1;display:flex;flex-direction:column;padding:10px 20px 0">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+            <button style="width:44px;height:44px;flex:none;border:0;border-radius:999px;background:var(--tt);color:var(--ac);display:flex;align-items:center;justify-content:center"><svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"></path></svg></button>
+            <span style="font:700 19px/1 'Roboto Mono',monospace;color:var(--mut)">01:47</span>
+            <span style="display:flex;align-items:center;gap:6px;height:44px;padding:0 13px;flex:none;border-radius:999px;background:var(--sf);box-shadow:var(--sh)"><span style="width:15px;height:15px;border-radius:999px;border:2px solid oklch(68% 0.15 75);background:oklch(80% 0.14 85);box-sizing:border-box"></span><span style="font:700 14px/1 'Roboto Mono',monospace;color:oklch(45% 0.11 75)">1,240</span></span>
+          </div>
+          <div style="margin-top:14px;display:flex;align-items:center;gap:11px">
+            <p style="margin:0;font:600 12px/1 Poppins;color:var(--mut)">Chapter 7 · Wildflower Field</p>
+            <div style="flex:1;height:4px;border-radius:999px;background:var(--tt);overflow:hidden"><div style="width:15%;height:100%;border-radius:999px;background:var(--ac)"></div></div>
+            <p style="margin:0;font:700 11.5px/1 'Roboto Mono',monospace;color:var(--mut)">3/20</p>
+          </div>
+
+          <div style="flex:1;display:flex;align-items:center;justify-content:center">
+            <div style="position:relative;width:312px;height:312px;border-radius:14px;background:var(--sf);box-shadow:var(--sh);overflow:hidden">
+              <div style="position:absolute;inset:0;display:grid;grid-template-columns:repeat(6,1fr);grid-template-rows:repeat(6,1fr)">
+                <sc-for list="{{ zipCells }}" as="c" hint-placeholder-count="36">
+                  <div style="position:relative;box-shadow:inset 0 0 0 0.75px oklch(87% 0.012 260)">
+                    <sc-if value="{{ c.on }}" hint-placeholder-val="{{ true }}">
+                      <span style="position:absolute;inset:0;background:var(--tt)"></span>
+                    </sc-if>
+                  </div>
+                </sc-for>
+              </div>
+              <svg viewBox="0 0 312 312" width="312" height="312" style="position:absolute;inset:0" fill="none" stroke="var(--ac)" stroke-width="21" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="26,26 286,26 286,78 26,78 26,130 286,130 286,182 26,182"></polyline>
+              </svg>
+              <sc-for list="{{ zipDots }}" as="d" hint-placeholder-count="6">
+                <div style="position:absolute;left:{{ d.l }}px;top:{{ d.t }}px;width:52px;height:52px;display:flex;align-items:center;justify-content:center">
+                  <span style="width:36px;height:36px;border-radius:999px;background:{{ d.bg }};border:{{ d.bd }};box-sizing:border-box;display:flex;align-items:center;justify-content:center;font:800 16px/1 Poppins;color:{{ d.col }};box-shadow:{{ d.sh }}">{{ d.n }}</span>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+
+          <div style="flex:none;padding-bottom:22px">
+            <div style="height:60px;border-radius:999px;background:var(--sf);box-shadow:var(--sh);display:flex;align-items:center;gap:6px;padding:8px;box-sizing:border-box">
+              <button style="width:44px;height:44px;flex:none;border:0;border-radius:999px;background:transparent;color:var(--mut);display:flex;align-items:center;justify-content:center"><svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5h11a4.5 4.5 0 0 1 0 9H9M7.6 5.6L4 9.5l3.6 3.9"></path></svg></button>
+              <button style="width:44px;height:44px;flex:none;border:0;border-radius:999px;background:transparent;color:var(--mut);display:flex;align-items:center;justify-content:center"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 7h15M9.5 7V4.6h5V7M6.6 7l1 13h8.8l1-13"></path></svg></button>
+              <div style="flex:1;display:flex;align-items:center;justify-content:center;gap:7px">
+                <span style="font:700 12px/1 Poppins;color:var(--mut)">Next</span>
+                <span style="width:26px;height:26px;border-radius:999px;background:var(--tt);color:var(--ac);display:flex;align-items:center;justify-content:center;font:800 13px/1 Poppins">6</span>
+              </div>
+              <button style="height:44px;flex:none;border:0;border-radius:999px;background:var(--ac);color:#fff;padding:0 17px;display:flex;align-items:center;gap:8px;font:700 14px/1 Poppins"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 19h5M10.5 21.6h3"></path><path d="M12 2.8a6.2 6.2 0 0 0-3.3 11.4V16.4h6.6v-2.2A6.2 6.2 0 0 0 12 2.8z"></path></svg>Hint</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <p style="margin:12px 2px 0;font:500 12.5px/1.55 Poppins;color:var(--mut);text-wrap:pretty">One 21px stroke with round caps and joins, drawn over a gapless lattice, so corners bend instead of butting together. Cells the line has passed through hold a pale teal fill — the trail stays readable under her thumb. Checkpoints ride on top as white discs; 6 is still dashed and waiting.</p>
+    </div>
+
+    <div style="flex:none;width:390px">
+      <div style="display:flex;align-items:center;gap:9px;margin:0 0 12px 2px">
+        <span style="font:800 11px/1 Poppins;letter-spacing:0.14em;color:var(--mut)">11</span>
+        <span style="font:700 15px/1 Poppins;color:var(--ink)">Patches — shape clues</span>
+      </div>
+      <div style="--ac:oklch(53% 0.15 45);--tt:oklch(94% 0.04 45);width:390px;height:844px;border-radius:46px;overflow:hidden;position:relative;background:var(--bg);box-shadow:0 0 0 9px oklch(18% 0.012 260), 0 24px 60px -14px rgb(0 0 0/0.4);display:flex;flex-direction:column">
+        <div style="flex:none;height:50px;display:flex;align-items:flex-end;justify-content:space-between;padding:0 28px 8px;font:700 13px/1 Poppins;color:var(--ink)"><span>9:41</span><span style="width:17px;height:10px;border:1.4px solid currentColor;border-radius:3px;opacity:0.5"></span></div>
+        <div style="flex:1;display:flex;flex-direction:column;padding:10px 20px 0">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+            <button style="width:44px;height:44px;flex:none;border:0;border-radius:999px;background:var(--tt);color:var(--ac);display:flex;align-items:center;justify-content:center"><svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"></path></svg></button>
+            <span style="font:700 19px/1 'Roboto Mono',monospace;color:var(--mut)">03:22</span>
+            <span style="display:flex;align-items:center;gap:6px;height:44px;padding:0 13px;flex:none;border-radius:999px;background:var(--sf);box-shadow:var(--sh)"><span style="width:15px;height:15px;border-radius:999px;border:2px solid oklch(68% 0.15 75);background:oklch(80% 0.14 85);box-sizing:border-box"></span><span style="font:700 14px/1 'Roboto Mono',monospace;color:oklch(45% 0.11 75)">1,240</span></span>
+          </div>
+          <div style="margin-top:14px;display:flex;align-items:center;gap:11px">
+            <p style="margin:0;font:600 12px/1 Poppins;color:var(--mut)">Chapter 1 · First Steps</p>
+            <div style="flex:1;height:4px;border-radius:999px;background:var(--tt);overflow:hidden"><div style="width:45%;height:100%;border-radius:999px;background:var(--ac)"></div></div>
+            <p style="margin:0;font:700 11.5px/1 'Roboto Mono',monospace;color:var(--mut)">9/20</p>
+          </div>
+
+          <div style="flex:1;display:flex;align-items:center;justify-content:center">
+            <div style="position:relative;width:308px;height:308px;border-radius:14px;background:var(--sf);box-shadow:var(--sh);overflow:hidden">
+              <div style="position:absolute;inset:0;display:grid;grid-template-columns:repeat(7,1fr);grid-template-rows:repeat(7,1fr)">
+                <sc-for list="{{ patchesGrid }}" as="g" hint-placeholder-count="49">
+                  <div style="box-shadow:inset 0 0 0 0.75px oklch(87% 0.012 260)"></div>
+                </sc-for>
+              </div>
+              <sc-for list="{{ patchesRects }}" as="p" hint-placeholder-count="9">
+                <div style="position:absolute;left:{{ p.l }}px;top:{{ p.t }}px;width:{{ p.w }}px;height:{{ p.h }}px;border-radius:9px;background:{{ p.bg }};display:flex;align-items:center;justify-content:center">
+                  <span style="width:{{ p.bw }}px;height:{{ p.bh }}px;border-radius:6px;background:rgb(255 255 255/0.9);box-shadow:0 1px 3px rgb(0 0 0/0.1);display:flex;align-items:center;justify-content:center;font:800 14px/1 Poppins;color:oklch(30% 0.03 60)">{{ p.clue }}</span>
+                </div>
+              </sc-for>
+              <sc-for list="{{ patchesLoose }}" as="p" hint-placeholder-count="2">
+                <div style="position:absolute;left:{{ p.l }}px;top:{{ p.t }}px;width:44px;height:44px;display:flex;align-items:center;justify-content:center">
+                  <span style="width:{{ p.bw }}px;height:{{ p.bh }}px;border-radius:6px;background:var(--sf);box-shadow:inset 0 0 0 2px var(--ac);display:flex;align-items:center;justify-content:center;font:800 14px/1 Poppins;color:var(--ac)">{{ p.clue }}</span>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+
+          <div style="flex:none;padding:0 2px 14px;display:flex;align-items:center;gap:14px">
+            <span style="display:flex;align-items:center;gap:7px"><span style="width:20px;height:20px;border-radius:5px;box-shadow:inset 0 0 0 2px var(--mut);opacity:0.75"></span><span style="font:600 11.5px/1 Poppins;color:var(--mut)">square</span></span>
+            <span style="display:flex;align-items:center;gap:7px"><span style="width:30px;height:18px;border-radius:5px;box-shadow:inset 0 0 0 2px var(--mut);opacity:0.75"></span><span style="font:600 11.5px/1 Poppins;color:var(--mut)">wide</span></span>
+            <span style="display:flex;align-items:center;gap:7px"><span style="width:18px;height:30px;border-radius:5px;box-shadow:inset 0 0 0 2px var(--mut);opacity:0.75"></span><span style="font:600 11.5px/1 Poppins;color:var(--mut)">tall</span></span>
+          </div>
+
+          <div style="flex:none;padding-bottom:22px">
+            <div style="height:60px;border-radius:999px;background:var(--sf);box-shadow:var(--sh);display:flex;align-items:center;gap:6px;padding:8px;box-sizing:border-box">
+              <button style="width:44px;height:44px;flex:none;border:0;border-radius:999px;background:transparent;color:var(--mut);display:flex;align-items:center;justify-content:center"><svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5h11a4.5 4.5 0 0 1 0 9H9M7.6 5.6L4 9.5l3.6 3.9"></path></svg></button>
+              <button style="width:44px;height:44px;flex:none;border:0;border-radius:999px;background:transparent;color:var(--mut);display:flex;align-items:center;justify-content:center"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 7h15M9.5 7V4.6h5V7M6.6 7l1 13h8.8l1-13"></path></svg></button>
+              <div style="flex:1;display:flex;align-items:center;justify-content:center;gap:7px">
+                <span style="font:700 12px/1 Poppins;color:var(--mut)">2 clues left</span>
+              </div>
+              <button style="height:44px;flex:none;border:0;border-radius:999px;background:var(--ac);color:#fff;padding:0 17px;display:flex;align-items:center;gap:8px;font:700 14px/1 Poppins"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 19h5M10.5 21.6h3"></path><path d="M12 2.8a6.2 6.2 0 0 0-3.3 11.4V16.4h6.6v-2.2A6.2 6.2 0 0 0 12 2.8z"></path></svg>Hint</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <p style="margin:12px 2px 0;font:500 12.5px/1.55 Poppins;color:var(--mut);text-wrap:pretty">The clue marker is now the shape it describes: a square badge for a square area, a wide badge for a horizontal rectangle, a tall one for a vertical rectangle — number inside. Placed areas carry it frosted on their fill; the two unplaced clues sit outlined in Patches amber, so their shape reads before she draws. A three-item key under the board teaches the vocabulary once.</p>
+    </div>
+
+  </div>
+</section>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:960,&quot;height&quot;:1100}}">
+const CANDY = ['#FCA5A5','#FDBA74','#FDE68A','#86EFAC','#5EEAD4','#7DD3FC','#A5B4FC','#D8B4FE','#F9A8D4','#D4D4D8']
+
+// ---- Zip 6x6, gapless lattice, cell = 52 ----------------------------------
+const ZCELL = 52
+function zipCells() {
+  const on = new Set()
+  for (let r = 0; r < 4; r++) for (let c = 0; c < 6; c++) on.add(r + '-' + c)
+  const out = []
+  for (let r = 0; r < 6; r++) for (let c = 0; c < 6; c++) out.push({ on: on.has(r + '-' + c) })
+  return out
+}
+function zipDots() {
+  const spec = [
+    { r:0, c:0, n:'1' }, { r:0, c:5, n:'2' }, { r:1, c:0, n:'3' },
+    { r:2, c:5, n:'4' }, { r:3, c:0, n:'5' },
+    { r:5, c:5, n:'6', pending:true },
+  ]
+  return spec.map((d) => ({
+    n: d.n,
+    l: d.c * ZCELL,
+    t: d.r * ZCELL,
+    bg: d.pending ? 'var(--bg)' : '#fff',
+    col: d.pending ? 'var(--mut)' : 'var(--ac)',
+    bd: d.pending ? '2px dashed color-mix(in oklch, var(--ac) 45%, transparent)' : '0',
+    sh: d.pending ? 'none' : '0 1px 3px rgb(0 0 0/0.18)',
+  }))
+}
+
+// ---- Patches 7x7 — clue badge carries size + orientation ------------------
+const PRECTS = [
+  { r:0, c:0, h:2, w:2, clue:4, ci:0 },
+  { r:0, c:2, h:1, w:3, clue:3, ci:1 },
+  { r:0, c:5, h:3, w:2, clue:6, ci:2 },
+  { r:1, c:2, h:3, w:1, clue:3, ci:8 },
+  { r:1, c:3, h:2, w:2, clue:4, ci:3 },
+  { r:2, c:0, h:3, w:2, clue:6, ci:4 },
+  { r:3, c:3, h:1, w:4, clue:4, ci:5 },
+  { r:4, c:2, h:1, w:2, clue:2, ci:6 },
+  { r:4, c:4, h:2, w:3, clue:6, ci:7 },
+]
+const PLOOSE = [ { r:5, c:0, clue:4, shape:'sq' }, { r:6, c:4, clue:3, shape:'v' } ]
+
+function badge(shape) {
+  if (shape === 'h') return { bw: 40, bh: 24 }
+  if (shape === 'v') return { bw: 24, bh: 40 }
+  return { bw: 28, bh: 28 }
+}
+function shapeOf(w, h) { return w > h ? 'h' : h > w ? 'v' : 'sq' }
+
+function patchesRects(cell, gap) {
+  return PRECTS.map((p) => ({
+    clue: String(p.clue),
+    l: p.c * cell + gap / 2,
+    t: p.r * cell + gap / 2,
+    w: p.w * cell - gap,
+    h: p.h * cell - gap,
+    bg: CANDY[p.ci],
+    ...badge(shapeOf(p.w, p.h)),
+  }))
+}
+function patchesLoose(cell) {
+  return PLOOSE.map((p) => ({
+    clue: String(p.clue),
+    l: p.c * cell,
+    t: p.r * cell,
+    ...badge(p.shape),
+  }))
+}
+
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      zipCells: zipCells(),
+      zipDots: zipDots(),
+      patchesRects: patchesRects(44, 4),
+      patchesLoose: patchesLoose(44),
+      patchesGrid: Array.from({ length: 49 }, () => ({})),
+    }
+  }
+}
+
+</script>
+</body>
+</html>
