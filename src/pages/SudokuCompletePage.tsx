@@ -89,6 +89,7 @@ export default function SudokuCompletePage() {
         dailyBonusApplied={dailyBonusApplied}
         isDaily={isDaily}
         dailyStreak={dailyStreak}
+        chaptersHref="/sudoku/chapters"
         onNextLevel={() => navigate(`/sudoku/${validDifficulty}`, { replace: true })}
         onReplay={() =>
           navigate(isDaily ? '/sudoku/daily' : `/sudoku/${validDifficulty}`, { state: { replayLevel: level }, replace: true })

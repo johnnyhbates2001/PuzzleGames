@@ -137,10 +137,14 @@ const ALL_DIFFICULTIES: Difficulty[] = ['easy', 'medium', 'hard']
  *  per-game), so a milestone unlocks the moment ANY game reaches it. */
 export async function getHighestChapterCompleted(): Promise<number> {
   const results = await Promise.all(ALL_PROGRESS_GETTERS.flatMap((getter) => ALL_DIFFICULTIES.map((d) => getter(d))))
-  return results.reduce(
-    (max, p) => Math.max(max, tierOffsetChapters(p.difficulty) + chaptersCompletedInTier(p.currentLevelIndex)),
-    0,
-  )
+  return results.reduce((max, p) => {
+    // A tier with zero chapters completed contributes nothing — without this guard, an
+    // untouched medium/hard row would still add its tier offset (10/20) to the max,
+    // reporting chapters as "completed" purely because that tier is numerically later,
+    // even on a completely fresh profile.
+    const completedInTier = chaptersCompletedInTier(p.currentLevelIndex)
+    return completedInTier === 0 ? max : Math.max(max, tierOffsetChapters(p.difficulty) + completedInTier)
+  }, 0)
 }
 
 // Endless mode: once hard's own 200-level story spine (chapters 21-30) is finished,

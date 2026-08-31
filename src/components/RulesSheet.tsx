@@ -1,3 +1,7 @@
+import { CloseIcon, HelpCircleIcon, LightbulbIcon } from './icons'
+import { useDismissable } from '../hooks/useDismissable'
+import { useSheetDrag } from '../hooks/useSheetDrag'
+
 interface RulesSheetProps {
   open: boolean
   onClose: () => void
@@ -6,31 +10,36 @@ interface RulesSheetProps {
   tip?: string
 }
 
+const EXIT_DURATION_MS = 240
+
 export function RulesSheet({ open, onClose, title, steps, tip }: RulesSheetProps) {
-  if (!open) return null
+  const { shouldRender, exiting } = useDismissable(open, EXIT_DURATION_MS)
+  const { dragY, dragging, handleProps } = useSheetDrag(onClose)
+  if (!shouldRender) return null
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-ink/35"
+      className={`fixed inset-0 z-50 flex items-end justify-center bg-ink/35 transition-opacity duration-[240ms] ${exiting ? 'opacity-0' : 'opacity-100'}`}
       onClick={onClose}
       role="dialog"
       aria-modal="true"
       aria-label={`How to play ${title}`}
     >
       <div
-        className="anim-sheet-up w-full max-w-lg rounded-t-[32px] bg-surface p-5 pb-[max(1.5rem,env(safe-area-inset-bottom))] shadow-card"
+        className={`w-full max-w-lg rounded-t-[32px] bg-surface p-5 pb-[max(1.5rem,env(safe-area-inset-bottom))] shadow-card ${exiting ? 'anim-sheet-down' : 'anim-sheet-up'}`}
+        style={dragY > 0 ? { transform: `translateY(${dragY}px)`, transition: dragging ? 'none' : 'transform 200ms ease-out' } : undefined}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="mx-auto mb-3 h-1 w-9 rounded-full bg-bg" />
+        <div className="mx-auto mb-3 h-1 w-9 touch-none rounded-full bg-bg" {...handleProps} />
         <div className="mb-3 flex items-center justify-between">
           <h2 className="font-display text-xl font-extrabold text-ink">How to play {title}</h2>
           <button
             type="button"
             aria-label="Close"
             onClick={onClose}
-            className="flex size-8 items-center justify-center text-xl text-ink-muted"
+            className="flex size-11 items-center justify-center rounded-full text-ink-muted"
           >
-            ×
+            <CloseIcon />
           </button>
         </div>
 
@@ -46,7 +55,8 @@ export function RulesSheet({ open, onClose, title, steps, tip }: RulesSheetProps
         </ol>
 
         {tip && (
-          <p className="mt-3 rounded-xl bg-accent-tint px-3 py-2 text-center text-[13px] font-medium text-accent">
+          <p className="mt-3 flex items-center gap-2 rounded-xl bg-accent-tint px-3 py-2.5 text-[13px] font-medium text-accent">
+            <LightbulbIcon size={17} className="shrink-0" />
             {tip}
           </p>
         )}
@@ -63,11 +73,7 @@ export function RulesButton({ onClick }: { onClick: () => void }) {
       onClick={onClick}
       className="inline-flex size-9 items-center justify-center rounded-full bg-accent-tint text-accent"
     >
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <circle cx="12" cy="12" r="10" />
-        <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 2-3 4" />
-        <line x1="12" y1="17" x2="12.01" y2="17" />
-      </svg>
+      <HelpCircleIcon size={16} />
     </button>
   )
 }

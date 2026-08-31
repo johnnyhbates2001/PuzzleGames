@@ -1,8 +1,13 @@
 import { useRef } from 'react'
-import { boundingRect, clueIndexAt, rectContains, type Coord, type PatchesLevelRecord } from '../engine/patches/types'
+import { boundingRect, clueIndexAt, rectCells, rectContains, type Coord, type PatchesLevelRecord } from '../engine/patches/types'
 import { isMismatched, isRectFree, placedRectAt, type PlacedRect } from '../engine/patches/validator'
 import { PatchesCell } from './PatchesCell'
 import { useRegionColors } from '../hooks/useSkin'
+
+interface RetractGhost {
+  id: number
+  rect: PlacedRect
+}
 
 interface PatchesBoardProps {
   level: PatchesLevelRecord
@@ -23,6 +28,14 @@ interface PatchesBoardProps {
    *  solve-sweep across every cell before the win effect navigates away (see
    *  useGameCompletion). */
   solved?: boolean
+  /** Rects an Undo just popped — see PatchesGamePage.tsx's diff-on-undo wiring. Each
+   *  renders a fading ghost of its own fill color across its footprint, since the real
+   *  state has already dropped it by the time we know. */
+  retractedRects?: RetractGhost[]
+  onRetractEnd?: (id: number) => void
+  /** Cells (coordKey) a reveal-hint just placed — pulses once, gold. */
+  hintedCells?: Set<string>
+  onHintPulseEnd?: (key: string) => void
   className?: string
 }
 
@@ -50,6 +63,10 @@ export function PatchesBoard({
   onCancelDrag,
   onRemoveRect,
   solved,
+  retractedRects,
+  onRetractEnd,
+  hintedCells,
+  onHintPulseEnd,
   className,
 }: PatchesBoardProps) {
   const regionColors = useRegionColors()
@@ -113,6 +130,14 @@ export function PatchesBoard({
     }
   })
 
+  // Ghost coverage from recently-undone rects — keyed by cell so each cell can render
+  // its own ghost's color and fire that ghost's own onRetractEnd once its animation ends.
+  const ghostAt = new Map<string, { id: number; color: string }>()
+  retractedRects?.forEach(({ id, rect }) => {
+    const color = regionColors[rect.clueIndex % regionColors.length]
+    rectCells(rect.rect).forEach((c) => ghostAt.set(`${c.row},${c.col}`, { id, color }))
+  })
+
   // Live preview: the rectangle the current drag would commit if released right now —
   // grown from the anchor clue to wherever the pointer currently is (dragEnd), tinted
   // danger-red instead of the clue's own color whenever that placement is actually
@@ -142,10 +167,12 @@ export function PatchesBoard({
       const bottomIdx = r < level.size - 1 ? regionAt(r + 1, c) : -2
       const fillDelayMs =
         placedIdx === lastIdx && lastAnchor ? (Math.abs(r - lastAnchor.row) + Math.abs(c - lastAnchor.col)) * 25 : undefined
+      const key = `${r},${c}`
+      const ghost = ghostAt.get(key)
 
       cells.push(
         <PatchesCell
-          key={`${r},${c}`}
+          key={key}
           row={r}
           col={c}
           clueArea={clue?.area ?? null}
@@ -157,6 +184,10 @@ export function PatchesBoard({
           borderRight={regionIdx !== rightIdx}
           borderBottom={regionIdx !== bottomIdx}
           sweepDelayMs={solved ? (r + c) * SWEEP_STEP_MS : undefined}
+          retractGhostColor={placedIdx === -1 ? (ghost?.color ?? null) : null}
+          onRetractEnd={ghost ? () => onRetractEnd?.(ghost.id) : undefined}
+          hinted={!!hintedCells?.has(key)}
+          onHintPulseEnd={() => onHintPulseEnd?.(key)}
         />,
       )
     }

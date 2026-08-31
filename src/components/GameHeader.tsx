@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { useAppNavigate as useNavigate } from '../hooks/useAppNavigate'
 import { Timer } from './Timer'
 import { CoinBalance } from './CoinBalance'
+import { ChevronLeftIcon, ZenIcon } from './icons'
 import { getSettings } from '../storage/db'
 
 interface GameHeaderProps {
@@ -45,14 +46,15 @@ export function GameHeader({ elapsedMs, runStartedAt, coins, right, timerKey, bu
         // actually came from.
         onClick={() => navigate(-1)}
         aria-label="Back"
-        className="inline-flex size-9 items-center justify-center rounded-full bg-accent-tint text-accent"
+        className="inline-flex size-11 items-center justify-center rounded-full bg-accent-tint text-accent"
       >
-        <svg width="9" height="15" viewBox="0 0 9 15" fill="none">
-          <path d="M8 1L1 7.5 8 14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
+        <ChevronLeftIcon />
       </button>
       {zenMode ? (
-        <span className="rounded-full bg-accent-tint px-3 py-1.5 text-xs font-semibold text-accent">🧘 Zen mode</span>
+        <span className="flex items-center gap-1.5 rounded-full bg-accent-tint px-3 py-1.5 text-xs font-semibold text-accent">
+          <ZenIcon />
+          Zen mode
+        </span>
       ) : (
         <Timer key={timerKey} elapsedMs={elapsedMs} runStartedAt={runStartedAt} budgetMs={budgetMs} onExpire={onTimerExpire} />
       )}

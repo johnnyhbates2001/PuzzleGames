@@ -88,6 +88,7 @@ export default function ZipCompletePage() {
         dailyBonusApplied={dailyBonusApplied}
         isDaily={isDaily}
         dailyStreak={dailyStreak}
+        chaptersHref="/zip/chapters"
         onNextLevel={() => navigate(`/zip/${validDifficulty}`, { replace: true })}
         onReplay={() =>
           navigate(isDaily ? '/zip/daily' : `/zip/${validDifficulty}`, { state: { replayLevel: level }, replace: true })

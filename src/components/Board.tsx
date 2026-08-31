@@ -20,6 +20,14 @@ interface BoardProps {
   /** True once the level is solved — triggers the one-shot diagonal solve-sweep
    *  across every cell before the win effect navigates away (see useGameCompletion). */
   solved?: boolean
+  /** Cells (coordKey) whose queen an Undo just removed — see GamePage.tsx's diff-on-
+   *  undo wiring. The cell renders a fading ghost of the removed queen instead of
+   *  nothing, since the real state has already gone empty by the time we know. */
+  retractedCells?: Set<string>
+  onRetractEnd?: (key: string) => void
+  /** Cells (coordKey) a reveal-hint just filled — pulses once, gold. */
+  hintedCells?: Set<string>
+  onHintPulseEnd?: (key: string) => void
   className?: string
 }
 
@@ -28,7 +36,7 @@ interface Coord {
   col: number
 }
 
-const AUTO_X_STEP_MS = 20
+const AUTO_X_STEP_MS = 45
 const SWEEP_STEP_MS = 42
 
 /** Delay (ms) for an auto-X'd cell's entrance animation: the Chebyshev distance
@@ -54,7 +62,20 @@ function cellFromPoint(clientX: number, clientY: number): Coord | null {
   return { row: Number(button.dataset.row), col: Number(button.dataset.col) }
 }
 
-export function Board({ level, board, conflicts, onCellClick, onDragStart, onCellDragEnter, solved, className }: BoardProps) {
+export function Board({
+  level,
+  board,
+  conflicts,
+  onCellClick,
+  onDragStart,
+  onCellDragEnter,
+  solved,
+  retractedCells,
+  onRetractEnd,
+  hintedCells,
+  onHintPulseEnd,
+  className,
+}: BoardProps) {
   const regionColors = useRegionColors()
   // Gesture state lives in refs, not React state — pointermove fires far too often
   // (and far too latency-sensitively) to route through re-renders, and refs are stable
@@ -134,19 +155,26 @@ export function Board({ level, board, conflicts, onCellClick, onDragStart, onCel
       onClickCapture={handleClickCapture}
     >
       {board.map((row, r) =>
-        row.map((cell, c) => (
-          <Cell
-            key={`${r},${c}`}
-            row={r}
-            col={c}
-            cell={cell}
-            regionColor={regionColors[level.regions[r][c] % regionColors.length]}
-            conflict={cell.queen && conflicts.has(coordKey({ row: r, col: c }))}
-            autoXDelayMs={autoXDelayMs(r, c, cell)}
-            sweepDelayMs={solved ? (r + c) * SWEEP_STEP_MS : undefined}
-            onClick={onCellClick}
-          />
-        )),
+        row.map((cell, c) => {
+          const key = coordKey({ row: r, col: c })
+          return (
+            <Cell
+              key={key}
+              row={r}
+              col={c}
+              cell={cell}
+              regionColor={regionColors[level.regions[r][c] % regionColors.length]}
+              conflict={cell.queen && conflicts.has(key)}
+              autoXDelayMs={autoXDelayMs(r, c, cell)}
+              sweepDelayMs={solved ? (r + c) * SWEEP_STEP_MS : undefined}
+              retracting={!!retractedCells?.has(key)}
+              onRetractEnd={() => onRetractEnd?.(key)}
+              hinted={!!hintedCells?.has(key)}
+              onHintPulseEnd={() => onHintPulseEnd?.(key)}
+              onClick={onCellClick}
+            />
+          )
+        }),
       )}
     </div>
   )

@@ -1,5 +1,5 @@
-import { useMemo, useRef } from 'react'
-import { coordKey, type Coord, type NonogramLevelRecord } from '../engine/nonogram/types'
+import { useMemo, useRef, useState } from 'react'
+import { cluesForLine, coordKey, type Coord, type NonogramLevelRecord } from '../engine/nonogram/types'
 import { contradictoryLines, type Mark } from '../engine/nonogram/validator'
 import type { MarkMode } from '../state/nonogramReducer'
 import { NonogramCell } from './NonogramCell'
@@ -22,6 +22,14 @@ interface NonogramBoardProps {
    *  solve-sweep across every cell before the win effect navigates away (see
    *  useGameCompletion). */
   solved?: boolean
+  /** Cells (coordKey) an Undo just cleared, mapped to the mark that was removed — see
+   *  NonogramGamePage.tsx's diff-on-undo wiring. Renders a fading ghost of that mark
+   *  instead of nothing, since the real state has already gone empty by the time we know. */
+  retractedCells?: Map<string, Mark>
+  onRetractEnd?: (key: string) => void
+  /** Cells (coordKey) a reveal-hint just marked — pulses once, gold. */
+  hintedCells?: Set<string>
+  onHintPulseEnd?: (key: string) => void
   className?: string
 }
 
@@ -31,6 +39,10 @@ function targetMark(mode: MarkMode): Mark {
   return mode === 'fill' ? 'filled' : 'x'
 }
 
+function arraysEqual(a: number[], b: number[]): boolean {
+  return a.length === b.length && a.every((n, i) => n === b[i])
+}
+
 function cellFromPoint(clientX: number, clientY: number): Coord | null {
   const el = document.elementFromPoint(clientX, clientY)
   const button = el?.closest('button[data-row]') as HTMLElement | null
@@ -38,7 +50,20 @@ function cellFromPoint(clientX: number, clientY: number): Coord | null {
   return { row: Number(button.dataset.row), col: Number(button.dataset.col) }
 }
 
-export function NonogramBoard({ level, grid, markMode, onCellClick, onDragStart, onCellDragEnter, solved, className }: NonogramBoardProps) {
+export function NonogramBoard({
+  level,
+  grid,
+  markMode,
+  onCellClick,
+  onDragStart,
+  onCellDragEnter,
+  solved,
+  retractedCells,
+  onRetractEnd,
+  hintedCells,
+  onHintPulseEnd,
+  className,
+}: NonogramBoardProps) {
   const { size, rowClues, colClues } = level
 
   // Free, real-time, solution-independent feedback (see contradictoryLines) — never a
@@ -48,6 +73,21 @@ export function NonogramBoard({ level, grid, markMode, onCellClick, onDragStart,
     [size, rowClues, colClues, grid],
   )
 
+  // Also solution-independent (compares the grid's own run-lengths to the printed
+  // clue, not to the answer) — a row/col whose fill pattern exactly matches its clue
+  // gets its numbers struck through, reversing instantly if a later move breaks it.
+  const { satisfiedRows, satisfiedCols } = useMemo(() => {
+    const rows = new Set<number>()
+    const cols = new Set<number>()
+    for (let r = 0; r < size; r++) {
+      if (arraysEqual(cluesForLine(grid[r].map((m) => m === 'filled')), rowClues[r])) rows.add(r)
+    }
+    for (let c = 0; c < size; c++) {
+      if (arraysEqual(cluesForLine(grid.map((row) => row[c] === 'filled')), colClues[c])) cols.add(c)
+    }
+    return { satisfiedRows: rows, satisfiedCols: cols }
+  }, [size, rowClues, colClues, grid])
+
   // Gesture state lives in refs, not React state — pointermove fires far too often to
   // route through re-renders (see Board.tsx, which this drag gesture mirrors).
   const startCellRef = useRef<Coord | null>(null)
@@ -56,6 +96,10 @@ export function NonogramBoard({ level, grid, markMode, onCellClick, onDragStart,
   const dragModeRef = useRef<'add' | 'erase'>('add')
   const pointerIdRef = useRef<number | null>(null)
   const suppressNextClickRef = useRef(false)
+  // Promoted to state (unlike the gesture refs above) specifically so it can drive a
+  // render — cells read this to suppress their per-cell pop-in while a drag-fill is in
+  // progress, so a fast drag across many cells doesn't stutter with N little pops.
+  const [dragging, setDragging] = useState(false)
 
   function handlePointerDown(e: React.PointerEvent<HTMLDivElement>) {
     if (e.pointerType === 'mouse' && e.button !== 0) return
@@ -83,6 +127,7 @@ export function NonogramBoard({ level, grid, markMode, onCellClick, onDragStart,
       dragModeRef.current = grid[start.row][start.col] === target ? 'erase' : 'add'
       suppressNextClickRef.current = true
       if (pointerIdRef.current !== null) e.currentTarget.setPointerCapture(pointerIdRef.current)
+      setDragging(true)
       onDragStart()
       onCellDragEnter(start.row, start.col, dragModeRef.current)
     }
@@ -94,6 +139,7 @@ export function NonogramBoard({ level, grid, markMode, onCellClick, onDragStart,
     visitedRef.current = new Set()
     dragConfirmedRef.current = false
     pointerIdRef.current = null
+    setDragging(false)
   }
 
   function handleClickCapture(e: React.MouseEvent<HTMLDivElement>) {
@@ -106,15 +152,21 @@ export function NonogramBoard({ level, grid, markMode, onCellClick, onDragStart,
   const cells = []
   for (let r = 0; r < size; r++) {
     for (let c = 0; c < size; c++) {
+      const key = `${r},${c}`
       cells.push(
         <NonogramCell
-          key={`${r},${c}`}
+          key={key}
           row={r}
           col={c}
           mark={grid[r][c]}
+          dragging={dragging}
           borderRight={c === size - 1 ? false : c % 5 === 4}
           borderBottom={r === size - 1 ? false : r % 5 === 4}
           sweepDelayMs={solved ? (r + c) * SWEEP_STEP_MS : undefined}
+          retractGhostMark={retractedCells?.get(key) ?? null}
+          onRetractEnd={() => onRetractEnd?.(key)}
+          hinted={!!hintedCells?.has(key)}
+          onHintPulseEnd={() => onHintPulseEnd?.(key)}
           onClick={onCellClick}
         />,
       )
@@ -133,8 +185,8 @@ export function NonogramBoard({ level, grid, markMode, onCellClick, onDragStart,
             {clue.map((n, i) => (
               <span
                 key={i}
-                className={`text-[min(2.6vw,12px)] leading-none font-bold tabular-nums ${
-                  badCols.has(c) ? 'text-danger' : 'text-ink-muted'
+                className={`text-[min(2.6vw,12px)] leading-none font-bold tabular-nums transition-all duration-[120ms] ${
+                  badCols.has(c) ? 'text-danger' : satisfiedCols.has(c) ? 'text-ink-muted line-through opacity-[0.32]' : 'text-ink-muted'
                 }`}
               >
                 {n}
@@ -150,8 +202,8 @@ export function NonogramBoard({ level, grid, markMode, onCellClick, onDragStart,
             {clue.map((n, i) => (
               <span
                 key={i}
-                className={`text-[min(2.6vw,12px)] leading-none font-bold tabular-nums ${
-                  badRows.has(r) ? 'text-danger' : 'text-ink-muted'
+                className={`text-[min(2.6vw,12px)] leading-none font-bold tabular-nums transition-all duration-[120ms] ${
+                  badRows.has(r) ? 'text-danger' : satisfiedRows.has(r) ? 'text-ink-muted line-through opacity-[0.32]' : 'text-ink-muted'
                 }`}
               >
                 {n}

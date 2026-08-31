@@ -6,6 +6,7 @@ import { useReducedMotion } from '../hooks/useReducedMotion'
 import { getSettings } from '../storage/db'
 import { getSkin } from '../skins'
 import { Confetti } from './Confetti'
+import { CheckIcon, FlameIcon } from './icons'
 import type { ChapterCompleteInfo } from '../hooks/useGameCompletion'
 
 interface CompleteSheetProps {
@@ -29,6 +30,8 @@ interface CompleteSheetProps {
   dailyStreak?: number
   /** Set when this completion also crossed a chapter boundary — see useGameCompletion. */
   chapterComplete?: ChapterCompleteInfo
+  /** This game's Chapters screen — the secondary button links here instead of Home. */
+  chaptersHref: string
   onNextLevel: () => void
   onReplay: () => void
 }
@@ -39,7 +42,7 @@ interface CompleteSheetProps {
 // never appear to fly from a pill that hasn't visually landed yet.
 const FLIGHT_START_MS = 380
 const FLIGHT_DURATION_MS = 620
-const FLIGHT_STAGGER_MS = 55
+const FLIGHT_STAGGER_MS = 60
 const COIN_COUNT = 5
 const COUNT_UP_START_MS = FLIGHT_START_MS + FLIGHT_DURATION_MS
 const COUNT_UP_DURATION_MS = 480
@@ -88,6 +91,7 @@ export function CompleteSheet({
   isDaily,
   dailyStreak,
   chapterComplete,
+  chaptersHref,
   onNextLevel,
   onReplay,
 }: CompleteSheetProps) {
@@ -187,7 +191,7 @@ export function CompleteSheet({
   return (
     <>
       {boardPreview}
-      <Confetti />
+      <Confetti variant={chapterComplete ? 'full' : 'light'} />
       <div className="absolute inset-0 bg-ink/32" />
 
       {flightOrigin &&
@@ -218,10 +222,10 @@ export function CompleteSheet({
         </div>
 
         <span
-          className="anim-pop-in absolute -top-8 flex size-16 items-center justify-center rounded-full border-4 border-surface bg-accent text-2xl font-bold text-white"
+          className="anim-pop-in absolute -top-8 flex size-16 items-center justify-center rounded-full border-4 border-surface bg-accent text-white"
           style={{ animationDelay: '140ms', animationFillMode: 'both' }}
         >
-          ✓
+          <CheckIcon size={26} />
         </span>
 
         <div className="mt-4">
@@ -251,7 +255,12 @@ export function CompleteSheet({
             <span ref={rewardCoinRef} className="size-5 rounded-full border-2 border-[oklch(68%_0.15_75)] bg-[oklch(80%_0.14_85)] box-border" />
             <span className="text-[15px] font-extrabold text-[oklch(45%_0.11_75)]">+{coinsAwarded} coins</span>
             {isPersonalBest && <span className="text-xs font-semibold text-[oklch(55%_0.08_75)]">personal best</span>}
-            {dailyBonusApplied && <span className="text-xs font-semibold text-[oklch(55%_0.08_75)]">🔥 daily bonus ×2</span>}
+            {dailyBonusApplied && (
+              <span className="flex items-center gap-1 text-xs font-semibold text-[oklch(55%_0.08_75)]">
+                <FlameIcon size={12} />
+                daily bonus ×2
+              </span>
+            )}
           </div>
         )}
 
@@ -277,7 +286,9 @@ export function CompleteSheet({
             className="anim-rise flex w-full items-center justify-center gap-2 rounded-2xl bg-accent-tint py-3.5"
             style={{ animationDelay: '420ms' }}
           >
-            <span className="text-lg">🔥</span>
+            <span className="text-accent">
+              <FlameIcon size={18} />
+            </span>
             <span className="text-[15px] font-bold text-ink">{dailyStreak ?? 0} day streak</span>
           </div>
         ) : (
@@ -309,8 +320,8 @@ export function CompleteSheet({
             <button type="button" onClick={onReplay} className="flex-1 rounded-full bg-bg py-3 font-semibold text-ink-muted">
               Replay
             </button>
-            <Link to="/" className="flex-1 rounded-full bg-bg py-3 font-semibold text-ink-muted">
-              Home
+            <Link to={chaptersHref} className="flex-1 rounded-full bg-bg py-3 font-semibold text-ink-muted">
+              Back to chapters
             </Link>
           </div>
         </div>

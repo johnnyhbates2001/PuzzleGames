@@ -2,7 +2,9 @@ import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'r
 import { useLocation, useParams } from 'react-router-dom'
 import { useAppNavigate as useNavigate } from '../hooks/useAppNavigate'
 import type { Coord, Difficulty, LevelRecord } from '../engine/types'
+import { coordKey } from '../engine/types'
 import { getConflicts } from '../engine/validator'
+import type { CellState } from '../state/types'
 import { createInitialState, gameReducer, getWrongQueens } from '../state/gameReducer'
 import {
   getDailyChallenge,
@@ -13,6 +15,8 @@ import {
   saveInProgress,
   setAutoPlaceX,
   spendCoins,
+  type InProgressLevel,
+  type Settings as AppSettings,
 } from '../storage/db'
 import { getNextLevel } from '../games/queensLevels'
 import { getDailyQueensLevel, todayDateKey } from '../games/dailyChallenge'
@@ -25,11 +29,14 @@ import { Controls } from '../components/Controls'
 import { GameHeader } from '../components/GameHeader'
 import { HintSheet, type HintOption } from '../components/HintSheet'
 import { FailSheet } from '../components/FailSheet'
+import { BossGateSheet } from '../components/BossGateSheet'
+import { LevelContext } from '../components/LevelContext'
+import { BoltIcon, EyeIcon, FlagIcon, SparkleIcon } from '../components/icons'
 
 const HINT_OPTIONS: HintOption[] = [
-  { id: 'reveal-cell', icon: '👁', title: 'Reveal a cell', desc: 'Fills one correct square of your choice.', price: 25 },
-  { id: 'check', icon: '⚑', title: 'Check my work', desc: 'Flags anything currently placed wrong.', price: 40 },
-  { id: 'solve-region', icon: '✧', title: 'Solve a region', desc: 'Completes one whole colored region.', price: 120 },
+  { id: 'reveal-cell', icon: <EyeIcon />, title: 'Reveal a cell', desc: 'Fills one correct square of your choice.', price: 25 },
+  { id: 'check', icon: <FlagIcon />, title: 'Check my work', desc: 'Flags anything currently placed wrong.', price: 40 },
+  { id: 'solve-region', icon: <SparkleIcon />, title: 'Solve a region', desc: 'Completes one whole colored region.', price: 120 },
 ]
 
 // First-guess placeholder, not derived from real solve-time data — tune once the user
@@ -46,6 +53,30 @@ const PLACEHOLDER_LEVEL: LevelRecord = {
 
 function isValidDifficulty(value: string | undefined): value is Difficulty {
   return value === 'easy' || value === 'medium' || value === 'hard'
+}
+
+function removeKey(set: Set<string>, key: string): Set<string> {
+  if (!set.has(key)) return set
+  const next = new Set(set)
+  next.delete(key)
+  return next
+}
+
+/** Queen cells that appeared/disappeared between two board snapshots — used to drive
+ *  the retract ghost (on Undo) and the hint pulse (on a reveal hint). X-only changes
+ *  aren't tracked; only queen placement/removal is animated. */
+function diffQueenCells(prev: CellState[][], next: CellState[][]): { removed: Coord[]; added: Coord[] } {
+  const removed: Coord[] = []
+  const added: Coord[] = []
+  for (let r = 0; r < prev.length; r++) {
+    for (let c = 0; c < prev[r].length; c++) {
+      const wasQueen = prev[r][c]?.queen ?? false
+      const isQueen = next[r]?.[c]?.queen ?? false
+      if (wasQueen && !isQueen) removed.push({ row: r, col: c })
+      else if (!wasQueen && isQueen) added.push({ row: r, col: c })
+    }
+  }
+  return { removed, added }
 }
 
 interface ReplayLocationState {
@@ -67,7 +98,25 @@ export default function GamePage() {
   const [hintsOpen, setHintsOpen] = useState(false)
   const [checkMessage, setCheckMessage] = useState<string | null>(null)
   const [modifiers, setModifiers] = useState<LevelModifiers | null>(null)
+  // Set only for a normal (non-daily, non-replay) run — see the init effect below —
+  // which is exactly when the level-context row ("Chapter 3 · Garden Path · 7/20") has
+  // something to show.
+  const [levelIndex, setLevelIndex] = useState<number | null>(null)
+  // Retract-ghost / hint-pulse targets, keyed by coordKey — see diffQueenCells above
+  // and the board-diff effect below. `actingRef` tells that effect whether the change
+  // it's about to see was caused by Undo or a hint reveal (both are otherwise
+  // indistinguishable full-board swaps) — plain placements leave it null, so they
+  // never populate either set.
+  const [retractedCells, setRetractedCells] = useState<Set<string>>(new Set())
+  const [hintedCells, setHintedCells] = useState<Set<string>>(new Set())
+  const actingRef = useRef<'undo' | 'hint' | null>(null)
+  const prevBoardRef = useRef(state.board)
   const [failed, setFailed] = useState<{ reason: 'timeout' | 'mistake' } | null>(null)
+  // True while a boss level's modifiers are on screen for confirmation but not yet
+  // acknowledged — see the init effect below and handleBeginBoss.
+  const [awaitingBossConfirm, setAwaitingBossConfirm] = useState(false)
+  const [bossChapter, setBossChapter] = useState<number | null>(null)
+  const pendingLoadRef = useRef<{ inProgress: InProgressLevel | undefined; settings: AppSettings } | null>(null)
   const sourceRef = useRef<{ source: 'bank' | 'generated'; bankIndex?: number }>({ source: 'generated' })
   // Set during load if today's Daily Challenge was already completed — the win effect
   // reads this to skip re-awarding coins on a replay (recordDailyChallengeCompletion
@@ -77,6 +126,41 @@ export default function GamePage() {
   // route (Complete -> Game is always a route change), so this never needs to react
   // to a later location.state change.
   const initialReplayLevelRef = useRef((location.state as ReplayLocationState | null)?.replayLevel)
+
+  // Shared by the init effect's normal path and handleBeginBoss (post-gate) below —
+  // dispatches the actual LOAD once we know we're clear to start playing.
+  const finishLoad = useCallback(
+    async (inProgress: InProgressLevel | undefined, settings: AppSettings) => {
+      if (inProgress) {
+        sourceRef.current = { source: inProgress.levelSource, bankIndex: inProgress.bankIndex }
+        dispatch({
+          type: 'LOAD',
+          level: inProgress.level,
+          autoPlaceX: settings.autoPlaceX,
+          snapshot: { board: inProgress.board, elapsedMs: inProgress.elapsedMs },
+        })
+        return
+      }
+      const next = await getNextLevel(validDifficulty as Difficulty)
+      sourceRef.current = { source: next.source, bankIndex: next.bankIndex }
+      dispatch({ type: 'LOAD', level: next.level, autoPlaceX: settings.autoPlaceX })
+    },
+    [validDifficulty],
+  )
+
+  const handleBeginBoss = useCallback(async () => {
+    const pending = pendingLoadRef.current
+    if (!pending) return
+    setAwaitingBossConfirm(false)
+    setLoading(true)
+    try {
+      await finishLoad(pending.inProgress, pending.settings)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setLoading(false)
+    }
+  }, [finishLoad])
 
   // Load the in-progress save for this difficulty if one exists, else the next level.
   // The 'daily' route (/queens/daily) shares this same param slot: it skips bank/resume
@@ -90,7 +174,9 @@ export default function GamePage() {
       setLoading(true)
       setError(null)
       setModifiers(null)
+      setLevelIndex(null)
       setFailed(null)
+      setAwaitingBossConfirm(false)
       try {
         const replayLevel = initialReplayLevelRef.current
         if (replayLevel) {
@@ -123,25 +209,27 @@ export default function GamePage() {
         setCoins(settings.coins)
         // currentLevelIndex doesn't change while a level is in progress (only on
         // completion), so this is correct whether we're about to resume or load fresh —
-        // and it's how Endless boss levels (see games/chapters.ts) get their modifiers.
+        // and it's how Endless boss levels (see games/chapters.ts) get their modifiers,
+        // and how the level-context row derives its chapter/Endless label below.
+        setLevelIndex(progress.currentLevelIndex)
+        let levelModifiers: LevelModifiers | null = null
         if (validDifficulty === 'hard') {
-          setModifiers(modifiersForLevel(endlessProgress(progress.currentLevelIndex)))
+          const endless = endlessProgress(progress.currentLevelIndex)
+          levelModifiers = modifiersForLevel(endless)
+          setModifiers(levelModifiers)
+          setBossChapter(endless?.endlessChapter ?? null)
         }
 
-        if (inProgress) {
-          sourceRef.current = { source: inProgress.levelSource, bankIndex: inProgress.bankIndex }
-          dispatch({
-            type: 'LOAD',
-            level: inProgress.level,
-            autoPlaceX: settings.autoPlaceX,
-            snapshot: { board: inProgress.board, elapsedMs: inProgress.elapsedMs },
-          })
-        } else {
-          const next = await getNextLevel(validDifficulty as Difficulty)
-          if (cancelled) return
-          sourceRef.current = { source: next.source, bankIndex: next.bankIndex }
-          dispatch({ type: 'LOAD', level: next.level, autoPlaceX: settings.autoPlaceX })
+        // Announce a boss level's modifiers up front instead of letting the player
+        // discover them mid-run — hold the actual LOAD until they tap "Begin" (see
+        // handleBeginBoss and BossGateSheet below).
+        if (levelModifiers) {
+          pendingLoadRef.current = { inProgress, settings }
+          setAwaitingBossConfirm(true)
+          return
         }
+
+        await finishLoad(inProgress, settings)
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : String(e))
       } finally {
@@ -153,7 +241,32 @@ export default function GamePage() {
     return () => {
       cancelled = true
     }
-  }, [validDifficulty, isDaily])
+  }, [validDifficulty, isDaily, finishLoad])
+
+  // Attributes a board change to Undo or a hint reveal (see actingRef above) and turns
+  // it into the matching ghost/pulse targets — runs after every board change, but only
+  // ever does anything when actingRef was armed just before the dispatch that caused it.
+  useEffect(() => {
+    if (actingRef.current) {
+      const { removed, added } = diffQueenCells(prevBoardRef.current, state.board)
+      if (actingRef.current === 'undo' && removed.length > 0) {
+        setRetractedCells((prev) => {
+          const next = new Set(prev)
+          removed.forEach((c) => next.add(coordKey(c)))
+          return next
+        })
+      }
+      if (actingRef.current === 'hint' && added.length > 0) {
+        setHintedCells((prev) => {
+          const next = new Set(prev)
+          added.forEach((c) => next.add(coordKey(c)))
+          return next
+        })
+      }
+      actingRef.current = null
+    }
+    prevBoardRef.current = state.board
+  }, [state.board])
 
   useGameLifecycle(loading, error, state.status, dispatch)
 
@@ -247,8 +360,13 @@ export default function GamePage() {
       }
 
       setCheckMessage(null)
-      if (id === 'reveal-cell') dispatch({ type: 'HINT_REVEAL_CELL', now: Date.now() })
-      else if (id === 'solve-region') dispatch({ type: 'HINT_SOLVE_REGION', now: Date.now() })
+      if (id === 'reveal-cell') {
+        actingRef.current = 'hint'
+        dispatch({ type: 'HINT_REVEAL_CELL', now: Date.now() })
+      } else if (id === 'solve-region') {
+        actingRef.current = 'hint'
+        dispatch({ type: 'HINT_SOLVE_REGION', now: Date.now() })
+      }
       setHintsOpen(false)
     },
     [state, playSound],
@@ -289,17 +407,15 @@ export default function GamePage() {
         right={
           isDaily ? (
             <span className="rounded-full bg-accent-tint px-3 py-1.5 text-xs font-semibold text-accent">Daily Challenge</span>
-          ) : (
-            <span
-              className={`rounded-full px-3 py-1.5 text-xs font-semibold ${
-                state.autoPlaceX ? 'bg-accent-tint text-accent' : 'text-ink-muted'
-              }`}
-            >
-              Auto X {state.autoPlaceX ? 'on' : 'off'}
-            </span>
-          )
+          ) : undefined
         }
       />
+
+      {validDifficulty && levelIndex !== null && (
+        <div className="w-full max-w-[560px]">
+          <LevelContext difficulty={validDifficulty} currentLevelIndex={levelIndex} />
+        </div>
+      )}
 
       {/* Board and Controls share this single wrapper's width (rather than each
           declaring their own max-width independently) so widening the board to
@@ -308,8 +424,8 @@ export default function GamePage() {
           before) — only the board area itself swaps for the loading message. */}
       <div className="-mx-2 flex w-[calc(100%+1rem)] max-w-[560px] flex-col items-center gap-6">
         {modifiers && (
-          <p className="w-full rounded-2xl bg-accent-tint px-4 py-2.5 text-center text-[13px] font-bold text-accent">
-            ⚡ Boss level · {modifierLabel(modifiers)}
+          <p className="flex w-full items-center justify-center gap-1.5 rounded-2xl bg-accent-tint px-4 py-2.5 text-center text-[13px] font-bold text-accent">
+            <BoltIcon /> Boss level · {modifierLabel(modifiers)}
           </p>
         )}
 
@@ -324,6 +440,10 @@ export default function GamePage() {
             onDragStart={handleDragStart}
             onCellDragEnter={handleCellDragEnter}
             solved={state.status === 'won'}
+            retractedCells={retractedCells}
+            onRetractEnd={(key) => setRetractedCells((prev) => removeKey(prev, key))}
+            hintedCells={hintedCells}
+            onHintPulseEnd={(key) => setHintedCells((prev) => removeKey(prev, key))}
           />
         )}
 
@@ -331,7 +451,10 @@ export default function GamePage() {
           autoPlaceX={state.autoPlaceX}
           canUndo={!modifiers?.noUndo && state.history.length > 0}
           onClear={() => dispatch({ type: 'CLEAR', now: Date.now() })}
-          onUndo={() => dispatch({ type: 'UNDO' })}
+          onUndo={() => {
+            actingRef.current = 'undo'
+            dispatch({ type: 'UNDO' })
+          }}
           onToggleAutoX={(enabled) => {
             dispatch({ type: 'SET_AUTO_X', enabled })
             void setAutoPlaceX(enabled)
@@ -354,7 +477,16 @@ export default function GamePage() {
         checkMessage={checkMessage}
       />
 
-      {failed && <FailSheet reason={failed.reason} onTryAgain={handleTryAgain} />}
+      {failed && <FailSheet reason={failed.reason} chaptersHref="/queens/chapters" onTryAgain={handleTryAgain} />}
+
+      {awaitingBossConfirm && modifiers && bossChapter !== null && (
+        <BossGateSheet
+          chapterNumber={bossChapter}
+          modifiers={modifiers}
+          backHref="/queens/chapters"
+          onBegin={handleBeginBoss}
+        />
+      )}
     </main>
   )
 }

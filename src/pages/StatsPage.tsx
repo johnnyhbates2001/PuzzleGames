@@ -2,8 +2,11 @@ import { useEffect, useState } from 'react'
 import { GAMES } from '../games/registry'
 import { TabBar } from '../components/TabBar'
 import { formatElapsed } from '../components/Timer'
+import { FlameIcon } from '../components/icons'
+import { SKINS } from '../skins'
 import type { Difficulty } from '../engine/types'
 import {
+  getBestStreak,
   getHeatmap,
   getNonogramProgress,
   getPatchesProgress,
@@ -54,16 +57,23 @@ function heatLevel(count: number): string {
 export default function StatsPage() {
   const [totalSolved, setTotalSolved] = useState(0)
   const [streak, setStreak] = useState(0)
+  const [bestStreak, setBestStreak] = useState(0)
   const [heatmap, setHeatmap] = useState<number[]>([])
   const [coins, setCoins] = useState(0)
+  const [skinCount, setSkinCount] = useState(0)
   const [games, setGames] = useState<GameSummary[]>([])
 
   useEffect(() => {
     let cancelled = false
     getTotalSolved().then((n) => !cancelled && setTotalSolved(n))
     getStreak().then((s) => !cancelled && setStreak(s))
+    getBestStreak().then((s) => !cancelled && setBestStreak(s))
     getHeatmap(5).then((counts) => !cancelled && setHeatmap(counts))
-    getSettings().then((s) => !cancelled && setCoins(s.coins))
+    getSettings().then((s) => {
+      if (cancelled) return
+      setCoins(s.coins)
+      setSkinCount(s.ownedSkins.length)
+    })
     Promise.all(GAMES.map((g) => summarizeGame(g.id, g.title))).then((results) => !cancelled && setGames(results))
     return () => {
       cancelled = true
@@ -77,10 +87,21 @@ export default function StatsPage() {
     >
       <h1 className="font-display text-[30px] font-extrabold tracking-tight">Stats</h1>
 
+      <div className="flex items-center gap-3 rounded-[22px] bg-surface p-4">
+        <div className="flex-1">
+          <p className="text-[11px] font-bold tracking-wide text-ink-muted uppercase">Current streak</p>
+          <p className="mt-1 font-mono text-[38px] font-extrabold text-[var(--color-streak)]">{streak}</p>
+          <p className="mt-0.5 text-[12px] text-ink-muted">Best ever · {Math.max(streak, bestStreak)} days</p>
+        </div>
+        <span className="flex size-14 shrink-0 items-center justify-center rounded-full bg-[var(--color-streak)]/15 text-[var(--color-streak)]">
+          <FlameIcon size={30} />
+        </span>
+      </div>
+
       <div className="flex gap-2.5">
         <StatTile value={String(totalSolved)} label="Solved" color="oklch(96% 0.01 260)" />
-        <StatTile value={String(streak)} label="Streak" color="var(--color-streak)" />
         <StatTile value={String(coins)} label="Coins" color="oklch(80% 0.14 85)" />
+        <StatTile value={`${skinCount}/${SKINS.length}`} label="Skins" color="var(--color-accent)" />
       </div>
 
       <div className="flex flex-col gap-3 rounded-[22px] bg-surface p-4">

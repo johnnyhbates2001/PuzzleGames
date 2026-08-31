@@ -333,6 +333,31 @@ export async function getStreak(now: number = Date.now()): Promise<number> {
   return streak
 }
 
+/** Longest historical consecutive-day streak, current run included — scans the whole
+ *  dailyActivity store (small: at most one row per day the player has ever solved
+ *  anything) rather than tracking a separate running-max, so it can't drift out of sync
+ *  with getStreak's own day-by-day definition. */
+export async function getBestStreak(): Promise<number> {
+  const db = await getDB()
+  const [keys, values] = await Promise.all([db.getAllKeys('dailyActivity'), db.getAll('dailyActivity')])
+  const activeDays = keys
+    .map((key, i) => ({ key: key as string, count: values[i] }))
+    .filter((d) => d.count > 0)
+    .map((d) => d.key)
+    .sort()
+
+  let best = 0
+  let current = 0
+  let prevDate: Date | null = null
+  for (const key of activeDays) {
+    const date = new Date(`${key}T00:00:00`)
+    current = prevDate && Math.round((date.getTime() - prevDate.getTime()) / 86_400_000) === 1 ? current + 1 : 1
+    best = Math.max(best, current)
+    prevDate = date
+  }
+  return best
+}
+
 /** Daily completion counts for the last `weeks` weeks, oldest first (`weeks * 7` entries,
  *  today last) — the stats page buckets these into heatmap levels for display. */
 export async function getHeatmap(weeks = 5, now: number = Date.now()): Promise<number[]> {
@@ -651,4 +676,29 @@ export async function getDailyStreak(gameId: DailyGameId, now: number = Date.now
     cursor.setDate(cursor.getDate() - 1)
   }
   return streak
+}
+
+const ALL_STORE_NAMES = [
+  'settings',
+  'progress',
+  'inProgress',
+  'sudokuProgress',
+  'sudokuInProgress',
+  'zipProgress',
+  'zipInProgress',
+  'patchesProgress',
+  'patchesInProgress',
+  'dailyActivity',
+  'dailyChallenge',
+  'nonogramProgress',
+  'nonogramInProgress',
+] as const
+
+/** Wipes every stored value — coins, skins, streaks, and every game's progress — back
+ *  to a fresh install. The caller is expected to reload the page afterward so every
+ *  in-memory hook (SkinProvider, useAudio, useTheme, etc.) re-initializes from the now-
+ *  empty DB rather than needing to be manually reset one by one. */
+export async function resetAllProgress(): Promise<void> {
+  const db = await getDB()
+  await Promise.all(ALL_STORE_NAMES.map((name) => db.clear(name)))
 }

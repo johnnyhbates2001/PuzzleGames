@@ -93,6 +93,7 @@ export default function PatchesCompletePage() {
         dailyBonusApplied={dailyBonusApplied}
         isDaily={isDaily}
         dailyStreak={dailyStreak}
+        chaptersHref="/patches/chapters"
         onNextLevel={() => navigate(`/patches/${validDifficulty}`, { replace: true })}
         onReplay={() =>
           navigate(isDaily ? '/patches/daily' : `/patches/${validDifficulty}`, { state: { replayLevel: level }, replace: true })

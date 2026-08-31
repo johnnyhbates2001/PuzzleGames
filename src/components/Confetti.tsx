@@ -1,7 +1,5 @@
 import { useMemo, type CSSProperties } from 'react'
-import { REGION_COLORS } from './Cell'
-
-const PIECE_COUNT = 24
+import { useRegionColors } from '../hooks/useSkin'
 
 interface Piece {
   left: number
@@ -12,20 +10,31 @@ interface Piece {
   drift: number
 }
 
+interface ConfettiProps {
+  /** Full burst on a chapter/boss clear, a light sprinkle on a routine level — see
+   *  CompleteSheet's chapterComplete prop. */
+  variant?: 'full' | 'light'
+}
+
 /** One-shot celebratory burst rendered once per completion screen — a fixed set of
  *  pieces frozen at mount (not re-randomized on re-render), each falling with its own
  *  timing/drift/rotation via CSS custom properties. Plays once, never loops. */
-export function Confetti() {
+export function Confetti({ variant = 'full' }: ConfettiProps) {
+  const regionColors = useRegionColors()
+  const pieceCount = variant === 'full' ? 16 : 4
   const pieces = useMemo<Piece[]>(
     () =>
-      Array.from({ length: PIECE_COUNT }, (_, i) => ({
+      Array.from({ length: pieceCount }, (_, i) => ({
         left: Math.random() * 100,
-        color: REGION_COLORS[i % REGION_COLORS.length],
+        color: regionColors[i % regionColors.length],
         delay: Math.random() * 200,
         duration: 900 + Math.random() * 400,
         rotate: Math.random() * 360,
         drift: (Math.random() - 0.5) * 60,
       })),
+    // Frozen at mount, same as before — regionColors/pieceCount don't change within
+    // one completion screen's lifetime.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
   )
 
@@ -34,6 +43,7 @@ export function Confetti() {
       {pieces.map((p, i) => (
         <span
           key={i}
+          aria-hidden="true"
           className="anim-confetti absolute top-0 size-2 rounded-[1px]"
           style={
             {

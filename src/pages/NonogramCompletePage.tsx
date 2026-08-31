@@ -90,6 +90,7 @@ export default function NonogramCompletePage() {
         dailyBonusApplied={dailyBonusApplied}
         isDaily={isDaily}
         dailyStreak={dailyStreak}
+        chaptersHref="/nonogram/chapters"
         onNextLevel={() => navigate(`/nonogram/${validDifficulty}`, { replace: true })}
         onReplay={() =>
           navigate(isDaily ? '/nonogram/daily' : `/nonogram/${validDifficulty}`, { state: { replayLevel: level }, replace: true })

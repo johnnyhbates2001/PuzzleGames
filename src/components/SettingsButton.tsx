@@ -1,8 +1,13 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { useTheme, type ThemePreference } from '../hooks/useTheme'
 import { useAudio } from '../hooks/useAudio'
+import { useDismissable } from '../hooks/useDismissable'
+import { useSheetDrag } from '../hooks/useSheetDrag'
 import { ToggleRow } from './ToggleRow'
-import { getSettings, setAutoPlaceX as setAutoPlaceXDb, setZenMode as setZenModeDb } from '../storage/db'
+import { CloseIcon, GearIcon, SpeakerIcon, TimedIcon, VibrationIcon, XMarkIcon } from './icons'
+import { getSettings, resetAllProgress, setAutoPlaceX as setAutoPlaceXDb, setZenMode as setZenModeDb } from '../storage/db'
+
+const EXIT_DURATION_MS = 240
 
 const THEME_OPTIONS: { value: ThemePreference; label: string }[] = [
   { value: 'system', label: 'System' },
@@ -11,12 +16,38 @@ const THEME_OPTIONS: { value: ThemePreference; label: string }[] = [
   { value: 'yellow', label: 'Yellow' },
 ]
 
+function IconToggleRow({
+  icon,
+  label,
+  checked,
+  onChange,
+}: {
+  icon: ReactNode
+  label: string
+  checked: boolean
+  onChange: (checked: boolean) => void
+}) {
+  return (
+    <div className="flex items-center gap-3">
+      <span className="flex size-9 shrink-0 items-center justify-center rounded-[12px] bg-accent-tint text-accent">{icon}</span>
+      <div className="flex-1">
+        <ToggleRow label={label} checked={checked} onChange={onChange} />
+      </div>
+    </div>
+  )
+}
+
 export function SettingsButton() {
   const [open, setOpen] = useState(false)
   const [theme, setTheme] = useTheme()
   const { soundEnabled, hapticsEnabled, setSoundEnabled, setHapticsEnabled } = useAudio()
   const [autoPlaceX, setAutoPlaceX] = useState(true)
   const [zenMode, setZenMode] = useState(false)
+  const [confirmingReset, setConfirmingReset] = useState(false)
+  const [resetting, setResetting] = useState(false)
+  const handleClose = () => setOpen(false)
+  const { shouldRender, exiting } = useDismissable(open, EXIT_DURATION_MS)
+  const { dragY, dragging, handleProps } = useSheetDrag(handleClose)
 
   useEffect(() => {
     let cancelled = false
@@ -30,6 +61,12 @@ export function SettingsButton() {
     }
   }, [])
 
+  async function handleConfirmReset() {
+    setResetting(true)
+    await resetAllProgress()
+    window.location.reload()
+  }
+
   return (
     <>
       <button
@@ -41,24 +78,26 @@ export function SettingsButton() {
         <GearIcon />
       </button>
 
-      {open && (
+      {shouldRender && (
         <div
-          className="fixed inset-0 z-50 flex items-end justify-center bg-black/30 sm:items-center"
-          onClick={() => setOpen(false)}
+          className={`fixed inset-0 z-50 flex items-end justify-center bg-black/30 transition-opacity duration-[240ms] sm:items-center ${exiting ? 'opacity-0' : 'opacity-100'}`}
+          onClick={handleClose}
         >
           <div
-            className="w-full max-w-sm rounded-t-3xl bg-surface p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-card sm:rounded-3xl"
+            className={`w-full max-w-sm rounded-t-3xl bg-surface p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-card sm:rounded-3xl ${exiting ? 'anim-sheet-down' : 'anim-sheet-up'}`}
+            style={dragY > 0 ? { transform: `translateY(${dragY}px)`, transition: dragging ? 'none' : 'transform 200ms ease-out' } : undefined}
             onClick={(event) => event.stopPropagation()}
           >
+            <div className="mx-auto mb-3 h-1 w-9 touch-none rounded-full bg-bg sm:hidden" {...handleProps} />
             <div className="mb-4 flex items-center justify-between">
               <h2 className="font-display text-lg font-bold text-ink">Settings</h2>
               <button
                 type="button"
                 aria-label="Close settings"
-                onClick={() => setOpen(false)}
-                className="flex size-8 items-center justify-center text-xl text-ink-muted"
+                onClick={handleClose}
+                className="flex size-11 items-center justify-center rounded-full text-ink-muted"
               >
-                ×
+                <CloseIcon />
               </button>
             </div>
 
@@ -81,13 +120,14 @@ export function SettingsButton() {
 
             <p className="mb-2 text-sm font-medium text-ink-muted">Sound &amp; haptics</p>
             <div className="mb-4 flex flex-col gap-2">
-              <ToggleRow label="Sound effects" checked={soundEnabled} onChange={setSoundEnabled} />
-              <ToggleRow label="Haptics" checked={hapticsEnabled} onChange={setHapticsEnabled} />
+              <IconToggleRow icon={<SpeakerIcon size={16} />} label="Sound effects" checked={soundEnabled} onChange={setSoundEnabled} />
+              <IconToggleRow icon={<VibrationIcon size={16} />} label="Haptics" checked={hapticsEnabled} onChange={setHapticsEnabled} />
             </div>
 
             <p className="mb-2 text-sm font-medium text-ink-muted">Gameplay</p>
             <div className="flex flex-col gap-2">
-              <ToggleRow
+              <IconToggleRow
+                icon={<XMarkIcon size={15} />}
                 label="Auto-place X's (Queens)"
                 checked={autoPlaceX}
                 onChange={(enabled) => {
@@ -95,7 +135,8 @@ export function SettingsButton() {
                   void setAutoPlaceXDb(enabled)
                 }}
               />
-              <ToggleRow
+              <IconToggleRow
+                icon={<TimedIcon size={16} />}
                 label="Zen mode — hide timers"
                 checked={zenMode}
                 onChange={(enabled) => {
@@ -104,18 +145,45 @@ export function SettingsButton() {
                 }}
               />
             </div>
+
+            <div className="mt-5 border-t border-border-dashed pt-4">
+              {!confirmingReset ? (
+                <button
+                  type="button"
+                  onClick={() => setConfirmingReset(true)}
+                  className="w-full rounded-2xl py-3 text-center text-sm font-semibold text-danger"
+                >
+                  Reset all progress
+                </button>
+              ) : (
+                <div className="rounded-2xl bg-[oklch(94%_0.04_25)] p-4">
+                  <p className="text-[13px] font-semibold text-danger">
+                    This clears every game's progress, coins, and skins. This can't be undone.
+                  </p>
+                  <div className="mt-3 flex gap-2">
+                    <button
+                      type="button"
+                      disabled={resetting}
+                      onClick={() => setConfirmingReset(false)}
+                      className="flex-1 rounded-full bg-surface py-2.5 text-sm font-semibold text-ink-muted disabled:opacity-50"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      disabled={resetting}
+                      onClick={handleConfirmReset}
+                      className="flex-1 rounded-full bg-danger py-2.5 text-sm font-semibold text-white disabled:opacity-50"
+                    >
+                      {resetting ? 'Resetting…' : 'Yes, reset everything'}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}
     </>
-  )
-}
-
-function GearIcon() {
-  return (
-    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="12" cy="12" r="3" />
-      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
-    </svg>
   )
 }

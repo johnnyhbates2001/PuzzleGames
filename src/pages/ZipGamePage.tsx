@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useReducer, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import { useLocation, useParams } from 'react-router-dom'
 import { useAppNavigate as useNavigate } from '../hooks/useAppNavigate'
-import type { Coord, Difficulty, ZipLevelRecord } from '../engine/zip/types'
+import { coordKey, type Coord, type Difficulty, type ZipLevelRecord } from '../engine/zip/types'
 import { applyCellEntry } from '../engine/zip/validator'
 import { createInitialState, getWrongCells, zipReducer } from '../state/zipReducer'
 import {
@@ -12,6 +12,7 @@ import {
   recordZipCompletion,
   saveZipInProgress,
   spendCoins,
+  type ZipInProgressLevel,
 } from '../storage/db'
 import { getNextZipLevel } from '../games/zipLevels'
 import { getDailyZipLevel, todayDateKey } from '../games/dailyChallenge'
@@ -24,10 +25,13 @@ import { ZipControls } from '../components/ZipControls'
 import { GameHeader } from '../components/GameHeader'
 import { HintSheet, type HintOption } from '../components/HintSheet'
 import { FailSheet } from '../components/FailSheet'
+import { BossGateSheet } from '../components/BossGateSheet'
+import { LevelContext } from '../components/LevelContext'
+import { BoltIcon, EyeIcon, FlagIcon } from '../components/icons'
 
 const HINT_OPTIONS: HintOption[] = [
-  { id: 'reveal-next', icon: '👁', title: 'Reveal next step', desc: 'Extends your path by one correct cell.', price: 25 },
-  { id: 'check', icon: '⚑', title: 'Check my work', desc: 'Flags any step that strayed from the path.', price: 40 },
+  { id: 'reveal-next', icon: <EyeIcon />, title: 'Reveal next step', desc: 'Extends your path by one correct cell.', price: 25 },
+  { id: 'check', icon: <FlagIcon />, title: 'Check my work', desc: 'Flags any step that strayed from the path.', price: 40 },
 ]
 
 // First-guess placeholder, not derived from real solve-time data — tune once the user
@@ -50,6 +54,23 @@ function isValidDifficulty(value: string | undefined): value is Difficulty {
   return value === 'easy' || value === 'medium' || value === 'hard'
 }
 
+function removeKey(set: Set<string>, key: string): Set<string> {
+  if (!set.has(key)) return set
+  const next = new Set(set)
+  next.delete(key)
+  return next
+}
+
+/** Path cells that appeared/disappeared between two path snapshots — used to drive
+ *  the retract ghost (on Undo) and the hint pulse (on a reveal hint). */
+function diffZipCells(prev: Coord[], next: Coord[]): { removed: Coord[]; added: Coord[] } {
+  const prevKeys = new Set(prev.map(coordKey))
+  const nextKeys = new Set(next.map(coordKey))
+  const removed = prev.filter((c) => !nextKeys.has(coordKey(c)))
+  const added = next.filter((c) => !prevKeys.has(coordKey(c)))
+  return { removed, added }
+}
+
 interface ReplayLocationState {
   replayLevel?: ZipLevelRecord
 }
@@ -69,14 +90,54 @@ export default function ZipGamePage() {
   const [hintsOpen, setHintsOpen] = useState(false)
   const [checkMessage, setCheckMessage] = useState<string | null>(null)
   const [rejectedCell, setRejectedCell] = useState<Coord | null>(null)
+  const [justReachedCheckpoint, setJustReachedCheckpoint] = useState<number | null>(null)
   const [modifiers, setModifiers] = useState<LevelModifiers | null>(null)
+  const [levelIndex, setLevelIndex] = useState<number | null>(null)
+  // Retract-ghost / hint-pulse targets, keyed by coordKey — see diffZipCells above and
+  // the path-diff effect below. `actingRef` tells that effect whether the change it's
+  // about to see was caused by Undo or a hint reveal (plain path entries leave it null).
+  const [retractedCells, setRetractedCells] = useState<Set<string>>(new Set())
+  const [hintedCells, setHintedCells] = useState<Set<string>>(new Set())
+  const actingRef = useRef<'undo' | 'hint' | null>(null)
+  const prevPathRef = useRef(state.path)
   const [failed, setFailed] = useState<{ reason: 'timeout' | 'mistake' } | null>(null)
+  const [awaitingBossConfirm, setAwaitingBossConfirm] = useState(false)
+  const [bossChapter, setBossChapter] = useState<number | null>(null)
+  const pendingLoadRef = useRef<{ inProgress: ZipInProgressLevel | undefined } | null>(null)
   const sourceRef = useRef<{ source: 'bank' | 'generated'; bankIndex?: number }>({ source: 'generated' })
   // Set during load if today's Daily Challenge was already completed — the win effect
   // reads this to skip re-awarding coins on a replay (recordDailyChallengeCompletion
   // would otherwise let a player farm coins by re-solving the same puzzle all day).
   const dailyAlreadyCompletedRef = useRef(false)
   const initialReplayLevelRef = useRef((location.state as ReplayLocationState | null)?.replayLevel)
+
+  const finishLoad = useCallback(
+    async (inProgress: ZipInProgressLevel | undefined) => {
+      if (inProgress) {
+        sourceRef.current = { source: inProgress.levelSource, bankIndex: inProgress.bankIndex }
+        dispatch({ type: 'LOAD', level: inProgress.level, snapshot: { path: inProgress.path, elapsedMs: inProgress.elapsedMs } })
+        return
+      }
+      const next = await getNextZipLevel(validDifficulty as Difficulty)
+      sourceRef.current = { source: next.source, bankIndex: next.bankIndex }
+      dispatch({ type: 'LOAD', level: next.level })
+    },
+    [validDifficulty],
+  )
+
+  const handleBeginBoss = useCallback(async () => {
+    const pending = pendingLoadRef.current
+    if (!pending) return
+    setAwaitingBossConfirm(false)
+    setLoading(true)
+    try {
+      await finishLoad(pending.inProgress)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setLoading(false)
+    }
+  }, [finishLoad])
 
   useEffect(() => {
     if (!validDifficulty && !isDaily) return
@@ -86,7 +147,9 @@ export default function ZipGamePage() {
       setLoading(true)
       setError(null)
       setModifiers(null)
+      setLevelIndex(null)
       setFailed(null)
+      setAwaitingBossConfirm(false)
       try {
         const replayLevel = initialReplayLevelRef.current
         if (replayLevel) {
@@ -113,23 +176,22 @@ export default function ZipGamePage() {
         ])
         if (cancelled) return
         setCoins(settings.coins)
+        setLevelIndex(progress.currentLevelIndex)
+        let levelModifiers: LevelModifiers | null = null
         if (validDifficulty === 'hard') {
-          setModifiers(modifiersForLevel(endlessProgress(progress.currentLevelIndex)))
+          const endless = endlessProgress(progress.currentLevelIndex)
+          levelModifiers = modifiersForLevel(endless)
+          setModifiers(levelModifiers)
+          setBossChapter(endless?.endlessChapter ?? null)
         }
 
-        if (inProgress) {
-          sourceRef.current = { source: inProgress.levelSource, bankIndex: inProgress.bankIndex }
-          dispatch({
-            type: 'LOAD',
-            level: inProgress.level,
-            snapshot: { path: inProgress.path, elapsedMs: inProgress.elapsedMs },
-          })
-        } else {
-          const next = await getNextZipLevel(validDifficulty as Difficulty)
-          if (cancelled) return
-          sourceRef.current = { source: next.source, bankIndex: next.bankIndex }
-          dispatch({ type: 'LOAD', level: next.level })
+        if (levelModifiers) {
+          pendingLoadRef.current = { inProgress }
+          setAwaitingBossConfirm(true)
+          return
         }
+
+        await finishLoad(inProgress)
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : String(e))
       } finally {
@@ -141,7 +203,29 @@ export default function ZipGamePage() {
     return () => {
       cancelled = true
     }
-  }, [validDifficulty, isDaily])
+  }, [validDifficulty, isDaily, finishLoad])
+
+  useEffect(() => {
+    if (actingRef.current) {
+      const { removed, added } = diffZipCells(prevPathRef.current, state.path)
+      if (actingRef.current === 'undo' && removed.length > 0) {
+        setRetractedCells((prev) => {
+          const next = new Set(prev)
+          removed.forEach((c) => next.add(coordKey(c)))
+          return next
+        })
+      }
+      if (actingRef.current === 'hint' && added.length > 0) {
+        setHintedCells((prev) => {
+          const next = new Set(prev)
+          added.forEach((c) => next.add(coordKey(c)))
+          return next
+        })
+      }
+      actingRef.current = null
+    }
+    prevPathRef.current = state.path
+  }, [state.path])
 
   useGameLifecycle(loading, error, state.status, dispatch)
 
@@ -201,6 +285,32 @@ export default function ZipGamePage() {
     }
   }, [validDifficulty])
 
+  const nextCheckpoint = useMemo(() => {
+    const idx = state.level.checkpoints.findIndex(
+      (cp) => !state.path.some((p) => p.row === cp.row && p.col === cp.col),
+    )
+    return idx === -1 ? null : idx + 1
+  }, [state.level.checkpoints, state.path])
+
+  // Pulses whichever checkpoint nextCheckpoint just advanced past — the ref establishes
+  // a silent baseline on every fresh level load/resume so resuming an in-progress path
+  // (already partway through) doesn't fire a pulse for checkpoints reached before this
+  // mount.
+  const prevNextCheckpointRef = useRef(nextCheckpoint)
+  const prevLevelIdRef = useRef(state.level.id)
+  useEffect(() => {
+    if (prevLevelIdRef.current !== state.level.id) {
+      prevLevelIdRef.current = state.level.id
+      prevNextCheckpointRef.current = nextCheckpoint
+      return
+    }
+    const prev = prevNextCheckpointRef.current
+    if (prev !== null && prev !== nextCheckpoint) {
+      setJustReachedCheckpoint(prev)
+    }
+    prevNextCheckpointRef.current = nextCheckpoint
+  }, [nextCheckpoint, state.level.id])
+
   const handleCellEnter = useCallback(
     (row: number, col: number) => {
       // Classify the move client-side first (using the same pure function the
@@ -232,7 +342,10 @@ export default function ZipGamePage() {
       }
 
       setCheckMessage(null)
-      if (id === 'reveal-next') dispatch({ type: 'HINT_REVEAL_NEXT', now: Date.now() })
+      if (id === 'reveal-next') {
+        actingRef.current = 'hint'
+        dispatch({ type: 'HINT_REVEAL_NEXT', now: Date.now() })
+      }
       setHintsOpen(false)
     },
     [state, playSound],
@@ -267,10 +380,16 @@ export default function ZipGamePage() {
         }
       />
 
+      {validDifficulty && levelIndex !== null && (
+        <div className="w-full max-w-[420px]">
+          <LevelContext difficulty={validDifficulty} currentLevelIndex={levelIndex} />
+        </div>
+      )}
+
       <div className="flex w-full max-w-[420px] flex-col items-center gap-6">
         {modifiers && (
-          <p className="w-full rounded-2xl bg-accent-tint px-4 py-2.5 text-center text-[13px] font-bold text-accent">
-            ⚡ Boss level · {modifierLabel(modifiers)}
+          <p className="flex w-full items-center justify-center gap-1.5 rounded-2xl bg-accent-tint px-4 py-2.5 text-center text-[13px] font-bold text-accent">
+            <BoltIcon /> Boss level · {modifierLabel(modifiers)}
           </p>
         )}
 
@@ -283,19 +402,29 @@ export default function ZipGamePage() {
             onCellEnter={handleCellEnter}
             rejectedCell={rejectedCell}
             onRejectedShakeEnd={() => setRejectedCell(null)}
+            justReachedCheckpoint={justReachedCheckpoint}
+            onCheckpointPulseEnd={() => setJustReachedCheckpoint(null)}
             solved={state.status === 'won'}
+            retractedCells={retractedCells}
+            onRetractEnd={(key) => setRetractedCells((prev) => removeKey(prev, key))}
+            hintedCells={hintedCells}
+            onHintPulseEnd={(key) => setHintedCells((prev) => removeKey(prev, key))}
           />
         )}
 
         <ZipControls
           canUndo={!modifiers?.noUndo && state.history.length > 0}
           canClear={state.path.length > 0}
-          onUndo={() => dispatch({ type: 'UNDO' })}
+          onUndo={() => {
+            actingRef.current = 'undo'
+            dispatch({ type: 'UNDO' })
+          }}
           onClear={() => dispatch({ type: 'CLEAR', now: Date.now() })}
           onOpenHints={() => {
             setCheckMessage(null)
             setHintsOpen(true)
           }}
+          nextCheckpoint={nextCheckpoint}
           hintPrice={HINT_OPTIONS[0].price}
           hintsDisabled={modifiers?.noHints}
         />
@@ -310,7 +439,11 @@ export default function ZipGamePage() {
         checkMessage={checkMessage}
       />
 
-      {failed && <FailSheet reason={failed.reason} onTryAgain={handleTryAgain} />}
+      {failed && <FailSheet reason={failed.reason} chaptersHref="/zip/chapters" onTryAgain={handleTryAgain} />}
+
+      {awaitingBossConfirm && modifiers && bossChapter !== null && (
+        <BossGateSheet chapterNumber={bossChapter} modifiers={modifiers} backHref="/zip/chapters" onBegin={handleBeginBoss} />
+      )}
     </main>
   )
 }

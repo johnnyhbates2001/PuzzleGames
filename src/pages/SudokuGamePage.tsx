@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import { useLocation, useParams } from 'react-router-dom'
 import { useAppNavigate as useNavigate } from '../hooks/useAppNavigate'
-import { SUDOKU_SIZE, type Difficulty, type SudokuLevelRecord } from '../engine/sudoku/types'
+import { SUDOKU_SIZE, boxIndex, coordKey, type Coord, type Difficulty, type SudokuLevelRecord } from '../engine/sudoku/types'
 import { getConflicts } from '../engine/sudoku/validator'
 import { createInitialState, getWrongCells, sudokuReducer } from '../state/sudokuReducer'
-import { boardValues, digitCounts } from '../state/sudokuTypes'
+import { boardValues, digitCounts, type SudokuCellState } from '../state/sudokuTypes'
 import {
   getDailyChallenge,
   getSettings,
@@ -13,6 +13,7 @@ import {
   recordSudokuCompletion,
   saveSudokuInProgress,
   spendCoins,
+  type SudokuInProgressLevel,
 } from '../storage/db'
 import { getNextSudokuLevel } from '../games/sudokuLevels'
 import { getDailySudokuLevel, todayDateKey } from '../games/dailyChallenge'
@@ -26,11 +27,14 @@ import { SudokuControls } from '../components/SudokuControls'
 import { GameHeader } from '../components/GameHeader'
 import { HintSheet, type HintOption } from '../components/HintSheet'
 import { FailSheet } from '../components/FailSheet'
+import { BossGateSheet } from '../components/BossGateSheet'
+import { LevelContext } from '../components/LevelContext'
+import { BoltIcon, EyeIcon, FlagIcon, SparkleIcon } from '../components/icons'
 
 const HINT_OPTIONS: HintOption[] = [
-  { id: 'reveal-cell', icon: '👁', title: 'Reveal a cell', desc: 'Fills one correct square of your choice.', price: 25 },
-  { id: 'check', icon: '⚑', title: 'Check my work', desc: 'Flags anything currently placed wrong.', price: 40 },
-  { id: 'solve-box', icon: '✧', title: 'Solve a box', desc: 'Completes one whole 3×3 box.', price: 120 },
+  { id: 'reveal-cell', icon: <EyeIcon />, title: 'Reveal a cell', desc: 'Fills one correct square of your choice.', price: 25 },
+  { id: 'check', icon: <FlagIcon />, title: 'Check my work', desc: 'Flags anything currently placed wrong.', price: 40 },
+  { id: 'solve-box', icon: <SparkleIcon />, title: 'Solve a box', desc: 'Completes one whole 3×3 box.', price: 120 },
 ]
 
 // First-guess placeholder, not derived from real solve-time data — Sudoku's 9x9 takes
@@ -53,6 +57,61 @@ function isValidDifficulty(value: string | undefined): value is Difficulty {
   return value === 'easy' || value === 'medium' || value === 'hard'
 }
 
+function removeSetKey(set: Set<string>, key: string): Set<string> {
+  if (!set.has(key)) return set
+  const next = new Set(set)
+  next.delete(key)
+  return next
+}
+
+function removeMapKey<T>(map: Map<string, T>, key: string): Map<string, T> {
+  if (!map.has(key)) return map
+  const next = new Map(map)
+  next.delete(key)
+  return next
+}
+
+/** Cells whose value changed between two board snapshots. `removed`/`added` cover the
+ *  0<->nonzero transitions Undo and a reveal-hint each produce; `changed` covers every
+ *  value change (including an overwrite), used to find the just-placed digit for the
+ *  unit-complete check. */
+function diffSudokuCells(prev: SudokuCellState[][], next: SudokuCellState[][]): { removed: Coord[]; added: Coord[]; changed: Coord[] } {
+  const removed: Coord[] = []
+  const added: Coord[] = []
+  const changed: Coord[] = []
+  for (let r = 0; r < prev.length; r++) {
+    for (let c = 0; c < prev[r].length; c++) {
+      const prevValue = prev[r][c]?.value ?? 0
+      const nextValue = next[r]?.[c]?.value ?? 0
+      if (prevValue === nextValue) continue
+      changed.push({ row: r, col: c })
+      if (prevValue !== 0 && nextValue === 0) removed.push({ row: r, col: c })
+      else if (prevValue === 0 && nextValue !== 0) added.push({ row: r, col: c })
+    }
+  }
+  return { removed, added, changed }
+}
+
+/** A row/col/box is complete once none of its 9 values are 0 and none repeat. */
+function isUnitComplete(values: number[]): boolean {
+  return values.every((v) => v !== 0) && new Set(values).size === SUDOKU_SIZE
+}
+
+function unitCoords(kind: 'row' | 'col' | 'box', row: number, col: number): Coord[] {
+  if (kind === 'row') return Array.from({ length: SUDOKU_SIZE }, (_, c) => ({ row, col: c }))
+  if (kind === 'col') return Array.from({ length: SUDOKU_SIZE }, (_, r) => ({ row: r, col }))
+  const box = boxIndex(row, col)
+  const coords: Coord[] = []
+  for (let r = 0; r < SUDOKU_SIZE; r++) {
+    for (let c = 0; c < SUDOKU_SIZE; c++) {
+      if (boxIndex(r, c) === box) coords.push({ row: r, col: c })
+    }
+  }
+  return coords
+}
+
+const UNIT_COMPLETE_STEP_MS = 55
+
 interface ReplayLocationState {
   replayLevel?: SudokuLevelRecord
 }
@@ -73,13 +132,54 @@ export default function SudokuGamePage() {
   const [checkMessage, setCheckMessage] = useState<string | null>(null)
   const [ripple, setRipple] = useState<{ row: number; col: number; seq: number } | null>(null)
   const [modifiers, setModifiers] = useState<LevelModifiers | null>(null)
+  const [levelIndex, setLevelIndex] = useState<number | null>(null)
+  // Retract-ghost (value keyed by coordKey — the removed digit is gone from real state
+  // by the time the diff sees it, so the ghost needs to carry its own content), hint-
+  // pulse targets, and unit-complete cells. `actingRef` tells the board-diff effect
+  // below what caused the change it's about to see (plain placements leave it null).
+  const [retractedCells, setRetractedCells] = useState<Map<string, number>>(new Map())
+  const [hintedCells, setHintedCells] = useState<Set<string>>(new Set())
+  const [completedUnitCells, setCompletedUnitCells] = useState<Map<string, number>>(new Map())
+  const actingRef = useRef<'undo' | 'hint' | 'digit' | null>(null)
+  const prevBoardRef = useRef(state.board)
   const [failed, setFailed] = useState<{ reason: 'timeout' | 'mistake' } | null>(null)
+  const [awaitingBossConfirm, setAwaitingBossConfirm] = useState(false)
+  const [bossChapter, setBossChapter] = useState<number | null>(null)
+  const pendingLoadRef = useRef<{ inProgress: SudokuInProgressLevel | undefined } | null>(null)
   const sourceRef = useRef<{ source: 'bank' | 'generated'; bankIndex?: number }>({ source: 'generated' })
   // Set during load if today's Daily Challenge was already completed — the win effect
   // reads this to skip re-awarding coins on a replay (recordDailyChallengeCompletion
   // would otherwise let a player farm coins by re-solving the same puzzle all day).
   const dailyAlreadyCompletedRef = useRef(false)
   const initialReplayLevelRef = useRef((location.state as ReplayLocationState | null)?.replayLevel)
+
+  const finishLoad = useCallback(
+    async (inProgress: SudokuInProgressLevel | undefined) => {
+      if (inProgress) {
+        sourceRef.current = { source: inProgress.levelSource, bankIndex: inProgress.bankIndex }
+        dispatch({ type: 'LOAD', level: inProgress.level, snapshot: { board: inProgress.board, elapsedMs: inProgress.elapsedMs } })
+        return
+      }
+      const next = await getNextSudokuLevel(validDifficulty as Difficulty)
+      sourceRef.current = { source: next.source, bankIndex: next.bankIndex }
+      dispatch({ type: 'LOAD', level: next.level })
+    },
+    [validDifficulty],
+  )
+
+  const handleBeginBoss = useCallback(async () => {
+    const pending = pendingLoadRef.current
+    if (!pending) return
+    setAwaitingBossConfirm(false)
+    setLoading(true)
+    try {
+      await finishLoad(pending.inProgress)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setLoading(false)
+    }
+  }, [finishLoad])
 
   useEffect(() => {
     if (!validDifficulty && !isDaily) return
@@ -89,7 +189,9 @@ export default function SudokuGamePage() {
       setLoading(true)
       setError(null)
       setModifiers(null)
+      setLevelIndex(null)
       setFailed(null)
+      setAwaitingBossConfirm(false)
       try {
         const replayLevel = initialReplayLevelRef.current
         if (replayLevel) {
@@ -117,23 +219,22 @@ export default function SudokuGamePage() {
         ])
         if (cancelled) return
         setCoins(settings.coins)
+        setLevelIndex(progress.currentLevelIndex)
+        let levelModifiers: LevelModifiers | null = null
         if (validDifficulty === 'hard') {
-          setModifiers(modifiersForLevel(endlessProgress(progress.currentLevelIndex)))
+          const endless = endlessProgress(progress.currentLevelIndex)
+          levelModifiers = modifiersForLevel(endless)
+          setModifiers(levelModifiers)
+          setBossChapter(endless?.endlessChapter ?? null)
         }
 
-        if (inProgress) {
-          sourceRef.current = { source: inProgress.levelSource, bankIndex: inProgress.bankIndex }
-          dispatch({
-            type: 'LOAD',
-            level: inProgress.level,
-            snapshot: { board: inProgress.board, elapsedMs: inProgress.elapsedMs },
-          })
-        } else {
-          const next = await getNextSudokuLevel(validDifficulty as Difficulty)
-          if (cancelled) return
-          sourceRef.current = { source: next.source, bankIndex: next.bankIndex }
-          dispatch({ type: 'LOAD', level: next.level })
+        if (levelModifiers) {
+          pendingLoadRef.current = { inProgress }
+          setAwaitingBossConfirm(true)
+          return
         }
+
+        await finishLoad(inProgress)
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : String(e))
       } finally {
@@ -145,7 +246,50 @@ export default function SudokuGamePage() {
     return () => {
       cancelled = true
     }
-  }, [validDifficulty, isDaily])
+  }, [validDifficulty, isDaily, finishLoad])
+
+  useEffect(() => {
+    if (actingRef.current) {
+      const prevBoard = prevBoardRef.current
+      const { removed, added, changed } = diffSudokuCells(prevBoard, state.board)
+      if (actingRef.current === 'undo' && removed.length > 0) {
+        setRetractedCells((prev) => {
+          const next = new Map(prev)
+          removed.forEach((c) => next.set(coordKey(c), prevBoard[c.row][c.col].value))
+          return next
+        })
+      }
+      if (actingRef.current === 'hint' && added.length > 0) {
+        setHintedCells((prev) => {
+          const next = new Set(prev)
+          added.forEach((c) => next.add(coordKey(c)))
+          return next
+        })
+      }
+      if (actingRef.current === 'digit' && changed.length > 0) {
+        const { row, col } = changed[0]
+        const prevValues = boardValues(prevBoard)
+        const nextValues = boardValues(state.board)
+        const newlyComplete = (['row', 'col', 'box'] as const)
+          .map((kind) => unitCoords(kind, row, col))
+          .filter((unit) => !isUnitComplete(unit.map((p) => prevValues[p.row][p.col])) && isUnitComplete(unit.map((p) => nextValues[p.row][p.col])))
+        if (newlyComplete.length > 0) {
+          const delays = new Map<string, number>()
+          for (const unit of newlyComplete) {
+            for (const p of unit) {
+              const delay = Math.max(Math.abs(p.row - row), Math.abs(p.col - col)) * UNIT_COMPLETE_STEP_MS
+              const key = coordKey(p)
+              const existing = delays.get(key)
+              if (existing === undefined || delay < existing) delays.set(key, delay)
+            }
+          }
+          setCompletedUnitCells((prev) => new Map([...prev, ...delays]))
+        }
+      }
+      actingRef.current = null
+    }
+    prevBoardRef.current = state.board
+  }, [state.board])
 
   useGameLifecycle(loading, error, state.status, dispatch)
 
@@ -234,6 +378,7 @@ export default function SudokuGamePage() {
       playSound('tap')
       buzz(10)
       maybeTriggerRipple(digit)
+      actingRef.current = 'digit'
       dispatch({ type: 'INPUT_DIGIT', digit, now: Date.now() })
     },
     [playSound, buzz, maybeTriggerRipple],
@@ -262,8 +407,13 @@ export default function SudokuGamePage() {
       }
 
       setCheckMessage(null)
-      if (id === 'reveal-cell') dispatch({ type: 'HINT_REVEAL_CELL', now: Date.now() })
-      else if (id === 'solve-box') dispatch({ type: 'HINT_SOLVE_BOX', now: Date.now() })
+      if (id === 'reveal-cell') {
+        actingRef.current = 'hint'
+        dispatch({ type: 'HINT_REVEAL_CELL', now: Date.now() })
+      } else if (id === 'solve-box') {
+        actingRef.current = 'hint'
+        dispatch({ type: 'HINT_SOLVE_BOX', now: Date.now() })
+      }
       setHintsOpen(false)
     },
     [state, playSound],
@@ -274,6 +424,7 @@ export default function SudokuGamePage() {
       if (e.key >= '1' && e.key <= '9') {
         const digit = Number(e.key)
         maybeTriggerRipple(digit)
+        actingRef.current = 'digit'
         dispatch({ type: 'INPUT_DIGIT', digit, now: Date.now() })
       } else if (e.key === 'Backspace' || e.key === 'Delete' || e.key === '0') {
         dispatch({ type: 'ERASE', now: Date.now() })
@@ -318,10 +469,16 @@ export default function SudokuGamePage() {
         }
       />
 
+      {validDifficulty && levelIndex !== null && (
+        <div className="w-full max-w-[420px]">
+          <LevelContext difficulty={validDifficulty} currentLevelIndex={levelIndex} />
+        </div>
+      )}
+
       <div className="flex w-full max-w-[420px] flex-col items-center gap-4">
         {modifiers && (
-          <p className="w-full rounded-2xl bg-accent-tint px-4 py-2.5 text-center text-[13px] font-bold text-accent">
-            ⚡ Boss level · {modifierLabel(modifiers)}
+          <p className="flex w-full items-center justify-center gap-1.5 rounded-2xl bg-accent-tint px-4 py-2.5 text-center text-[13px] font-bold text-accent">
+            <BoltIcon /> Boss level · {modifierLabel(modifiers)}
           </p>
         )}
 
@@ -336,23 +493,32 @@ export default function SudokuGamePage() {
               ripple={ripple}
               solved={state.status === 'won'}
               onCellClick={handleCellClick}
+              retractedCells={retractedCells}
+              onRetractEnd={(key) => setRetractedCells((prev) => removeMapKey(prev, key))}
+              hintedCells={hintedCells}
+              onHintPulseEnd={(key) => setHintedCells((prev) => removeSetKey(prev, key))}
+              completedUnitCells={completedUnitCells}
+              onUnitCompleteEnd={(key) => setCompletedUnitCells((prev) => removeMapKey(prev, key))}
             />
             <SudokuKeypad
               selectedValue={selectedValue}
-              noteMode={state.noteMode}
               digitCounts={placedCounts}
+              canErase={state.selected !== null}
               onDigit={handleDigit}
-              onToggleNoteMode={handleToggleNoteMode}
+              onErase={handleErase}
             />
           </>
         )}
 
         <SudokuControls
-          canErase={state.selected !== null}
           canUndo={!modifiers?.noUndo && state.history.length > 0}
-          onErase={handleErase}
-          onUndo={() => dispatch({ type: 'UNDO' })}
+          noteMode={state.noteMode}
+          onUndo={() => {
+            actingRef.current = 'undo'
+            dispatch({ type: 'UNDO' })
+          }}
           onClear={() => dispatch({ type: 'CLEAR', now: Date.now() })}
+          onToggleNoteMode={handleToggleNoteMode}
           onOpenHints={() => {
             setCheckMessage(null)
             setHintsOpen(true)
@@ -371,7 +537,16 @@ export default function SudokuGamePage() {
         checkMessage={checkMessage}
       />
 
-      {failed && <FailSheet reason={failed.reason} onTryAgain={handleTryAgain} />}
+      {failed && <FailSheet reason={failed.reason} chaptersHref="/sudoku/chapters" onTryAgain={handleTryAgain} />}
+
+      {awaitingBossConfirm && modifiers && bossChapter !== null && (
+        <BossGateSheet
+          chapterNumber={bossChapter}
+          modifiers={modifiers}
+          backHref="/sudoku/chapters"
+          onBegin={handleBeginBoss}
+        />
+      )}
     </main>
   )
 }

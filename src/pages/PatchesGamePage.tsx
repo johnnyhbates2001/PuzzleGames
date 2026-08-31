@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react'
 import { useLocation, useParams } from 'react-router-dom'
 import { useAppNavigate as useNavigate } from '../hooks/useAppNavigate'
-import type { Difficulty, PatchesLevelRecord } from '../engine/patches/types'
+import { rectCells, type Difficulty, type PatchesLevelRecord } from '../engine/patches/types'
 import { createInitialState, getWrongCells, patchesReducer } from '../state/patchesReducer'
+import type { PlacedRect } from '../engine/patches/validator'
 import {
   getDailyChallenge,
   getPatchesInProgress,
@@ -11,6 +12,7 @@ import {
   recordPatchesCompletion,
   savePatchesInProgress,
   spendCoins,
+  type PatchesInProgressLevel,
 } from '../storage/db'
 import { getNextPatchesLevel } from '../games/patchesLevels'
 import { getDailyPatchesLevel, todayDateKey } from '../games/dailyChallenge'
@@ -23,10 +25,19 @@ import { PatchesControls } from '../components/PatchesControls'
 import { GameHeader } from '../components/GameHeader'
 import { HintSheet, type HintOption } from '../components/HintSheet'
 import { FailSheet } from '../components/FailSheet'
+import { BossGateSheet } from '../components/BossGateSheet'
+import { LevelContext } from '../components/LevelContext'
+import { BoltIcon, FlagIcon, SparkleIcon } from '../components/icons'
 
 const HINT_OPTIONS: HintOption[] = [
-  { id: 'check', icon: '⚑', title: 'Check my work', desc: 'Flags any placed patch with the wrong size.', price: 40 },
-  { id: 'reveal-clue', icon: '✧', title: 'Reveal a patch', desc: "Places one clue's correct rectangle.", price: 120 },
+  { id: 'check', icon: <FlagIcon />, title: 'Check my work', desc: 'Flags any placed patch with the wrong size.', price: 40 },
+  { id: 'reveal-clue', icon: <SparkleIcon />, title: 'Reveal a patch', desc: "Places one clue's correct rectangle.", price: 120 },
+]
+
+const SHAPE_LEGEND: { shape: 'square' | 'wide' | 'tall'; label: string; className: string }[] = [
+  { shape: 'square', label: 'Square', className: 'aspect-square' },
+  { shape: 'wide', label: 'Wide', className: 'aspect-[3/2]' },
+  { shape: 'tall', label: 'Tall', className: 'aspect-[2/3]' },
 ]
 
 // First-guess placeholder, not derived from real solve-time data — tune once the user
@@ -48,6 +59,18 @@ function isValidDifficulty(value: string | undefined): value is Difficulty {
   return value === 'easy' || value === 'medium' || value === 'hard'
 }
 
+function removeKey(set: Set<string>, key: string): Set<string> {
+  if (!set.has(key)) return set
+  const next = new Set(set)
+  next.delete(key)
+  return next
+}
+
+interface RetractGhost {
+  id: number
+  rect: PlacedRect
+}
+
 interface ReplayLocationState {
   replayLevel?: PatchesLevelRecord
 }
@@ -67,13 +90,55 @@ export default function PatchesGamePage() {
   const [hintsOpen, setHintsOpen] = useState(false)
   const [checkMessage, setCheckMessage] = useState<string | null>(null)
   const [modifiers, setModifiers] = useState<LevelModifiers | null>(null)
+  const [levelIndex, setLevelIndex] = useState<number | null>(null)
+  // Retract-ghost (full removed rects, since a ghost needs its own fill color and
+  // footprint — the real rect is already gone from state.placed by the time we know)
+  // and hint-pulse targets (just coordKeys — the real content is already there).
+  // `actingRef` tells the placed-diff effect below whether the change it's about to
+  // see was caused by Undo or a hint reveal (plain placements/removals leave it null).
+  const [retractedRects, setRetractedRects] = useState<RetractGhost[]>([])
+  const [hintedCells, setHintedCells] = useState<Set<string>>(new Set())
+  const actingRef = useRef<'undo' | 'hint' | null>(null)
+  const prevPlacedRef = useRef(state.placed)
+  const retractIdRef = useRef(0)
   const [failed, setFailed] = useState<{ reason: 'timeout' | 'mistake' } | null>(null)
+  const [awaitingBossConfirm, setAwaitingBossConfirm] = useState(false)
+  const [bossChapter, setBossChapter] = useState<number | null>(null)
+  const pendingLoadRef = useRef<{ inProgress: PatchesInProgressLevel | undefined } | null>(null)
   const sourceRef = useRef<{ source: 'bank' | 'generated'; bankIndex?: number }>({ source: 'generated' })
   // Set during load if today's Daily Challenge was already completed — the win effect
   // reads this to skip re-awarding coins on a replay (recordDailyChallengeCompletion
   // would otherwise let a player farm coins by re-solving the same puzzle all day).
   const dailyAlreadyCompletedRef = useRef(false)
   const initialReplayLevelRef = useRef((location.state as ReplayLocationState | null)?.replayLevel)
+
+  const finishLoad = useCallback(
+    async (inProgress: PatchesInProgressLevel | undefined) => {
+      if (inProgress) {
+        sourceRef.current = { source: inProgress.levelSource, bankIndex: inProgress.bankIndex }
+        dispatch({ type: 'LOAD', level: inProgress.level, snapshot: { placed: inProgress.placed, elapsedMs: inProgress.elapsedMs } })
+        return
+      }
+      const next = await getNextPatchesLevel(validDifficulty as Difficulty)
+      sourceRef.current = { source: next.source, bankIndex: next.bankIndex }
+      dispatch({ type: 'LOAD', level: next.level })
+    },
+    [validDifficulty],
+  )
+
+  const handleBeginBoss = useCallback(async () => {
+    const pending = pendingLoadRef.current
+    if (!pending) return
+    setAwaitingBossConfirm(false)
+    setLoading(true)
+    try {
+      await finishLoad(pending.inProgress)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setLoading(false)
+    }
+  }, [finishLoad])
 
   useEffect(() => {
     if (!validDifficulty && !isDaily) return
@@ -83,7 +148,9 @@ export default function PatchesGamePage() {
       setLoading(true)
       setError(null)
       setModifiers(null)
+      setLevelIndex(null)
       setFailed(null)
+      setAwaitingBossConfirm(false)
       try {
         const replayLevel = initialReplayLevelRef.current
         if (replayLevel) {
@@ -111,23 +178,22 @@ export default function PatchesGamePage() {
         ])
         if (cancelled) return
         setCoins(settings.coins)
+        setLevelIndex(progress.currentLevelIndex)
+        let levelModifiers: LevelModifiers | null = null
         if (validDifficulty === 'hard') {
-          setModifiers(modifiersForLevel(endlessProgress(progress.currentLevelIndex)))
+          const endless = endlessProgress(progress.currentLevelIndex)
+          levelModifiers = modifiersForLevel(endless)
+          setModifiers(levelModifiers)
+          setBossChapter(endless?.endlessChapter ?? null)
         }
 
-        if (inProgress) {
-          sourceRef.current = { source: inProgress.levelSource, bankIndex: inProgress.bankIndex }
-          dispatch({
-            type: 'LOAD',
-            level: inProgress.level,
-            snapshot: { placed: inProgress.placed, elapsedMs: inProgress.elapsedMs },
-          })
-        } else {
-          const next = await getNextPatchesLevel(validDifficulty as Difficulty)
-          if (cancelled) return
-          sourceRef.current = { source: next.source, bankIndex: next.bankIndex }
-          dispatch({ type: 'LOAD', level: next.level })
+        if (levelModifiers) {
+          pendingLoadRef.current = { inProgress }
+          setAwaitingBossConfirm(true)
+          return
         }
+
+        await finishLoad(inProgress)
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : String(e))
       } finally {
@@ -139,7 +205,28 @@ export default function PatchesGamePage() {
     return () => {
       cancelled = true
     }
-  }, [validDifficulty, isDaily])
+  }, [validDifficulty, isDaily, finishLoad])
+
+  useEffect(() => {
+    if (actingRef.current) {
+      const prevPlaced = prevPlacedRef.current
+      const nextPlaced = state.placed
+      if (actingRef.current === 'undo' && prevPlaced.length > nextPlaced.length) {
+        const removed = prevPlaced.slice(nextPlaced.length)
+        setRetractedRects((prev) => [...prev, ...removed.map((rect) => ({ id: retractIdRef.current++, rect }))])
+      }
+      if (actingRef.current === 'hint' && nextPlaced.length > prevPlaced.length) {
+        const added = nextPlaced.slice(prevPlaced.length)
+        setHintedCells((prev) => {
+          const next = new Set(prev)
+          added.forEach((p) => rectCells(p.rect).forEach((c) => next.add(`${c.row},${c.col}`)))
+          return next
+        })
+      }
+      actingRef.current = null
+    }
+    prevPlacedRef.current = state.placed
+  }, [state.placed])
 
   useGameLifecycle(loading, error, state.status, dispatch)
 
@@ -239,7 +326,10 @@ export default function PatchesGamePage() {
       }
 
       setCheckMessage(null)
-      if (id === 'reveal-clue') dispatch({ type: 'HINT_REVEAL_CLUE', now: Date.now() })
+      if (id === 'reveal-clue') {
+        actingRef.current = 'hint'
+        dispatch({ type: 'HINT_REVEAL_CLUE', now: Date.now() })
+      }
       setHintsOpen(false)
     },
     [state, playSound],
@@ -274,39 +364,63 @@ export default function PatchesGamePage() {
         }
       />
 
+      {validDifficulty && levelIndex !== null && (
+        <div className="w-full max-w-[420px]">
+          <LevelContext difficulty={validDifficulty} currentLevelIndex={levelIndex} />
+        </div>
+      )}
+
       <div className="flex w-full max-w-[420px] flex-col items-center gap-6">
         {modifiers && (
-          <p className="w-full rounded-2xl bg-accent-tint px-4 py-2.5 text-center text-[13px] font-bold text-accent">
-            ⚡ Boss level · {modifierLabel(modifiers)}
+          <p className="flex w-full items-center justify-center gap-1.5 rounded-2xl bg-accent-tint px-4 py-2.5 text-center text-[13px] font-bold text-accent">
+            <BoltIcon /> Boss level · {modifierLabel(modifiers)}
           </p>
         )}
 
         {loading ? (
           <p className="text-ink-muted">Loading level…</p>
         ) : (
-          <PatchesBoard
-            level={state.level}
-            placed={state.placed}
-            dragAnchor={state.dragAnchor}
-            dragEnd={state.dragEnd}
-            onStartDrag={handleStartDrag}
-            onDragMove={handleDragMove}
-            onCommitDrag={handleCommitDrag}
-            onCancelDrag={handleCancelDrag}
-            onRemoveRect={handleRemoveRect}
-            solved={state.status === 'won'}
-          />
+          <>
+            <PatchesBoard
+              level={state.level}
+              placed={state.placed}
+              dragAnchor={state.dragAnchor}
+              dragEnd={state.dragEnd}
+              onStartDrag={handleStartDrag}
+              onDragMove={handleDragMove}
+              onCommitDrag={handleCommitDrag}
+              onCancelDrag={handleCancelDrag}
+              onRemoveRect={handleRemoveRect}
+              solved={state.status === 'won'}
+              retractedRects={retractedRects}
+              onRetractEnd={(id) => setRetractedRects((prev) => prev.filter((g) => g.id !== id))}
+              hintedCells={hintedCells}
+              onHintPulseEnd={(key) => setHintedCells((prev) => removeKey(prev, key))}
+            />
+            <div className="flex gap-4">
+              {SHAPE_LEGEND.map(({ shape, label, className }) => (
+                <span key={shape} className="flex items-center gap-1.5 text-[11.5px] font-semibold text-ink-muted opacity-75">
+                  <span className={`h-3.5 rounded-[3px] border-2 border-ink-muted ${className}`} />
+                  {label}
+                </span>
+              ))}
+            </div>
+          </>
         )}
 
         <PatchesControls
           canUndo={!modifiers?.noUndo && state.placed.length > 0}
           canClear={state.placed.length > 0}
-          onUndo={() => dispatch({ type: 'UNDO' })}
+          onUndo={() => {
+            actingRef.current = 'undo'
+            dispatch({ type: 'UNDO' })
+          }}
           onClear={() => dispatch({ type: 'CLEAR' })}
           onOpenHints={() => {
             setCheckMessage(null)
             setHintsOpen(true)
           }}
+          cluesLeft={Math.max(0, state.level.clues.length - state.placed.length)}
           hintPrice={HINT_OPTIONS[0].price}
           hintsDisabled={modifiers?.noHints}
         />
@@ -321,7 +435,16 @@ export default function PatchesGamePage() {
         checkMessage={checkMessage}
       />
 
-      {failed && <FailSheet reason={failed.reason} onTryAgain={handleTryAgain} />}
+      {failed && <FailSheet reason={failed.reason} chaptersHref="/patches/chapters" onTryAgain={handleTryAgain} />}
+
+      {awaitingBossConfirm && modifiers && bossChapter !== null && (
+        <BossGateSheet
+          chapterNumber={bossChapter}
+          modifiers={modifiers}
+          backHref="/patches/chapters"
+          onBegin={handleBeginBoss}
+        />
+      )}
     </main>
   )
 }

@@ -1,4 +1,6 @@
 import type { MarkMode } from '../state/nonogramReducer'
+import { ControlBar, ControlIconButton } from './ControlBar'
+import { EraseIcon, UndoIcon, XMarkIcon } from './icons'
 
 interface NonogramControlsProps {
   canUndo: boolean
@@ -25,47 +27,48 @@ export function NonogramControls({
   hintsDisabled,
 }: NonogramControlsProps) {
   return (
-    <div className="flex items-center gap-1 rounded-full bg-surface p-2 shadow-card">
-      <button
-        type="button"
-        onClick={onUndo}
-        disabled={!canUndo}
-        className="rounded-full px-4 py-1.5 text-sm font-semibold text-ink-muted disabled:opacity-40"
-      >
-        Undo
-      </button>
-      <button
-        type="button"
-        onClick={onClear}
-        disabled={!canClear}
-        className="rounded-full px-4 py-1.5 text-sm font-semibold text-ink-muted disabled:opacity-40"
-      >
-        Clear
-      </button>
-      {/* Swaps what a tap/drag marks — fill or X — rather than relying on tapping
-          through both marks on every cell (see nonogramReducer's CELL_CLICK). */}
-      <button
-        type="button"
-        onClick={onToggleMarkMode}
-        aria-pressed={markMode === 'x'}
-        aria-label={markMode === 'x' ? 'Marking X — switch to fill' : 'Marking fill — switch to X'}
-        className={`ml-auto flex size-9 shrink-0 items-center justify-center rounded-full text-base leading-none font-bold ${
-          markMode === 'x' ? 'bg-accent-tint text-accent' : 'text-ink-muted'
-        }`}
-      >
-        {markMode === 'x' ? '✕' : '▪'}
-      </button>
-      <button
-        type="button"
-        onClick={onOpenHints}
-        disabled={hintsDisabled}
-        className="flex items-center gap-1.5 rounded-full bg-accent-tint px-4 py-1.5 text-sm font-semibold text-accent disabled:opacity-40"
-      >
-        Hint
-        <span className="rounded-full bg-accent px-1.5 py-0.5 text-[10px] font-bold text-white">
-          {hintsDisabled ? '🔒' : hintPrice}
-        </span>
-      </button>
-    </div>
+    <ControlBar
+      left={
+        <>
+          <ControlIconButton onClick={onUndo} disabled={!canUndo} label="Undo">
+            <UndoIcon />
+          </ControlIconButton>
+          <ControlIconButton onClick={onClear} disabled={!canClear} label="Clear">
+            <EraseIcon />
+          </ControlIconButton>
+        </>
+      }
+      center={
+        // Swaps what a tap/drag marks — fill or X — rather than relying on tapping
+        // through both marks on every cell (see nonogramReducer's CELL_CLICK).
+        <div className="flex h-9 items-center rounded-full bg-bg p-[3px]" role="group" aria-label="Mark mode">
+          <button
+            type="button"
+            onClick={() => markMode !== 'fill' && onToggleMarkMode()}
+            aria-pressed={markMode === 'fill'}
+            aria-label="Fill"
+            className={`flex h-full items-center justify-center rounded-full px-3.5 ${
+              markMode === 'fill' ? 'bg-accent text-white' : 'text-ink-muted'
+            }`}
+          >
+            <span className="size-2.5 rounded-[2px] bg-current" />
+          </button>
+          <button
+            type="button"
+            onClick={() => markMode !== 'x' && onToggleMarkMode()}
+            aria-pressed={markMode === 'x'}
+            aria-label="Mark X"
+            className={`flex h-full items-center justify-center rounded-full px-3.5 ${
+              markMode === 'x' ? 'bg-accent text-white' : 'text-ink-muted'
+            }`}
+          >
+            <XMarkIcon size={13} />
+          </button>
+        </div>
+      }
+      onOpenHints={onOpenHints}
+      hintPrice={hintPrice}
+      hintsDisabled={hintsDisabled}
+    />
   )
 }

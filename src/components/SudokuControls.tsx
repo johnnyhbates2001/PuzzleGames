@@ -1,9 +1,12 @@
+import { ControlBar, ControlIconButton } from './ControlBar'
+import { EraseIcon, PencilIcon, UndoIcon } from './icons'
+
 interface SudokuControlsProps {
-  canErase: boolean
   canUndo: boolean
-  onErase: () => void
+  noteMode: boolean
   onUndo: () => void
   onClear: () => void
+  onToggleNoteMode: () => void
   onOpenHints: () => void
   hintPrice: number
   /** Set by an active endless-boss "No Hints" modifier — see games/chapters.ts. */
@@ -11,47 +14,45 @@ interface SudokuControlsProps {
 }
 
 export function SudokuControls({
-  canErase,
   canUndo,
-  onErase,
+  noteMode,
   onUndo,
   onClear,
+  onToggleNoteMode,
   onOpenHints,
   hintPrice,
   hintsDisabled,
 }: SudokuControlsProps) {
   return (
-    <div className="flex items-center gap-1 rounded-full bg-surface p-2 shadow-card">
-      <button
-        type="button"
-        onClick={onErase}
-        disabled={!canErase}
-        className="rounded-full px-3 py-1.5 text-sm font-semibold text-ink-muted disabled:opacity-40"
-      >
-        Erase
-      </button>
-      <button
-        type="button"
-        onClick={onUndo}
-        disabled={!canUndo}
-        className="rounded-full px-3 py-1.5 text-sm font-semibold text-ink-muted disabled:opacity-40"
-      >
-        Undo
-      </button>
-      <button type="button" onClick={onClear} className="rounded-full px-3 py-1.5 text-sm font-semibold text-ink-muted">
-        Clear
-      </button>
-      <button
-        type="button"
-        onClick={onOpenHints}
-        disabled={hintsDisabled}
-        className="flex items-center gap-1.5 rounded-full bg-accent-tint px-3 py-1.5 text-sm font-semibold text-accent disabled:opacity-40"
-      >
-        Hint
-        <span className="rounded-full bg-accent px-1.5 py-0.5 text-[10px] font-bold text-white">
-          {hintsDisabled ? '🔒' : hintPrice}
-        </span>
-      </button>
-    </div>
+    <ControlBar
+      left={
+        <>
+          <ControlIconButton onClick={onUndo} disabled={!canUndo} label="Undo">
+            <UndoIcon />
+          </ControlIconButton>
+          {/* Hold, don't tap — clearing the whole board is destructive and shares a
+              row with Undo, so a mis-tap here is easy to make. */}
+          <ControlIconButton onClick={onClear} holdMs={550} label="Hold to clear">
+            <EraseIcon />
+          </ControlIconButton>
+        </>
+      }
+      center={
+        <button
+          type="button"
+          onClick={onToggleNoteMode}
+          aria-pressed={noteMode}
+          className={`flex h-9 items-center gap-1.5 rounded-full px-3.5 text-[13px] font-bold ${
+            noteMode ? 'bg-accent-tint text-accent' : 'text-ink-muted'
+          }`}
+        >
+          <PencilIcon size={15} />
+          Notes
+        </button>
+      }
+      onOpenHints={onOpenHints}
+      hintPrice={hintPrice}
+      hintsDisabled={hintsDisabled}
+    />
   )
 }

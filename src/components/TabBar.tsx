@@ -1,10 +1,11 @@
 import { AppLink as Link } from './AppLink'
+import { AwardsTabIcon, PlayTabIcon, ShopTabIcon, StatsTabIcon } from './icons'
 
 const TABS = [
-  { key: 'play', label: 'Play', icon: '▦', to: '/' },
-  { key: 'shop', label: 'Shop', icon: '✦', to: '/shop' },
-  { key: 'stats', label: 'Stats', icon: '◷', to: '/stats' },
-  { key: 'awards', label: 'Awards', icon: '🏆', to: '/achievements' },
+  { key: 'play', label: 'Play', Icon: PlayTabIcon, to: '/' },
+  { key: 'shop', label: 'Shop', Icon: ShopTabIcon, to: '/shop' },
+  { key: 'stats', label: 'Stats', Icon: StatsTabIcon, to: '/stats' },
+  { key: 'awards', label: 'Awards', Icon: AwardsTabIcon, to: '/achievements' },
 ] as const
 
 interface TabBarProps {
@@ -36,13 +37,13 @@ export function TabBar({ active }: TabBarProps) {
           }`}
         >
           <span
-            className="text-base leading-none"
+            className="flex leading-none"
             style={{
               transform: i === activeIndex ? 'scale(1.14) translateY(-1px)' : undefined,
               transition: 'transform 420ms cubic-bezier(0.34, 1.56, 0.64, 1)',
             }}
           >
-            {tab.icon}
+            <tab.Icon />
           </span>
           <span className="text-[11px] font-semibold">{tab.label}</span>
         </Link>

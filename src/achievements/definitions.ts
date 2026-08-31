@@ -11,11 +11,16 @@ export interface AchievementContext {
   totalSkinCount: number
 }
 
+/** Keyed to one of 5 shared SVG marks (see AwardsPage.tsx's ICON_BY_GROUP) rather than
+ *  each achievement carrying its own emoji — see design_handoff README: "eighteen emoji
+ *  become five drawn marks reused across the set." */
+export type AchievementIconGroup = 'star' | 'target' | 'flame' | 'gem' | 'crown'
+
 export interface AchievementDef {
   id: string
   title: string
   description: string
-  icon: string
+  iconGroup: AchievementIconGroup
   check: (ctx: AchievementContext) => boolean
 }
 
@@ -32,7 +37,7 @@ function perGameExpertAchievements(): AchievementDef[] {
     id: `${id}-expert`,
     title: `${label} Expert`,
     description: `Solve 20 ${label} puzzles.`,
-    icon: '🎯',
+    iconGroup: 'target',
     check: (ctx) => (ctx.solvedByGame[id] ?? 0) >= 20,
   }))
 }
@@ -42,42 +47,42 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     id: 'first-steps',
     title: 'First Steps',
     description: 'Solve your first puzzle.',
-    icon: '🌱',
+    iconGroup: 'star',
     check: (ctx) => ctx.totalSolved >= 1,
   },
   {
     id: 'getting-started',
     title: 'Getting Started',
     description: 'Solve 10 puzzles.',
-    icon: '✨',
+    iconGroup: 'star',
     check: (ctx) => ctx.totalSolved >= 10,
   },
   {
     id: 'enthusiast',
     title: 'Enthusiast',
     description: 'Solve 50 puzzles.',
-    icon: '⭐',
+    iconGroup: 'star',
     check: (ctx) => ctx.totalSolved >= 50,
   },
   {
     id: 'century',
     title: 'Century',
     description: 'Solve 100 puzzles.',
-    icon: '💯',
+    iconGroup: 'star',
     check: (ctx) => ctx.totalSolved >= 100,
   },
   {
     id: 'puzzle-master',
     title: 'Puzzle Master',
     description: 'Solve 250 puzzles.',
-    icon: '👑',
+    iconGroup: 'crown',
     check: (ctx) => ctx.totalSolved >= 250,
   },
   {
     id: 'all-rounder',
     title: 'All-Rounder',
     description: 'Solve at least one puzzle in every game.',
-    icon: '🧩',
+    iconGroup: 'star',
     check: (ctx) => Object.keys(GAME_LABELS).every((id) => (ctx.solvedByGame[id] ?? 0) >= 1),
   },
   ...perGameExpertAchievements(),
@@ -85,42 +90,42 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     id: 'week-warrior',
     title: 'Week Warrior',
     description: 'Reach a 7-day solving streak.',
-    icon: '🔥',
+    iconGroup: 'flame',
     check: (ctx) => ctx.streak >= 7,
   },
   {
     id: 'unstoppable',
     title: 'Unstoppable',
     description: 'Reach a 30-day solving streak.',
-    icon: '🚀',
+    iconGroup: 'flame',
     check: (ctx) => ctx.streak >= 30,
   },
   {
     id: 'flawless',
     title: 'Flawless',
     description: 'Solve 25 puzzles without a hint.',
-    icon: '💎',
+    iconGroup: 'gem',
     check: (ctx) => ctx.unassistedCompletions >= 25,
   },
   {
     id: 'collector',
     title: 'Collector',
     description: 'Own every board skin.',
-    icon: '🎨',
+    iconGroup: 'crown',
     check: (ctx) => ctx.totalSkinCount > 0 && ctx.ownedSkinCount >= ctx.totalSkinCount,
   },
   {
     id: 'daily-devotee',
     title: 'Daily Devotee',
     description: 'Reach a 7-day Daily Challenge streak in any one game.',
-    icon: '📅',
+    iconGroup: 'flame',
     check: (ctx) => ctx.maxDailyStreak >= 7,
   },
   {
     id: 'dedicated',
     title: 'Dedicated',
     description: 'Reach a 30-day Daily Challenge streak in any one game.',
-    icon: '🏅',
+    iconGroup: 'flame',
     check: (ctx) => ctx.maxDailyStreak >= 30,
   },
 ]

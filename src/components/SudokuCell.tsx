@@ -1,4 +1,7 @@
 import { memo } from 'react'
+import { useLingeringFlag } from '../hooks/useLingeringFlag'
+
+const CONFLICT_TINT_HOLD_MS = 900
 
 interface SudokuCellProps {
   row: number
@@ -19,6 +22,20 @@ interface SudokuCellProps {
   /** Ms to delay the solve-sweep's entrance by — set only once the puzzle is solved,
    *  proportional to (row + col) so the wave travels diagonally (see SudokuBoard.tsx). */
   sweepDelayMs?: number
+  /** The digit an Undo just cleared from this cell, if any — the real value is already
+   *  0 by the time we know, so this renders a fading ghost of it instead of nothing.
+   *  Cleared via onRetractEnd once the animation finishes. */
+  retractGhostValue?: number
+  onRetractEnd?: () => void
+  /** True for one render right after a reveal-hint filled this cell — pulses the real
+   *  (now-placed) digit gold. Cleared via onHintPulseEnd. */
+  hinted?: boolean
+  onHintPulseEnd?: () => void
+  /** Ms to delay this cell's completion bump by — set only when a direct digit
+   *  placement just completed a row/col/box this cell belongs to (see SudokuGamePage).
+   *  Cleared via onUnitCompleteEnd once the animation finishes. */
+  unitCompleteDelayMs?: number
+  onUnitCompleteEnd?: () => void
   onClick: (row: number, col: number) => void
 }
 
@@ -49,8 +66,23 @@ function SudokuCellImpl({
   rippleDelayMs,
   rippleSeq,
   sweepDelayMs,
+  retractGhostValue,
+  onRetractEnd,
+  hinted,
+  onHintPulseEnd,
+  unitCompleteDelayMs,
+  onUnitCompleteEnd,
   onClick,
 }: SudokuCellProps) {
+  const tinted = useLingeringFlag(conflict, CONFLICT_TINT_HOLD_MS)
+  const showGhost = retractGhostValue !== undefined && value === 0
+  const delayMs = sweepDelayMs ?? unitCompleteDelayMs
+
+  function handleAnimationEnd(e: React.AnimationEvent<HTMLButtonElement>) {
+    if (e.animationName === 'hint-pulse') onHintPulseEnd?.()
+    else if (e.animationName === 'unit-complete') onUnitCompleteEnd?.()
+  }
+
   return (
     <button
       type="button"
@@ -58,8 +90,9 @@ function SudokuCellImpl({
       data-row={row}
       data-col={col}
       aria-label={value === 0 ? 'Empty' : String(value)}
-      className={`relative flex aspect-square items-center justify-center text-[min(4.5vw,20px)] leading-none select-none ${borderClasses(row, col)} ${backgroundClass(selected, sameValue, peer)} ${conflict ? 'anim-shake ring-[2.5px] ring-inset ring-danger' : ''} ${sweepDelayMs !== undefined ? 'anim-solve-sweep' : ''}`}
-      style={{ animationDelay: sweepDelayMs !== undefined ? `${sweepDelayMs}ms` : undefined }}
+      className={`relative flex aspect-square items-center justify-center text-[min(4.5vw,20px)] leading-none select-none ${borderClasses(row, col)} ${backgroundClass(selected, sameValue, peer)} ${conflict ? 'anim-shake' : ''} ${tinted ? 'ring-[2.5px] ring-inset ring-danger' : ''} ${sweepDelayMs !== undefined ? 'anim-solve-sweep' : ''} ${hinted ? 'anim-hint-pulse' : ''} ${unitCompleteDelayMs !== undefined ? 'anim-unit-complete' : ''}`}
+      style={{ animationDelay: delayMs !== undefined ? `${delayMs}ms` : undefined }}
+      onAnimationEnd={hinted || unitCompleteDelayMs !== undefined ? handleAnimationEnd : undefined}
     >
       {rippleDelayMs !== undefined && (
         <span
@@ -70,9 +103,13 @@ function SudokuCellImpl({
       )}
       {value !== 0 ? (
         <span
-          className={`${given ? '' : 'anim-pop-in'} ${given ? 'font-bold text-ink' : conflict ? 'font-semibold text-danger' : 'font-semibold text-accent'}`}
+          className={`${given ? '' : 'anim-pop-in'} ${given ? 'font-bold text-ink' : tinted ? 'font-semibold text-danger' : 'font-semibold text-accent'}`}
         >
           {value}
+        </span>
+      ) : showGhost ? (
+        <span className="anim-retract flex font-semibold text-slate-900" onAnimationEnd={onRetractEnd}>
+          {retractGhostValue}
         </span>
       ) : notes.size > 0 ? (
         <div className="grid h-full w-full grid-cols-3 grid-rows-3 p-0.5">

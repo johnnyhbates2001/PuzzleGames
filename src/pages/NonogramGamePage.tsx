@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react'
 import { useLocation, useParams } from 'react-router-dom'
 import { useAppNavigate as useNavigate } from '../hooks/useAppNavigate'
-import type { Difficulty, NonogramLevelRecord } from '../engine/nonogram/types'
+import { coordKey, type Coord, type Difficulty, type NonogramLevelRecord } from '../engine/nonogram/types'
 import { createInitialState, getWrongCells, nonogramReducer } from '../state/nonogramReducer'
+import type { Mark } from '../engine/nonogram/validator'
 import {
   getDailyChallenge,
   getNonogramInProgress,
@@ -11,6 +12,7 @@ import {
   recordNonogramCompletion,
   saveNonogramInProgress,
   spendCoins,
+  type NonogramInProgressLevel,
 } from '../storage/db'
 import { getNextNonogramLevel } from '../games/nonogramLevels'
 import { getDailyNonogramLevel, todayDateKey } from '../games/dailyChallenge'
@@ -23,11 +25,14 @@ import { NonogramControls } from '../components/NonogramControls'
 import { GameHeader } from '../components/GameHeader'
 import { HintSheet, type HintOption } from '../components/HintSheet'
 import { FailSheet } from '../components/FailSheet'
+import { BossGateSheet } from '../components/BossGateSheet'
+import { LevelContext } from '../components/LevelContext'
+import { BoltIcon, EyeIcon, FlagIcon, SparkleIcon } from '../components/icons'
 
 const HINT_OPTIONS: HintOption[] = [
-  { id: 'reveal-cell', icon: '👁', title: 'Reveal a cell', desc: 'Fills or X-marks one correct square.', price: 25 },
-  { id: 'check', icon: '⚑', title: 'Check my work', desc: 'Flags anything currently marked wrong.', price: 40 },
-  { id: 'reveal-line', icon: '✧', title: 'Reveal a line', desc: 'Completes one whole row or column.', price: 120 },
+  { id: 'reveal-cell', icon: <EyeIcon />, title: 'Reveal a cell', desc: 'Fills or X-marks one correct square.', price: 25 },
+  { id: 'check', icon: <FlagIcon />, title: 'Check my work', desc: 'Flags anything currently marked wrong.', price: 40 },
+  { id: 'reveal-line', icon: <SparkleIcon />, title: 'Reveal a line', desc: 'Completes one whole row or column.', price: 120 },
 ]
 
 // First-guess placeholder, not derived from real solve-time data — tune once the user
@@ -50,6 +55,39 @@ function isValidDifficulty(value: string | undefined): value is Difficulty {
   return value === 'easy' || value === 'medium' || value === 'hard'
 }
 
+function removeKey(set: Set<string>, key: string): Set<string> {
+  if (!set.has(key)) return set
+  const next = new Set(set)
+  next.delete(key)
+  return next
+}
+
+function removeMapKey<T>(map: Map<string, T>, key: string): Map<string, T> {
+  if (!map.has(key)) return map
+  const next = new Map(map)
+  next.delete(key)
+  return next
+}
+
+/** Cells whose mark appeared/disappeared between two grid snapshots — used to drive
+ *  the retract ghost (on Undo) and the hint pulse (on a reveal hint). A single
+ *  HINT_REVEAL_LINE fills/marks a whole row or column in one dispatch, so `added`
+ *  naturally covers every cell in that line — no special-casing needed. */
+function diffNonogramCells(prev: Mark[][], next: Mark[][]): { removed: { coord: Coord; mark: Mark }[]; added: Coord[] } {
+  const removed: { coord: Coord; mark: Mark }[] = []
+  const added: Coord[] = []
+  for (let r = 0; r < prev.length; r++) {
+    for (let c = 0; c < prev[r].length; c++) {
+      const prevMark = prev[r][c]
+      const nextMark = next[r]?.[c] ?? 'empty'
+      if (prevMark === nextMark) continue
+      if (nextMark === 'empty') removed.push({ coord: { row: r, col: c }, mark: prevMark })
+      else if (prevMark === 'empty') added.push({ row: r, col: c })
+    }
+  }
+  return { removed, added }
+}
+
 interface ReplayLocationState {
   replayLevel?: NonogramLevelRecord
 }
@@ -69,13 +107,53 @@ export default function NonogramGamePage() {
   const [hintsOpen, setHintsOpen] = useState(false)
   const [checkMessage, setCheckMessage] = useState<string | null>(null)
   const [modifiers, setModifiers] = useState<LevelModifiers | null>(null)
+  const [levelIndex, setLevelIndex] = useState<number | null>(null)
+  // Retract-ghost (mark keyed by coordKey — the removed mark is gone from real state
+  // by the time the diff sees it, so the ghost needs to carry its own content) and
+  // hint-pulse targets. `actingRef` tells the grid-diff effect below what caused the
+  // change it's about to see (plain marks/drags leave it null).
+  const [retractedCells, setRetractedCells] = useState<Map<string, Mark>>(new Map())
+  const [hintedCells, setHintedCells] = useState<Set<string>>(new Set())
+  const actingRef = useRef<'undo' | 'hint' | null>(null)
+  const prevGridRef = useRef(state.grid)
   const [failed, setFailed] = useState<{ reason: 'timeout' | 'mistake' } | null>(null)
+  const [awaitingBossConfirm, setAwaitingBossConfirm] = useState(false)
+  const [bossChapter, setBossChapter] = useState<number | null>(null)
+  const pendingLoadRef = useRef<{ inProgress: NonogramInProgressLevel | undefined } | null>(null)
   const sourceRef = useRef<{ source: 'bank' | 'generated'; bankIndex?: number }>({ source: 'generated' })
   // Set during load if today's Daily Challenge was already completed — the win effect
   // reads this to skip re-awarding coins on a replay (recordDailyChallengeCompletion
   // would otherwise let a player farm coins by re-solving the same puzzle all day).
   const dailyAlreadyCompletedRef = useRef(false)
   const initialReplayLevelRef = useRef((location.state as ReplayLocationState | null)?.replayLevel)
+
+  const finishLoad = useCallback(
+    async (inProgress: NonogramInProgressLevel | undefined) => {
+      if (inProgress) {
+        sourceRef.current = { source: inProgress.levelSource, bankIndex: inProgress.bankIndex }
+        dispatch({ type: 'LOAD', level: inProgress.level, snapshot: { grid: inProgress.grid, elapsedMs: inProgress.elapsedMs } })
+        return
+      }
+      const next = await getNextNonogramLevel(validDifficulty as Difficulty)
+      sourceRef.current = { source: next.source, bankIndex: next.bankIndex }
+      dispatch({ type: 'LOAD', level: next.level })
+    },
+    [validDifficulty],
+  )
+
+  const handleBeginBoss = useCallback(async () => {
+    const pending = pendingLoadRef.current
+    if (!pending) return
+    setAwaitingBossConfirm(false)
+    setLoading(true)
+    try {
+      await finishLoad(pending.inProgress)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setLoading(false)
+    }
+  }, [finishLoad])
 
   useEffect(() => {
     if (!validDifficulty && !isDaily) return
@@ -85,7 +163,9 @@ export default function NonogramGamePage() {
       setLoading(true)
       setError(null)
       setModifiers(null)
+      setLevelIndex(null)
       setFailed(null)
+      setAwaitingBossConfirm(false)
       try {
         const replayLevel = initialReplayLevelRef.current
         if (replayLevel) {
@@ -113,23 +193,22 @@ export default function NonogramGamePage() {
         ])
         if (cancelled) return
         setCoins(settings.coins)
+        setLevelIndex(progress.currentLevelIndex)
+        let levelModifiers: LevelModifiers | null = null
         if (validDifficulty === 'hard') {
-          setModifiers(modifiersForLevel(endlessProgress(progress.currentLevelIndex)))
+          const endless = endlessProgress(progress.currentLevelIndex)
+          levelModifiers = modifiersForLevel(endless)
+          setModifiers(levelModifiers)
+          setBossChapter(endless?.endlessChapter ?? null)
         }
 
-        if (inProgress) {
-          sourceRef.current = { source: inProgress.levelSource, bankIndex: inProgress.bankIndex }
-          dispatch({
-            type: 'LOAD',
-            level: inProgress.level,
-            snapshot: { grid: inProgress.grid, elapsedMs: inProgress.elapsedMs },
-          })
-        } else {
-          const next = await getNextNonogramLevel(validDifficulty as Difficulty)
-          if (cancelled) return
-          sourceRef.current = { source: next.source, bankIndex: next.bankIndex }
-          dispatch({ type: 'LOAD', level: next.level })
+        if (levelModifiers) {
+          pendingLoadRef.current = { inProgress }
+          setAwaitingBossConfirm(true)
+          return
         }
+
+        await finishLoad(inProgress)
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : String(e))
       } finally {
@@ -141,7 +220,29 @@ export default function NonogramGamePage() {
     return () => {
       cancelled = true
     }
-  }, [validDifficulty, isDaily])
+  }, [validDifficulty, isDaily, finishLoad])
+
+  useEffect(() => {
+    if (actingRef.current) {
+      const { removed, added } = diffNonogramCells(prevGridRef.current, state.grid)
+      if (actingRef.current === 'undo' && removed.length > 0) {
+        setRetractedCells((prev) => {
+          const next = new Map(prev)
+          removed.forEach(({ coord, mark }) => next.set(coordKey(coord), mark))
+          return next
+        })
+      }
+      if (actingRef.current === 'hint' && added.length > 0) {
+        setHintedCells((prev) => {
+          const next = new Set(prev)
+          added.forEach((c) => next.add(coordKey(c)))
+          return next
+        })
+      }
+      actingRef.current = null
+    }
+    prevGridRef.current = state.grid
+  }, [state.grid])
 
   useGameLifecycle(loading, error, state.status, dispatch)
 
@@ -239,8 +340,13 @@ export default function NonogramGamePage() {
       }
 
       setCheckMessage(null)
-      if (id === 'reveal-cell') dispatch({ type: 'HINT_REVEAL_CELL', now: Date.now() })
-      else if (id === 'reveal-line') dispatch({ type: 'HINT_REVEAL_LINE', now: Date.now() })
+      if (id === 'reveal-cell') {
+        actingRef.current = 'hint'
+        dispatch({ type: 'HINT_REVEAL_CELL', now: Date.now() })
+      } else if (id === 'reveal-line') {
+        actingRef.current = 'hint'
+        dispatch({ type: 'HINT_REVEAL_LINE', now: Date.now() })
+      }
       setHintsOpen(false)
     },
     [state, playSound],
@@ -275,10 +381,16 @@ export default function NonogramGamePage() {
         }
       />
 
+      {validDifficulty && levelIndex !== null && (
+        <div className="w-full max-w-[420px]">
+          <LevelContext difficulty={validDifficulty} currentLevelIndex={levelIndex} />
+        </div>
+      )}
+
       <div className="flex w-full max-w-[420px] flex-col items-center gap-6">
         {modifiers && (
-          <p className="w-full rounded-2xl bg-accent-tint px-4 py-2.5 text-center text-[13px] font-bold text-accent">
-            ⚡ Boss level · {modifierLabel(modifiers)}
+          <p className="flex w-full items-center justify-center gap-1.5 rounded-2xl bg-accent-tint px-4 py-2.5 text-center text-[13px] font-bold text-accent">
+            <BoltIcon /> Boss level · {modifierLabel(modifiers)}
           </p>
         )}
 
@@ -293,6 +405,10 @@ export default function NonogramGamePage() {
             onDragStart={handleDragStart}
             onCellDragEnter={handleCellDragEnter}
             solved={state.status === 'won'}
+            retractedCells={retractedCells}
+            onRetractEnd={(key) => setRetractedCells((prev) => removeMapKey(prev, key))}
+            hintedCells={hintedCells}
+            onHintPulseEnd={(key) => setHintedCells((prev) => removeKey(prev, key))}
           />
         )}
 
@@ -300,7 +416,10 @@ export default function NonogramGamePage() {
           canUndo={!modifiers?.noUndo && state.history.length > 0}
           canClear={state.grid.some((row) => row.some((mark) => mark !== 'empty'))}
           markMode={state.markMode}
-          onUndo={() => dispatch({ type: 'UNDO' })}
+          onUndo={() => {
+            actingRef.current = 'undo'
+            dispatch({ type: 'UNDO' })
+          }}
           onClear={() => dispatch({ type: 'CLEAR', now: Date.now() })}
           onToggleMarkMode={handleToggleMarkMode}
           onOpenHints={() => {
@@ -321,7 +440,16 @@ export default function NonogramGamePage() {
         checkMessage={checkMessage}
       />
 
-      {failed && <FailSheet reason={failed.reason} onTryAgain={handleTryAgain} />}
+      {failed && <FailSheet reason={failed.reason} chaptersHref="/nonogram/chapters" onTryAgain={handleTryAgain} />}
+
+      {awaitingBossConfirm && modifiers && bossChapter !== null && (
+        <BossGateSheet
+          chapterNumber={bossChapter}
+          modifiers={modifiers}
+          backHref="/nonogram/chapters"
+          onBegin={handleBeginBoss}
+        />
+      )}
     </main>
   )
 }

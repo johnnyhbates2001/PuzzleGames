@@ -94,6 +94,7 @@ export default function CompletePage() {
         isDaily={isDaily}
         dailyStreak={dailyStreak}
         chapterComplete={chapterComplete}
+        chaptersHref="/queens/chapters"
         onNextLevel={() => navigate(`/queens/${validDifficulty}`, { replace: true })}
         onReplay={() =>
           navigate(isDaily ? '/queens/daily' : `/queens/${validDifficulty}`, { state: { replayLevel: level }, replace: true })

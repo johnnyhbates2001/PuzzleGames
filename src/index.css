@@ -249,6 +249,16 @@
       transform: translateY(0);
     }
   }
+  @keyframes sheet-down {
+    from {
+      transform: translateY(0);
+      opacity: 1;
+    }
+    to {
+      transform: translateY(100%);
+      opacity: 1;
+    }
+  }
   @keyframes rise {
     from {
       opacity: 0;
@@ -275,6 +285,9 @@
   .anim-sheet-up {
     animation: sheet-up 320ms cubic-bezier(0.32, 0.72, 0, 1);
   }
+  .anim-sheet-down {
+    animation: sheet-down 240ms cubic-bezier(0.32, 0.72, 0, 1) both;
+  }
 
   /* Queens — auto-X propagation ripple (see Board.tsx's per-cell animationDelay) */
   @keyframes x-in {
@@ -291,19 +304,76 @@
     animation: x-in 120ms ease-out both;
   }
 
-  /* Zip — path segment draw-in */
-  @keyframes zip-stub-in {
-    from {
-      transform: scale(0);
-      opacity: 0;
+  /* Zip — checkpoint disc pulse the instant the path reaches it */
+  @keyframes checkpoint-hit {
+    0% {
+      transform: scale(1);
+      box-shadow:
+        0 0 0 0 var(--color-accent),
+        0 0 0 0 var(--color-accent);
     }
-    to {
+    40% {
+      transform: scale(1.12);
+      box-shadow:
+        0 0 0 6px color-mix(in oklch, var(--color-accent) 35%, transparent),
+        0 0 0 12px color-mix(in oklch, var(--color-accent) 15%, transparent);
+    }
+    100% {
+      transform: scale(1);
+      box-shadow:
+        0 0 0 6px transparent,
+        0 0 0 12px transparent;
+    }
+  }
+  .anim-checkpoint-hit {
+    animation: checkpoint-hit 260ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  /* Undo/retract — a ghost of whatever was just removed (queen/digit/mark/tint), shown
+     briefly in place of the now-empty real cell (see each Game*Page.tsx's diff-on-undo
+     wiring) since the underlying state has already changed by the time we know what to
+     animate away. */
+  @keyframes retract {
+    from {
       transform: scale(1);
       opacity: 1;
     }
+    to {
+      transform: scale(0.68);
+      opacity: 0;
+    }
   }
-  .anim-zip-in {
-    animation: zip-stub-in 140ms ease-out both;
+  .anim-retract {
+    animation: retract 180ms cubic-bezier(0.4, 0, 0.2, 1) both;
+  }
+
+  /* Hint target pulse — three coin-gold rings on whichever cell(s) a reveal-hint just
+     filled (see each Game*Page.tsx's diff-on-hint wiring). */
+  @keyframes hint-pulse {
+    0%,
+    100% {
+      box-shadow: 0 0 0 0 oklch(80% 0.14 85 / 0.7);
+    }
+    50% {
+      box-shadow: 0 0 0 5px oklch(80% 0.14 85 / 0.35);
+    }
+  }
+  .anim-hint-pulse {
+    animation: hint-pulse 260ms ease-out 3;
+  }
+
+  /* Sudoku — a row/column/box that just became fully (and correctly) filled */
+  @keyframes unit-complete {
+    0%,
+    100% {
+      transform: scale(1);
+    }
+    50% {
+      transform: scale(1.08);
+    }
+  }
+  .anim-unit-complete {
+    animation: unit-complete 200ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
   }
 
   /* Patches — rect fill-in, staggered by distance from the drag anchor */
@@ -437,19 +507,19 @@
     animation: pip-fill 380ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
   }
 
-  /* Shop — swatch tiles flip in sequence when a skin is newly equipped (see
-     ShopPage's justEquippedId) */
-  @keyframes skin-flip {
-    0%,
-    100% {
-      transform: rotateY(0deg);
+  /* Shop — swatch strip cross-fades when a skin is newly equipped (see ShopPage's
+     justEquippedId); the card's equipped ring reuses .anim-ring-flash (defined above,
+     alongside Awards' unlock animation). */
+  @keyframes cross-fade {
+    from {
+      opacity: 0;
     }
-    50% {
-      transform: rotateY(-88deg);
+    to {
+      opacity: 1;
     }
   }
-  .anim-skin-flip {
-    animation: skin-flip 460ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  .anim-cross-fade {
+    animation: cross-fade 200ms ease-out both;
   }
 
   /* Complete sheet coin flight — each dot travels from the reward pill to the header
