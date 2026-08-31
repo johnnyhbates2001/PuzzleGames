@@ -100,6 +100,23 @@ function pushHistory(state: SudokuGameState): SudokuCellState[][][] {
   return next.length > MAX_HISTORY ? next.slice(next.length - MAX_HISTORY) : next
 }
 
+/** Mutates `board` in place, removing `digit` from the pencil marks of every row/col/box
+ *  peer of (row, col) — placing a digit rules it out as a candidate for those cells. */
+function clearPeerNotes(board: SudokuCellState[][], row: number, col: number, digit: number): void {
+  const box = boxIndex(row, col)
+  for (let r = 0; r < SUDOKU_SIZE; r++) {
+    for (let c = 0; c < SUDOKU_SIZE; c++) {
+      if (r === row && c === col) continue
+      if (r !== row && c !== col && boxIndex(r, c) !== box) continue
+      const cell = board[r][c]
+      if (!cell.notes.has(digit)) continue
+      const notes = new Set(cell.notes)
+      notes.delete(digit)
+      board[r][c] = { ...cell, notes }
+    }
+  }
+}
+
 export function sudokuReducer(state: SudokuGameState, action: SudokuAction): SudokuGameState {
   switch (action.type) {
     case 'SELECT_CELL': {
@@ -127,6 +144,7 @@ export function sudokuReducer(state: SudokuGameState, action: SudokuAction): Sud
       const board = cloneBoard(state.board)
       // Filling a cell always clears its own pencil marks — they're moot once solved.
       board[row][col] = { ...cell, value: action.digit, notes: new Set() }
+      clearPeerNotes(board, row, col, action.digit)
       return withWinCheck({ ...state, board, history: pushHistory(state) }, action.now)
     }
 
@@ -175,7 +193,9 @@ export function sudokuReducer(state: SudokuGameState, action: SudokuAction): Sud
       if (!target) return state
       const board = cloneBoard(state.board)
       const cell = board[target.row][target.col]
-      board[target.row][target.col] = { ...cell, value: state.level.solution[target.row][target.col], notes: new Set() }
+      const digit = state.level.solution[target.row][target.col]
+      board[target.row][target.col] = { ...cell, value: digit, notes: new Set() }
+      clearPeerNotes(board, target.row, target.col, digit)
       return withWinCheck({ ...state, board, history: pushHistory(state), hintsUsed: state.hintsUsed + 1 }, action.now)
     }
 
@@ -188,7 +208,10 @@ export function sudokuReducer(state: SudokuGameState, action: SudokuAction): Sud
         for (let c = 0; c < SUDOKU_SIZE; c++) {
           if (boxIndex(r, c) !== box) continue
           const cell = board[r][c]
-          if (!cell.given) board[r][c] = { ...cell, value: state.level.solution[r][c], notes: new Set() }
+          if (cell.given) continue
+          const digit = state.level.solution[r][c]
+          board[r][c] = { ...cell, value: digit, notes: new Set() }
+          clearPeerNotes(board, r, c, digit)
         }
       }
       return withWinCheck({ ...state, board, history: pushHistory(state), hintsUsed: state.hintsUsed + 1 }, action.now)

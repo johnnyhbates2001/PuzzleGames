@@ -133,7 +133,7 @@ function SudokuCellImpl({
           {retractGhostValue}
         </span>
       ) : notes.size > 0 ? (
-        <div className="grid h-full w-full grid-cols-3 grid-rows-3 p-0.5">
+        <div className="absolute inset-0 grid grid-cols-3 grid-rows-3 p-0.5">
           {Array.from({ length: 9 }, (_, i) => i + 1).map((d) => (
             <span key={d} className="flex items-center justify-center text-[min(1.6vw,8px)] leading-none text-ink-muted">
               {notes.has(d) ? d : ''}
