@@ -42,6 +42,9 @@
   --color-diff-easy: oklch(76% 0.15 145);
   --color-diff-medium: oklch(76% 0.15 95);
   --color-diff-hard: oklch(76% 0.15 25);
+  --color-wordle-correct: var(--wordle-correct);
+  --color-wordle-present: var(--wordle-present);
+  --color-wordle-absent: var(--wordle-absent);
   --font-display: 'Poppins', ui-sans-serif, system-ui, sans-serif;
   --shadow-card: 0 1px 2px rgb(0 0 0 / 0.04), 0 8px 24px rgb(0 0 0 / 0.06);
 }
@@ -67,6 +70,12 @@
   --heat-4: oklch(58% 0.19 300);
   --streak: oklch(58% 0.19 300);
   --coin: oklch(58% 0.16 85);
+  /* Wordle tile feedback — deliberately theme-invariant (unlike --accent, which
+     recolors per equipped theme): green/yellow/gray is the game's own identity, not
+     a color anyone should be able to reskin away. */
+  --wordle-correct: oklch(62% 0.15 145);
+  --wordle-present: oklch(76% 0.15 85);
+  --wordle-absent: oklch(58% 0.01 260);
 }
 
 /* Yellow palette — an explicit warm/gold theme option (see useTheme.ts), for users who'd
@@ -112,6 +121,9 @@
     --heat-4: oklch(72% 0.16 300);
     --streak: oklch(76% 0.15 300);
     --coin: oklch(80% 0.14 85);
+    --wordle-correct: oklch(58% 0.14 145);
+    --wordle-present: oklch(70% 0.14 85);
+    --wordle-absent: oklch(38% 0.012 260);
   }
 }
 
@@ -132,6 +144,9 @@
   --heat-4: oklch(72% 0.16 300);
   --streak: oklch(76% 0.15 300);
   --coin: oklch(80% 0.14 85);
+  --wordle-correct: oklch(58% 0.14 145);
+  --wordle-present: oklch(70% 0.14 85);
+  --wordle-absent: oklch(38% 0.012 260);
 }
 
 :root[data-theme='yellow'] [data-game='nonogram'] {
@@ -159,6 +174,10 @@
   --color-accent: oklch(53% 0.19 340);
   --color-accent-tint: oklch(94% 0.045 340);
 }
+[data-game='wordle'] {
+  --color-accent: oklch(56% 0.14 145);
+  --color-accent-tint: oklch(93% 0.04 145);
+}
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']):not([data-theme='yellow']) [data-game='sudoku'] {
@@ -177,6 +196,10 @@
     --color-accent: oklch(68% 0.16 340);
     --color-accent-tint: oklch(31% 0.05 340);
   }
+  :root:not([data-theme='light']):not([data-theme='yellow']) [data-game='wordle'] {
+    --color-accent: oklch(66% 0.13 145);
+    --color-accent-tint: oklch(29% 0.045 145);
+  }
 }
 
 :root[data-theme='dark'] [data-game='sudoku'] {
@@ -194,6 +217,10 @@
 :root[data-theme='dark'] [data-game='nonogram'] {
   --color-accent: oklch(68% 0.16 340);
   --color-accent-tint: oklch(31% 0.05 340);
+}
+:root[data-theme='dark'] [data-game='wordle'] {
+  --color-accent: oklch(66% 0.13 145);
+  --color-accent-tint: oklch(29% 0.045 145);
 }
 
 /* Accent themes (Shop Expansion) — a purchasable app-wide accent recolor, deliberately
@@ -424,6 +451,23 @@
   }
   .anim-ripple {
     animation: ripple 260ms ease-out both;
+  }
+
+  /* Wordle — per-tile reveal on a submitted guess (see WordleBoard, which staggers
+     animationDelay across the row's 5 tiles). The tile's final color is already applied
+     when this starts (simpler than an authentic mid-flip color swap, in keeping with
+     this file's "best-effort... rather than exact spring physics" motion philosophy). */
+  @keyframes wordle-reveal {
+    0%,
+    100% {
+      transform: rotateX(0deg);
+    }
+    50% {
+      transform: rotateX(90deg);
+    }
+  }
+  .anim-wordle-reveal {
+    animation: wordle-reveal 500ms ease-in-out both;
   }
 
   /* Solve sweep — a diagonal wave across the board the instant a level is solved (see

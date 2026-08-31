@@ -44,7 +44,7 @@ export default defineConfig({
       manifest: {
         name: 'Puzzle Box',
         short_name: 'Puzzle Box',
-        description: 'An offline-first collection of daily puzzles: Queens, Sudoku, Zip, Patches, and Nonogram.',
+        description: 'An offline-first collection of daily puzzles: Queens, Sudoku, Zip, Patches, Nonogram, and Wordle.',
         display: 'standalone',
         start_url: '/',
         theme_color: '#7C4DD6',

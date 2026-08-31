@@ -6,13 +6,15 @@ import type { PatchesLevelRecord } from '../engine/patches/types'
 import type { PlacedRect } from '../engine/patches/validator'
 import type { NonogramLevelRecord } from '../engine/nonogram/types'
 import type { Mark as NonogramMark } from '../engine/nonogram/validator'
+import type { WordleLevelRecord } from '../engine/wordle/types'
+import type { SubmittedGuess } from '../engine/wordle/validator'
 import type { CellState } from '../state/types'
 import type { SudokuCellState } from '../state/sudokuTypes'
 import type { DailyGameId } from '../games/dailyChallenge'
 import type { CosmeticCategory } from '../cosmetics'
 
 const DB_NAME = 'queens-pwa'
-const DB_VERSION = 8
+const DB_VERSION = 9
 
 export interface Settings {
   autoPlaceX: boolean
@@ -119,6 +121,22 @@ export interface NonogramInProgressLevel {
   savedAt: number
 }
 
+export interface WordleInProgressLevel {
+  difficulty: Difficulty
+  /** Full level record, always — including runtime-generated (non-bank) levels, which have
+   *  nothing else to resume from. Also insulates resume from a future bank re-shuffle. */
+  level: WordleLevelRecord
+  levelSource: 'bank' | 'generated'
+  /** Bookkeeping only — never used to reconstruct the level. */
+  bankIndex?: number
+  guesses: SubmittedGuess[]
+  currentGuess: string
+  hintedIndices: Set<number>
+  hintsUsed: number
+  elapsedMs: number
+  savedAt: number
+}
+
 export interface DailyChallengeRecord {
   gameId: DailyGameId
   completedAt: number
@@ -141,6 +159,8 @@ interface QueensDB extends DBSchema {
   patchesInProgress: { key: Difficulty; value: PatchesInProgressLevel }
   nonogramProgress: { key: Difficulty; value: DifficultyProgress }
   nonogramInProgress: { key: Difficulty; value: NonogramInProgressLevel }
+  wordleProgress: { key: Difficulty; value: DifficultyProgress }
+  wordleInProgress: { key: Difficulty; value: WordleInProgressLevel }
   /** Key = local date string ('YYYY-MM-DD'). Value = number of levels completed that day,
    *  across every game — feeds the home-screen streak and the stats-page heatmap. */
   dailyActivity: { key: string; value: number }
@@ -209,6 +229,10 @@ function getDB(): Promise<IDBPDatabase<QueensDB>> {
           // resets Daily Challenge history rather than trying to migrate it.
           db.deleteObjectStore('dailyChallenge')
           db.createObjectStore('dailyChallenge')
+        }
+        if (oldVersion < 9) {
+          db.createObjectStore('wordleProgress')
+          db.createObjectStore('wordleInProgress')
         }
       },
     })
@@ -432,8 +456,14 @@ export function computeCoinAward(difficulty: Difficulty, isPersonalBest: boolean
   return !assisted && isPersonalBest ? base + PERSONAL_BEST_BONUS : base
 }
 
-type ProgressStoreName = 'progress' | 'sudokuProgress' | 'zipProgress' | 'patchesProgress' | 'nonogramProgress'
-type InProgressStoreName = 'inProgress' | 'sudokuInProgress' | 'zipInProgress' | 'patchesInProgress' | 'nonogramInProgress'
+type ProgressStoreName = 'progress' | 'sudokuProgress' | 'zipProgress' | 'patchesProgress' | 'nonogramProgress' | 'wordleProgress'
+type InProgressStoreName =
+  | 'inProgress'
+  | 'sudokuInProgress'
+  | 'zipInProgress'
+  | 'patchesInProgress'
+  | 'nonogramInProgress'
+  | 'wordleInProgress'
 
 /** Shared by the four record*Completion functions below, which differ only in which
  *  pair of stores they touch. In one transaction: advances the bank pointer, clears the
@@ -635,8 +665,37 @@ export async function clearNonogramInProgress(difficulty: Difficulty): Promise<v
   await db.delete('nonogramInProgress', difficulty)
 }
 
+export async function getWordleProgress(difficulty: Difficulty): Promise<DifficultyProgress> {
+  const db = await getDB()
+  return (await db.get('wordleProgress', difficulty)) ?? defaultProgress(difficulty)
+}
+
+/** See recordCompletion — same shape, Wordle's stores. */
+export async function recordWordleCompletion(
+  difficulty: Difficulty,
+  elapsedMs: number,
+  assisted = false,
+): Promise<CompletionResult> {
+  return finishCompletion('wordleProgress', 'wordleInProgress', difficulty, elapsedMs, assisted)
+}
+
+export async function getWordleInProgress(difficulty: Difficulty): Promise<WordleInProgressLevel | undefined> {
+  const db = await getDB()
+  return db.get('wordleInProgress', difficulty)
+}
+
+export async function saveWordleInProgress(entry: WordleInProgressLevel): Promise<void> {
+  const db = await getDB()
+  await db.put('wordleInProgress', entry, entry.difficulty)
+}
+
+export async function clearWordleInProgress(difficulty: Difficulty): Promise<void> {
+  const db = await getDB()
+  await db.delete('wordleInProgress', difficulty)
+}
+
 const ALL_DIFFICULTIES: Difficulty[] = ['easy', 'medium', 'hard']
-const ALL_PROGRESS_GETTERS = [getProgress, getSudokuProgress, getZipProgress, getPatchesProgress, getNonogramProgress]
+const ALL_PROGRESS_GETTERS = [getProgress, getSudokuProgress, getZipProgress, getPatchesProgress, getNonogramProgress, getWordleProgress]
 
 /** Total completed levels across every game and difficulty — used for the Stats page's
  *  "Solved" tile and the Neon skin's solve-count unlock. */
@@ -770,6 +829,8 @@ const ALL_STORE_NAMES = [
   'dailyChallenge',
   'nonogramProgress',
   'nonogramInProgress',
+  'wordleProgress',
+  'wordleInProgress',
 ] as const
 
 /** Wipes every stored value — coins, skins, streaks, and every game's progress — back

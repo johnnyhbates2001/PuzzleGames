@@ -10,6 +10,7 @@ import {
   getStreak,
   getSudokuProgress,
   getZipProgress,
+  getWordleProgress,
   type DifficultyProgress,
 } from '../storage/db'
 import type { Difficulty } from '../engine/types'
@@ -23,6 +24,7 @@ const PROGRESS_GETTER: Record<string, (d: Difficulty) => Promise<DifficultyProgr
   zip: getZipProgress,
   patches: getPatchesProgress,
   nonogram: getNonogramProgress,
+  wordle: getWordleProgress,
 }
 
 async function solvedForGame(gameId: string): Promise<number> {

@@ -4,13 +4,15 @@ import { generateLevel as generateSudokuLevel } from '../engine/sudoku/generator
 import { generateLevel as generateZipLevel } from '../engine/zip/generator'
 import { generateLevel as generatePatchesLevel } from '../engine/patches/generator'
 import { generateLevel as generateNonogramLevel } from '../engine/nonogram/generator'
+import { generateLevel as generateWordleLevel } from '../engine/wordle/generator'
 import type { LevelRecord } from '../engine/types'
 import type { SudokuLevelRecord } from '../engine/sudoku/types'
 import type { ZipLevelRecord } from '../engine/zip/types'
 import type { PatchesLevelRecord } from '../engine/patches/types'
 import type { NonogramLevelRecord } from '../engine/nonogram/types'
+import type { WordleLevelRecord } from '../engine/wordle/types'
 
-export const DAILY_GAMES = ['queens', 'sudoku', 'zip', 'patches', 'nonogram'] as const
+export const DAILY_GAMES = ['queens', 'sudoku', 'zip', 'patches', 'nonogram', 'wordle'] as const
 export type DailyGameId = (typeof DAILY_GAMES)[number]
 
 /** The engine difficulty every Daily Challenge is generated at — fixed rather than
@@ -88,4 +90,15 @@ export function getDailyNonogramLevel(dateKey: string): NonogramLevelRecord {
     if (level) return { ...level, id: `daily-nonogram-${dateKey}` }
   }
   throw new Error(`Failed to generate the ${dateKey} Nonogram daily challenge`)
+}
+
+/** Unlike the other daily generators, this needs the answer pool passed in (loaded via
+ *  games/wordleLevels.ts's loadAnswerPool, a dynamic import so it stays code-split) —
+ *  the engine layer has no filesystem/bundler access of its own. Always 'medium' rules
+ *  (see engine/wordle/types.ts's WORDLE_RULES) — the daily is one unambiguous puzzle to
+ *  share/compare, not a difficulty choice. */
+export function getDailyWordleLevel(dateKey: string, pool: readonly string[]): WordleLevelRecord {
+  const rng = mulberry32(seedFor('wordle', dateKey))
+  const level = generateWordleLevel(DAILY_DIFFICULTY, rng, pool)
+  return { ...level, id: `daily-wordle-${dateKey}` }
 }

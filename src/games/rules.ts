@@ -42,4 +42,12 @@ export const GAME_RULES: Record<string, GameRules> = {
     ],
     tip: 'Marking cells you know are empty with an X is optional, but it helps track your logic on bigger boards.',
   },
+  wordle: {
+    steps: [
+      'Guess the hidden 5-letter word. Type a real word and submit to see how close you are.',
+      'A green letter is correct and in the right spot. A yellow letter is in the word but the wrong spot. A gray letter isn’t in the word at all.',
+      'Use what you learn each guess to narrow it down before you run out of attempts.',
+    ],
+    tip: 'Hard tier turns on Hard Mode: every green and yellow letter you’ve found must be used in your next guess.',
+  },
 }
