@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useLocation } from 'react-router-dom'
 import { AppLink as Link } from '../components/AppLink'
 import type { Difficulty } from '../engine/types'
-import { averageTimeMs, type DifficultyProgress } from '../storage/db'
-import { formatElapsed } from '../components/Timer'
+import type { DifficultyProgress } from '../storage/db'
 import {
   buildChapterNodes,
   endlessProgress,
@@ -43,9 +43,14 @@ const MODIFIER_ICON: Record<string, (props: { size?: number }) => React.JSX.Elem
 export default function ChaptersPage({ gameId }: { gameId: string }) {
   const game = GAMES.find((g) => g.id === gameId)!
   const { title, route } = game
+  const location = useLocation()
   const [progress, setProgress] = useState<Partial<Record<Difficulty, DifficultyProgress>>>({})
   const [rulesOpen, setRulesOpen] = useState(false)
-  const [tab, setTab] = useState<'primary' | 'free'>('primary')
+  // Deep-linkable via ?tab=free — FailSheet/BossGateSheet's "back" link from a Free
+  // Play run lands here, and a fresh visit still defaults to the chapter trail.
+  const [tab, setTab] = useState<'primary' | 'free'>(() =>
+    new URLSearchParams(location.search).get('tab') === 'free' ? 'free' : 'primary',
+  )
   useAutoOpenRulesOnce(gameId, setRulesOpen)
 
   useEffect(() => {
@@ -140,7 +145,7 @@ export default function ChaptersPage({ gameId }: { gameId: string }) {
           nodes && <ChaptersTrail nodes={nodes} route={route} />
         ))}
 
-      {tab === 'free' && <FreePlayTab gameId={gameId} route={route} progress={progress} />}
+      {tab === 'free' && <FreePlayTab gameId={gameId} route={route} />}
 
       <RulesSheet
         open={rulesOpen}
@@ -373,52 +378,35 @@ function EndlessTab({ route, endless }: { route: string; endless: EndlessProgres
   )
 }
 
-function FreePlayTab({
-  gameId,
-  route,
-  progress,
-}: {
-  gameId: string
-  route: string
-  progress: Partial<Record<Difficulty, DifficultyProgress>>
-}) {
+function FreePlayTab({ gameId, route }: { gameId: string; route: string }) {
   return (
     <div className="flex flex-col gap-3">
-      {DIFFICULTIES.map((d) => {
-        const p = progress[d]
-        const avg = p ? averageTimeMs(p) : null
-        return (
-          <Link
-            key={d}
-            to={`${route}/${d}`}
-            className="flex items-center gap-4 rounded-[20px] bg-surface p-4 shadow-card transition hover:shadow-md"
-          >
-            <div className="size-[58px] shrink-0 overflow-hidden rounded-xl bg-accent-tint p-2">{PREVIEW_BY_ID[gameId]}</div>
-            <div className="flex-1">
-              <div className="flex items-center gap-1.5">
-                <span
-                  className={`size-2 shrink-0 rounded-full ${
-                    d === 'easy' ? 'bg-diff-easy' : d === 'medium' ? 'bg-diff-medium' : 'bg-diff-hard'
-                  }`}
-                />
-                <h2 className="text-[17px] font-bold">{d === 'easy' ? 'Easy' : d === 'medium' ? 'Medium' : 'Hard'}</h2>
-              </div>
-              <p className="mt-0.5 text-[13px] text-ink-muted">{SIZE_LABEL[gameId](d)}</p>
+      <p className="px-1 text-[12.5px] text-ink-muted">
+        Freshly generated puzzles with no effect on your chapter progress — play as much as you like.
+      </p>
+      {DIFFICULTIES.map((d) => (
+        <Link
+          key={d}
+          to={`${route}/free/${d}`}
+          className="flex items-center gap-4 rounded-[20px] bg-surface p-4 shadow-card transition hover:shadow-md"
+        >
+          <div className="size-[58px] shrink-0 overflow-hidden rounded-xl bg-accent-tint p-2">{PREVIEW_BY_ID[gameId]}</div>
+          <div className="flex-1">
+            <div className="flex items-center gap-1.5">
+              <span
+                className={`size-2 shrink-0 rounded-full ${
+                  d === 'easy' ? 'bg-diff-easy' : d === 'medium' ? 'bg-diff-medium' : 'bg-diff-hard'
+                }`}
+              />
+              <h2 className="text-[17px] font-bold">{d === 'easy' ? 'Easy' : d === 'medium' ? 'Medium' : 'Hard'}</h2>
             </div>
-            <div className="flex items-center gap-2.5 text-right">
-              <div>
-                <p className="text-[13px] text-ink-muted">{p ? p.completedCount : 0} done</p>
-                <p className="mt-0.5 font-mono text-[13px] tabular-nums text-ink-muted">
-                  {avg !== null && avg !== undefined ? formatElapsed(avg) : '—'}
-                </p>
-              </div>
-              <span className="text-ink-muted opacity-60">
-                <ChevronRightIcon />
-              </span>
-            </div>
-          </Link>
-        )
-      })}
+            <p className="mt-0.5 text-[13px] text-ink-muted">{SIZE_LABEL[gameId](d)}</p>
+          </div>
+          <span className="text-ink-muted opacity-60">
+            <ChevronRightIcon />
+          </span>
+        </Link>
+      ))}
     </div>
   )
 }

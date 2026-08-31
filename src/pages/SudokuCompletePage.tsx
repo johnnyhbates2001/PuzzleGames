@@ -25,7 +25,7 @@ function isValidDifficulty(value: string | undefined): value is Difficulty {
   return value === 'easy' || value === 'medium' || value === 'hard'
 }
 
-export default function SudokuCompletePage() {
+export default function SudokuCompletePage({ freePlay = false }: { freePlay?: boolean }) {
   const { difficulty } = useParams<{ difficulty: string }>()
   const location = useLocation()
   const navigate = useNavigate()
@@ -37,7 +37,7 @@ export default function SudokuCompletePage() {
   const completion = location.state as CompleteLocationState | null
 
   useEffect(() => {
-    if (!validDifficulty) return
+    if (!validDifficulty || freePlay) return
     let cancelled = false
     getSudokuProgress(validDifficulty).then((progress) => {
       if (!cancelled) {
@@ -48,7 +48,7 @@ export default function SudokuCompletePage() {
     return () => {
       cancelled = true
     }
-  }, [validDifficulty])
+  }, [validDifficulty, freePlay])
 
   if ((!validDifficulty && !isDaily) || !completion) {
     return (
@@ -89,10 +89,15 @@ export default function SudokuCompletePage() {
         dailyBonusApplied={dailyBonusApplied}
         isDaily={isDaily}
         dailyStreak={dailyStreak}
-        chaptersHref="/sudoku/chapters"
-        onNextLevel={() => navigate(`/sudoku/${validDifficulty}`, { replace: true })}
+        freePlay={freePlay}
+        chaptersHref={isDaily ? '/' : freePlay ? '/sudoku/chapters?tab=free' : '/sudoku/chapters'}
+        chaptersLabel={isDaily ? 'Back to Home' : freePlay ? 'Back to Free Play' : undefined}
+        onNextLevel={() => navigate(`/sudoku/${freePlay ? 'free/' : ''}${validDifficulty}`, { replace: true })}
         onReplay={() =>
-          navigate(isDaily ? '/sudoku/daily' : `/sudoku/${validDifficulty}`, { state: { replayLevel: level }, replace: true })
+          navigate(isDaily ? '/sudoku/daily' : `/sudoku/${freePlay ? 'free/' : ''}${validDifficulty}`, {
+            state: { replayLevel: level },
+            replace: true,
+          })
         }
       />
     </main>

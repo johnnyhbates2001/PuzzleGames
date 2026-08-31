@@ -715,6 +715,47 @@ export async function getDailyStreak(gameId: DailyGameId, now: number = Date.now
   return streak
 }
 
+export interface FreePlayCompletionResult {
+  coinsAwarded: number
+}
+
+/** Free Play's own completion recording — deliberately never touches a *Progress store
+ *  (no currentLevelIndex, no completedCount, no bestTimeMs), so a Free Play solve can
+ *  never advance a chapter, the bank pointer, or Endless rank; it's a fully separate
+ *  play mode from the chapter system. Still awards coins and logs today's activity for
+ *  the streak/heatmap — same shape as recordDailyChallengeCompletion, just
+ *  parameterized by difficulty instead of a fixed daily puzzle. No personal-best bonus
+ *  since there's no persisted best time to compare against here. */
+export async function recordFreePlayCompletion(
+  difficulty: Difficulty,
+  _elapsedMs: number,
+  assisted: boolean,
+): Promise<FreePlayCompletionResult> {
+  const db = await getDB()
+  const tx = db.transaction(['settings', 'dailyActivity'], 'readwrite')
+
+  const activityStore = tx.objectStore('dailyActivity')
+  const key = dateKey(new Date())
+  const activityCount = (await activityStore.get(key)) ?? 0
+  const dailyBonusApplied = activityCount === 0
+  const coinsAwarded = computeCoinAward(difficulty, false, assisted) * (dailyBonusApplied ? 2 : 1)
+  await activityStore.put(activityCount + 1, key)
+
+  const settingsStore = tx.objectStore('settings')
+  const currentSettings = { ...DEFAULT_SETTINGS, ...(await settingsStore.get('global')) }
+  await settingsStore.put(
+    {
+      ...currentSettings,
+      coins: currentSettings.coins + coinsAwarded,
+      unassistedCompletions: currentSettings.unassistedCompletions + (assisted ? 0 : 1),
+    },
+    'global',
+  )
+
+  await tx.done
+  return { coinsAwarded }
+}
+
 const ALL_STORE_NAMES = [
   'settings',
   'progress',

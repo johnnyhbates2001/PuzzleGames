@@ -9,12 +9,13 @@ import {
   getNonogramInProgress,
   getNonogramProgress,
   getSettings,
+  recordFreePlayCompletion,
   recordNonogramCompletion,
   saveNonogramInProgress,
   spendCoins,
   type NonogramInProgressLevel,
 } from '../storage/db'
-import { getNextNonogramLevel } from '../games/nonogramLevels'
+import { getFreePlayNonogramLevel, getNextNonogramLevel } from '../games/nonogramLevels'
 import { getDailyNonogramLevel, todayDateKey } from '../games/dailyChallenge'
 import { endlessProgress, modifierLabel, modifiersForLevel, type LevelModifiers } from '../games/chapters'
 import { useGameLifecycle } from '../hooks/useGameLifecycle'
@@ -92,7 +93,7 @@ interface ReplayLocationState {
   replayLevel?: NonogramLevelRecord
 }
 
-export default function NonogramGamePage() {
+export default function NonogramGamePage({ freePlay = false }: { freePlay?: boolean }) {
   const { difficulty } = useParams<{ difficulty: string }>()
   const navigate = useNavigate()
   const location = useLocation()
@@ -186,6 +187,18 @@ export default function NonogramGamePage() {
           return
         }
 
+        // Free Play: always a fresh procedural level, no bank/currentLevelIndex, no
+        // resume, no boss gate — entirely separate from the chapter system below.
+        if (freePlay) {
+          const settings = await getSettings()
+          if (cancelled) return
+          setCoins(settings.coins)
+          const next = await getFreePlayNonogramLevel(validDifficulty as Difficulty)
+          sourceRef.current = { source: next.source }
+          dispatch({ type: 'LOAD', level: next.level })
+          return
+        }
+
         const [settings, inProgress, progress] = await Promise.all([
           getSettings(),
           getNonogramInProgress(validDifficulty as Difficulty),
@@ -220,7 +233,7 @@ export default function NonogramGamePage() {
     return () => {
       cancelled = true
     }
-  }, [validDifficulty, isDaily, finishLoad])
+  }, [validDifficulty, isDaily, freePlay, finishLoad])
 
   useEffect(() => {
     if (actingRef.current) {
@@ -248,9 +261,10 @@ export default function NonogramGamePage() {
 
   // Autosave in-progress state so leaving and returning resumes this exact board.
   // Daily Challenge intentionally skips this (see src/games/dailyChallenge.ts) — it
-  // always restarts fresh from the same deterministic puzzle within a day.
+  // always restarts fresh from the same deterministic puzzle within a day. Free Play
+  // skips it too — every visit is meant to generate a brand new puzzle, not resume.
   useEffect(() => {
-    if (loading || !validDifficulty || isDaily || state.status !== 'playing') return
+    if (loading || !validDifficulty || isDaily || freePlay || state.status !== 'playing') return
     saveNonogramInProgress({
       difficulty: validDifficulty as Difficulty,
       level: state.level,
@@ -260,13 +274,14 @@ export default function NonogramGamePage() {
       elapsedMs: state.elapsedMs,
       savedAt: Date.now(),
     })
-  }, [state.grid, state.elapsedMs, state.level, state.status, loading, validDifficulty, isDaily])
+  }, [state.grid, state.elapsedMs, state.level, state.status, loading, validDifficulty, isDaily, freePlay])
 
   useGameCompletion({
     gameId: 'nonogram',
     basePath: '/nonogram',
     status: state.status,
     isDaily,
+    isFreePlay: freePlay,
     validDifficulty,
     elapsedMs: state.elapsedMs,
     hintsUsed: state.hintsUsed,
@@ -275,6 +290,7 @@ export default function NonogramGamePage() {
     extraValue: state.grid,
     dailyAlreadyCompletedRef,
     recordCompletion: recordNonogramCompletion,
+    recordFreePlayCompletion,
   })
 
   // Perfect Run: fails the instant a wrong mark appears, using the same non-mutating
@@ -294,13 +310,19 @@ export default function NonogramGamePage() {
     setFailed(null)
     setLoading(true)
     try {
+      if (freePlay) {
+        const next = await getFreePlayNonogramLevel(validDifficulty)
+        sourceRef.current = { source: next.source }
+        dispatch({ type: 'LOAD', level: next.level })
+        return
+      }
       const next = await getNextNonogramLevel(validDifficulty)
       sourceRef.current = { source: next.source, bankIndex: next.bankIndex }
       dispatch({ type: 'LOAD', level: next.level })
     } finally {
       setLoading(false)
     }
-  }, [validDifficulty])
+  }, [validDifficulty, freePlay])
 
   const handleCellClick = useCallback(
     (row: number, col: number) => {
@@ -440,7 +462,13 @@ export default function NonogramGamePage() {
         checkMessage={checkMessage}
       />
 
-      {failed && <FailSheet reason={failed.reason} chaptersHref="/nonogram/chapters" onTryAgain={handleTryAgain} />}
+      {failed && (
+        <FailSheet
+          reason={failed.reason}
+          chaptersHref={freePlay ? '/nonogram/chapters?tab=free' : '/nonogram/chapters'}
+          onTryAgain={handleTryAgain}
+        />
+      )}
 
       {awaitingBossConfirm && modifiers && bossChapter !== null && (
         <BossGateSheet

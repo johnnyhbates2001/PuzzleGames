@@ -10,12 +10,13 @@ import {
   getSettings,
   getSudokuInProgress,
   getSudokuProgress,
+  recordFreePlayCompletion,
   recordSudokuCompletion,
   saveSudokuInProgress,
   spendCoins,
   type SudokuInProgressLevel,
 } from '../storage/db'
-import { getNextSudokuLevel } from '../games/sudokuLevels'
+import { getFreePlaySudokuLevel, getNextSudokuLevel } from '../games/sudokuLevels'
 import { getDailySudokuLevel, todayDateKey } from '../games/dailyChallenge'
 import { endlessProgress, modifierLabel, modifiersForLevel, type LevelModifiers } from '../games/chapters'
 import { useGameLifecycle } from '../hooks/useGameLifecycle'
@@ -116,7 +117,7 @@ interface ReplayLocationState {
   replayLevel?: SudokuLevelRecord
 }
 
-export default function SudokuGamePage() {
+export default function SudokuGamePage({ freePlay = false }: { freePlay?: boolean }) {
   const { difficulty } = useParams<{ difficulty: string }>()
   const navigate = useNavigate()
   const location = useLocation()
@@ -212,6 +213,18 @@ export default function SudokuGamePage() {
           return
         }
 
+        // Free Play: always a fresh procedural level, no bank/currentLevelIndex, no
+        // resume, no boss gate — entirely separate from the chapter system below.
+        if (freePlay) {
+          const settings = await getSettings()
+          if (cancelled) return
+          setCoins(settings.coins)
+          const next = await getFreePlaySudokuLevel(validDifficulty as Difficulty)
+          sourceRef.current = { source: next.source }
+          dispatch({ type: 'LOAD', level: next.level })
+          return
+        }
+
         const [settings, inProgress, progress] = await Promise.all([
           getSettings(),
           getSudokuInProgress(validDifficulty as Difficulty),
@@ -246,7 +259,7 @@ export default function SudokuGamePage() {
     return () => {
       cancelled = true
     }
-  }, [validDifficulty, isDaily, finishLoad])
+  }, [validDifficulty, isDaily, freePlay, finishLoad])
 
   useEffect(() => {
     if (actingRef.current) {
@@ -295,9 +308,10 @@ export default function SudokuGamePage() {
 
   // Autosave in-progress state so leaving and returning resumes this exact board.
   // Daily Challenge intentionally skips this (see src/games/dailyChallenge.ts) — it
-  // always restarts fresh from the same deterministic puzzle within a day.
+  // always restarts fresh from the same deterministic puzzle within a day. Free Play
+  // skips it too — every visit is meant to generate a brand new puzzle, not resume.
   useEffect(() => {
-    if (loading || !validDifficulty || isDaily || state.status !== 'playing') return
+    if (loading || !validDifficulty || isDaily || freePlay || state.status !== 'playing') return
     saveSudokuInProgress({
       difficulty: validDifficulty as Difficulty,
       level: state.level,
@@ -307,13 +321,14 @@ export default function SudokuGamePage() {
       elapsedMs: state.elapsedMs,
       savedAt: Date.now(),
     })
-  }, [state.board, state.elapsedMs, state.level, state.status, loading, validDifficulty, isDaily])
+  }, [state.board, state.elapsedMs, state.level, state.status, loading, validDifficulty, isDaily, freePlay])
 
   useGameCompletion({
     gameId: 'sudoku',
     basePath: '/sudoku',
     status: state.status,
     isDaily,
+    isFreePlay: freePlay,
     validDifficulty,
     elapsedMs: state.elapsedMs,
     hintsUsed: state.hintsUsed,
@@ -322,6 +337,7 @@ export default function SudokuGamePage() {
     extraValue: state.board,
     dailyAlreadyCompletedRef,
     recordCompletion: recordSudokuCompletion,
+    recordFreePlayCompletion,
   })
 
   // Perfect Run: fails the instant a wrong digit appears, using the same non-mutating
@@ -341,13 +357,19 @@ export default function SudokuGamePage() {
     setFailed(null)
     setLoading(true)
     try {
+      if (freePlay) {
+        const next = await getFreePlaySudokuLevel(validDifficulty)
+        sourceRef.current = { source: next.source }
+        dispatch({ type: 'LOAD', level: next.level })
+        return
+      }
       const next = await getNextSudokuLevel(validDifficulty)
       sourceRef.current = { source: next.source, bankIndex: next.bankIndex }
       dispatch({ type: 'LOAD', level: next.level })
     } finally {
       setLoading(false)
     }
-  }, [validDifficulty])
+  }, [validDifficulty, freePlay])
 
   const handleCellClick = useCallback(
     (row: number, col: number) => {
@@ -537,7 +559,13 @@ export default function SudokuGamePage() {
         checkMessage={checkMessage}
       />
 
-      {failed && <FailSheet reason={failed.reason} chaptersHref="/sudoku/chapters" onTryAgain={handleTryAgain} />}
+      {failed && (
+        <FailSheet
+          reason={failed.reason}
+          chaptersHref={freePlay ? '/sudoku/chapters?tab=free' : '/sudoku/chapters'}
+          onTryAgain={handleTryAgain}
+        />
+      )}
 
       {awaitingBossConfirm && modifiers && bossChapter !== null && (
         <BossGateSheet

@@ -9,12 +9,13 @@ import {
   getPatchesInProgress,
   getPatchesProgress,
   getSettings,
+  recordFreePlayCompletion,
   recordPatchesCompletion,
   savePatchesInProgress,
   spendCoins,
   type PatchesInProgressLevel,
 } from '../storage/db'
-import { getNextPatchesLevel } from '../games/patchesLevels'
+import { getFreePlayPatchesLevel, getNextPatchesLevel } from '../games/patchesLevels'
 import { getDailyPatchesLevel, todayDateKey } from '../games/dailyChallenge'
 import { endlessProgress, modifierLabel, modifiersForLevel, type LevelModifiers } from '../games/chapters'
 import { useGameLifecycle } from '../hooks/useGameLifecycle'
@@ -75,7 +76,7 @@ interface ReplayLocationState {
   replayLevel?: PatchesLevelRecord
 }
 
-export default function PatchesGamePage() {
+export default function PatchesGamePage({ freePlay = false }: { freePlay?: boolean }) {
   const { difficulty } = useParams<{ difficulty: string }>()
   const navigate = useNavigate()
   const location = useLocation()
@@ -171,6 +172,18 @@ export default function PatchesGamePage() {
           return
         }
 
+        // Free Play: always a fresh procedural level, no bank/currentLevelIndex, no
+        // resume, no boss gate — entirely separate from the chapter system below.
+        if (freePlay) {
+          const settings = await getSettings()
+          if (cancelled) return
+          setCoins(settings.coins)
+          const next = await getFreePlayPatchesLevel(validDifficulty as Difficulty)
+          sourceRef.current = { source: next.source }
+          dispatch({ type: 'LOAD', level: next.level })
+          return
+        }
+
         const [settings, inProgress, progress] = await Promise.all([
           getSettings(),
           getPatchesInProgress(validDifficulty as Difficulty),
@@ -205,7 +218,7 @@ export default function PatchesGamePage() {
     return () => {
       cancelled = true
     }
-  }, [validDifficulty, isDaily, finishLoad])
+  }, [validDifficulty, isDaily, freePlay, finishLoad])
 
   useEffect(() => {
     if (actingRef.current) {
@@ -232,9 +245,10 @@ export default function PatchesGamePage() {
 
   // Autosave in-progress state so leaving and returning resumes this exact board.
   // Daily Challenge intentionally skips this (see src/games/dailyChallenge.ts) — it
-  // always restarts fresh from the same deterministic puzzle within a day.
+  // always restarts fresh from the same deterministic puzzle within a day. Free Play
+  // skips it too — every visit is meant to generate a brand new puzzle, not resume.
   useEffect(() => {
-    if (loading || !validDifficulty || isDaily || state.status !== 'playing') return
+    if (loading || !validDifficulty || isDaily || freePlay || state.status !== 'playing') return
     savePatchesInProgress({
       difficulty: validDifficulty as Difficulty,
       level: state.level,
@@ -244,13 +258,14 @@ export default function PatchesGamePage() {
       elapsedMs: state.elapsedMs,
       savedAt: Date.now(),
     })
-  }, [state.placed, state.elapsedMs, state.level, state.status, loading, validDifficulty, isDaily])
+  }, [state.placed, state.elapsedMs, state.level, state.status, loading, validDifficulty, isDaily, freePlay])
 
   useGameCompletion({
     gameId: 'patches',
     basePath: '/patches',
     status: state.status,
     isDaily,
+    isFreePlay: freePlay,
     validDifficulty,
     elapsedMs: state.elapsedMs,
     hintsUsed: state.hintsUsed,
@@ -259,6 +274,7 @@ export default function PatchesGamePage() {
     extraValue: state.placed,
     dailyAlreadyCompletedRef,
     recordCompletion: recordPatchesCompletion,
+    recordFreePlayCompletion,
   })
 
   // Perfect Run: fails the instant a wrong patch appears, using the same non-mutating
@@ -278,13 +294,19 @@ export default function PatchesGamePage() {
     setFailed(null)
     setLoading(true)
     try {
+      if (freePlay) {
+        const next = await getFreePlayPatchesLevel(validDifficulty)
+        sourceRef.current = { source: next.source }
+        dispatch({ type: 'LOAD', level: next.level })
+        return
+      }
       const next = await getNextPatchesLevel(validDifficulty)
       sourceRef.current = { source: next.source, bankIndex: next.bankIndex }
       dispatch({ type: 'LOAD', level: next.level })
     } finally {
       setLoading(false)
     }
-  }, [validDifficulty])
+  }, [validDifficulty, freePlay])
 
   const handleStartDrag = useCallback(
     (row: number, col: number) => {
@@ -435,7 +457,13 @@ export default function PatchesGamePage() {
         checkMessage={checkMessage}
       />
 
-      {failed && <FailSheet reason={failed.reason} chaptersHref="/patches/chapters" onTryAgain={handleTryAgain} />}
+      {failed && (
+        <FailSheet
+          reason={failed.reason}
+          chaptersHref={freePlay ? '/patches/chapters?tab=free' : '/patches/chapters'}
+          onTryAgain={handleTryAgain}
+        />
+      )}
 
       {awaitingBossConfirm && modifiers && bossChapter !== null && (
         <BossGateSheet

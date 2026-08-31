@@ -2,7 +2,13 @@ import { useEffect, type MutableRefObject } from 'react'
 import { useAppNavigate as useNavigate } from './useAppNavigate'
 import { useAudio } from './useAudio'
 import { useReducedMotion } from './useReducedMotion'
-import { getDailyStreak, grantSkin, recordDailyChallengeCompletion, type CompletionResult } from '../storage/db'
+import {
+  getDailyStreak,
+  grantSkin,
+  recordDailyChallengeCompletion,
+  type CompletionResult,
+  type FreePlayCompletionResult,
+} from '../storage/db'
 import type { Difficulty } from '../engine/types'
 import type { DailyGameId } from '../games/dailyChallenge'
 import { CHAPTER_META, LEVELS_PER_CHAPTER, STORY_LEVELS_PER_TIER, chapterForIndex } from '../games/chapters'
@@ -37,6 +43,11 @@ interface UseGameCompletionOptions<K extends string, V> {
   basePath: string
   status: string
   isDaily: boolean
+  /** True for a Free Play run — see games/*Levels.ts's getFreePlayLevel and
+   *  storage/db.ts's recordFreePlayCompletion. Entirely separate from the chapter
+   *  system: never advances currentLevelIndex, so it can't move a chapter, the bank
+   *  pointer, or Endless rank. */
+  isFreePlay: boolean
   validDifficulty: Difficulty | null
   elapsedMs: number
   hintsUsed: number
@@ -52,6 +63,9 @@ interface UseGameCompletionOptions<K extends string, V> {
    *  let a player farm coins by re-solving the same puzzle all day). */
   dailyAlreadyCompletedRef: MutableRefObject<boolean>
   recordCompletion: (difficulty: Difficulty, elapsedMs: number, assisted: boolean) => Promise<CompletionResult>
+  /** Only called when isFreePlay — keeps Free Play completions out of recordCompletion
+   *  entirely, rather than branching inside one shared call. */
+  recordFreePlayCompletion: (difficulty: Difficulty, elapsedMs: number, assisted: boolean) => Promise<FreePlayCompletionResult>
 }
 
 /** How long the board's solve-sweep gets to play (see each Board's `solved` prop)
@@ -69,6 +83,7 @@ export function useGameCompletion<K extends string, V>({
   basePath,
   status,
   isDaily,
+  isFreePlay,
   validDifficulty,
   elapsedMs,
   hintsUsed,
@@ -77,6 +92,7 @@ export function useGameCompletion<K extends string, V>({
   extraValue,
   dailyAlreadyCompletedRef,
   recordCompletion,
+  recordFreePlayCompletion,
 }: UseGameCompletionOptions<K, V>) {
   const navigate = useNavigate()
   const { playSound, buzz } = useAudio()
@@ -110,6 +126,16 @@ export function useGameCompletion<K extends string, V>({
           dailyStreak: result.streak,
         })
       })
+    } else if (isFreePlay) {
+      recordFreePlayCompletion(validDifficulty as Difficulty, elapsedMs, hintsUsed > 0).then((result) => {
+        if (cancelled) return
+        scheduleNavigate(`${basePath}/free/${validDifficulty}/complete`, {
+          timeMs: elapsedMs,
+          level,
+          [extraKey]: extraValue,
+          coinsAwarded: result.coinsAwarded,
+        })
+      })
     } else {
       recordCompletion(validDifficulty as Difficulty, elapsedMs, hintsUsed > 0).then(async (result) => {
         if (cancelled) return
@@ -136,5 +162,5 @@ export function useGameCompletion<K extends string, V>({
     // status), so reacting to unrelated re-renders of those would be wrong, not
     // just redundant.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [status, validDifficulty, isDaily, navigate, elapsedMs, level, extraValue])
+  }, [status, validDifficulty, isDaily, isFreePlay, navigate, elapsedMs, level, extraValue])
 }

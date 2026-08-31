@@ -25,7 +25,7 @@ function isValidDifficulty(value: string | undefined): value is Difficulty {
   return value === 'easy' || value === 'medium' || value === 'hard'
 }
 
-export default function NonogramCompletePage() {
+export default function NonogramCompletePage({ freePlay = false }: { freePlay?: boolean }) {
   const { difficulty } = useParams<{ difficulty: string }>()
   const location = useLocation()
   const navigate = useNavigate()
@@ -37,7 +37,7 @@ export default function NonogramCompletePage() {
   const completion = location.state as CompleteLocationState | null
 
   useEffect(() => {
-    if (!validDifficulty) return
+    if (!validDifficulty || freePlay) return
     let cancelled = false
     getNonogramProgress(validDifficulty).then((progress) => {
       if (!cancelled) {
@@ -48,7 +48,7 @@ export default function NonogramCompletePage() {
     return () => {
       cancelled = true
     }
-  }, [validDifficulty])
+  }, [validDifficulty, freePlay])
 
   if ((!validDifficulty && !isDaily) || !completion) {
     return (
@@ -90,10 +90,15 @@ export default function NonogramCompletePage() {
         dailyBonusApplied={dailyBonusApplied}
         isDaily={isDaily}
         dailyStreak={dailyStreak}
-        chaptersHref="/nonogram/chapters"
-        onNextLevel={() => navigate(`/nonogram/${validDifficulty}`, { replace: true })}
+        freePlay={freePlay}
+        chaptersHref={isDaily ? '/' : freePlay ? '/nonogram/chapters?tab=free' : '/nonogram/chapters'}
+        chaptersLabel={isDaily ? 'Back to Home' : freePlay ? 'Back to Free Play' : undefined}
+        onNextLevel={() => navigate(`/nonogram/${freePlay ? 'free/' : ''}${validDifficulty}`, { replace: true })}
         onReplay={() =>
-          navigate(isDaily ? '/nonogram/daily' : `/nonogram/${validDifficulty}`, { state: { replayLevel: level }, replace: true })
+          navigate(isDaily ? '/nonogram/daily' : `/nonogram/${freePlay ? 'free/' : ''}${validDifficulty}`, {
+            state: { replayLevel: level },
+            replace: true,
+          })
         }
       />
     </main>

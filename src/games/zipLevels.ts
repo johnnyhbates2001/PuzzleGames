@@ -45,3 +45,22 @@ export async function getNextZipLevel(difficulty: Difficulty): Promise<NextZipLe
   // back to replaying a random bank level rather than crashing.
   return { level: bank[Math.floor(Math.random() * bank.length)], source: 'bank' }
 }
+
+export interface FreePlayZipLevelResult {
+  level: ZipLevelRecord
+  source: 'bank' | 'generated'
+}
+
+/** Free Play's level source: always a fresh procedural puzzle, never the bank/
+ *  currentLevelIndex progression that powers chapters — so solving it can't advance
+ *  chapter or Endless progress. Same generate-with-retries approach as the bank-
+ *  exhaustion fallback above, just invoked unconditionally instead of only once the
+ *  bank runs out. */
+export async function getFreePlayZipLevel(difficulty: Difficulty): Promise<FreePlayZipLevelResult> {
+  for (let attempt = 0; attempt < GENERATE_RETRIES; attempt++) {
+    const level = generateLevel(difficulty, Math.random)
+    if (level) return { level, source: 'generated' }
+  }
+  const bank = await loadBank(difficulty)
+  return { level: bank[Math.floor(Math.random() * bank.length)], source: 'bank' }
+}

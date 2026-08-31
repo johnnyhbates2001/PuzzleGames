@@ -24,7 +24,7 @@ function isValidDifficulty(value: string | undefined): value is Difficulty {
   return value === 'easy' || value === 'medium' || value === 'hard'
 }
 
-export default function ZipCompletePage() {
+export default function ZipCompletePage({ freePlay = false }: { freePlay?: boolean }) {
   const { difficulty } = useParams<{ difficulty: string }>()
   const location = useLocation()
   const navigate = useNavigate()
@@ -36,7 +36,7 @@ export default function ZipCompletePage() {
   const completion = location.state as CompleteLocationState | null
 
   useEffect(() => {
-    if (!validDifficulty) return
+    if (!validDifficulty || freePlay) return
     let cancelled = false
     getZipProgress(validDifficulty).then((progress) => {
       if (!cancelled) {
@@ -47,7 +47,7 @@ export default function ZipCompletePage() {
     return () => {
       cancelled = true
     }
-  }, [validDifficulty])
+  }, [validDifficulty, freePlay])
 
   if ((!validDifficulty && !isDaily) || !completion) {
     return (
@@ -88,10 +88,15 @@ export default function ZipCompletePage() {
         dailyBonusApplied={dailyBonusApplied}
         isDaily={isDaily}
         dailyStreak={dailyStreak}
-        chaptersHref="/zip/chapters"
-        onNextLevel={() => navigate(`/zip/${validDifficulty}`, { replace: true })}
+        freePlay={freePlay}
+        chaptersHref={isDaily ? '/' : freePlay ? '/zip/chapters?tab=free' : '/zip/chapters'}
+        chaptersLabel={isDaily ? 'Back to Home' : freePlay ? 'Back to Free Play' : undefined}
+        onNextLevel={() => navigate(`/zip/${freePlay ? 'free/' : ''}${validDifficulty}`, { replace: true })}
         onReplay={() =>
-          navigate(isDaily ? '/zip/daily' : `/zip/${validDifficulty}`, { state: { replayLevel: level }, replace: true })
+          navigate(isDaily ? '/zip/daily' : `/zip/${freePlay ? 'free/' : ''}${validDifficulty}`, {
+            state: { replayLevel: level },
+            replace: true,
+          })
         }
       />
     </main>

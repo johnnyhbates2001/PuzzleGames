@@ -27,7 +27,7 @@ function isValidDifficulty(value: string | undefined): value is Difficulty {
   return value === 'easy' || value === 'medium' || value === 'hard'
 }
 
-export default function CompletePage() {
+export default function CompletePage({ freePlay = false }: { freePlay?: boolean }) {
   const { difficulty } = useParams<{ difficulty: string }>()
   const location = useLocation()
   const navigate = useNavigate()
@@ -38,8 +38,11 @@ export default function CompletePage() {
   const validDifficulty = isValidDifficulty(difficulty) ? difficulty : null
   const completion = location.state as CompleteLocationState | null
 
+  // Free Play never writes a *Progress record (see storage/db.ts's
+  // recordFreePlayCompletion), so there's no Best/Average to fetch — CompleteSheet
+  // hides that tile outright when freePlay is set.
   useEffect(() => {
-    if (!validDifficulty) return
+    if (!validDifficulty || freePlay) return
     let cancelled = false
     getProgress(validDifficulty).then((progress) => {
       if (!cancelled) {
@@ -50,7 +53,7 @@ export default function CompletePage() {
     return () => {
       cancelled = true
     }
-  }, [validDifficulty])
+  }, [validDifficulty, freePlay])
 
   if ((!validDifficulty && !isDaily) || !completion) {
     return (
@@ -94,10 +97,15 @@ export default function CompletePage() {
         isDaily={isDaily}
         dailyStreak={dailyStreak}
         chapterComplete={chapterComplete}
-        chaptersHref="/queens/chapters"
-        onNextLevel={() => navigate(`/queens/${validDifficulty}`, { replace: true })}
+        freePlay={freePlay}
+        chaptersHref={isDaily ? '/' : freePlay ? '/queens/chapters?tab=free' : '/queens/chapters'}
+        chaptersLabel={isDaily ? 'Back to Home' : freePlay ? 'Back to Free Play' : undefined}
+        onNextLevel={() => navigate(`/queens/${freePlay ? 'free/' : ''}${validDifficulty}`, { replace: true })}
         onReplay={() =>
-          navigate(isDaily ? '/queens/daily' : `/queens/${validDifficulty}`, { state: { replayLevel: level }, replace: true })
+          navigate(isDaily ? '/queens/daily' : `/queens/${freePlay ? 'free/' : ''}${validDifficulty}`, {
+            state: { replayLevel: level },
+            replace: true,
+          })
         }
       />
     </main>

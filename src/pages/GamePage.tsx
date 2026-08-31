@@ -12,13 +12,14 @@ import {
   getProgress,
   getSettings,
   recordCompletion,
+  recordFreePlayCompletion,
   saveInProgress,
   setAutoPlaceX,
   spendCoins,
   type InProgressLevel,
   type Settings as AppSettings,
 } from '../storage/db'
-import { getNextLevel } from '../games/queensLevels'
+import { getFreePlayLevel, getNextLevel } from '../games/queensLevels'
 import { getDailyQueensLevel, todayDateKey } from '../games/dailyChallenge'
 import { endlessProgress, modifierLabel, modifiersForLevel, type LevelModifiers } from '../games/chapters'
 import { useGameLifecycle } from '../hooks/useGameLifecycle'
@@ -83,7 +84,7 @@ interface ReplayLocationState {
   replayLevel?: LevelRecord
 }
 
-export default function GamePage() {
+export default function GamePage({ freePlay = false }: { freePlay?: boolean }) {
   const { difficulty } = useParams<{ difficulty: string }>()
   const navigate = useNavigate()
   const location = useLocation()
@@ -200,6 +201,18 @@ export default function GamePage() {
           return
         }
 
+        // Free Play: always a fresh procedural level, no bank/currentLevelIndex, no
+        // resume, no boss gate — entirely separate from the chapter system below.
+        if (freePlay) {
+          const settings = await getSettings()
+          if (cancelled) return
+          setCoins(settings.coins)
+          const next = await getFreePlayLevel(validDifficulty as Difficulty)
+          sourceRef.current = { source: next.source }
+          dispatch({ type: 'LOAD', level: next.level, autoPlaceX: settings.autoPlaceX })
+          return
+        }
+
         const [settings, inProgress, progress] = await Promise.all([
           getSettings(),
           getInProgress(validDifficulty as Difficulty),
@@ -241,7 +254,7 @@ export default function GamePage() {
     return () => {
       cancelled = true
     }
-  }, [validDifficulty, isDaily, finishLoad])
+  }, [validDifficulty, isDaily, freePlay, finishLoad])
 
   // Attributes a board change to Undo or a hint reveal (see actingRef above) and turns
   // it into the matching ghost/pulse targets — runs after every board change, but only
@@ -272,9 +285,10 @@ export default function GamePage() {
 
   // Autosave in-progress state so leaving and returning resumes this exact board.
   // Daily Challenge intentionally skips this (see src/games/dailyChallenge.ts) — it
-  // always restarts fresh from the same deterministic puzzle within a day.
+  // always restarts fresh from the same deterministic puzzle within a day. Free Play
+  // skips it too — every visit is meant to generate a brand new puzzle, not resume.
   useEffect(() => {
-    if (loading || !validDifficulty || isDaily || state.status !== 'playing') return
+    if (loading || !validDifficulty || isDaily || freePlay || state.status !== 'playing') return
     saveInProgress({
       difficulty: validDifficulty as Difficulty,
       level: state.level,
@@ -284,13 +298,14 @@ export default function GamePage() {
       elapsedMs: state.elapsedMs,
       savedAt: Date.now(),
     })
-  }, [state.board, state.elapsedMs, state.level, state.status, loading, validDifficulty, isDaily])
+  }, [state.board, state.elapsedMs, state.level, state.status, loading, validDifficulty, isDaily, freePlay])
 
   useGameCompletion({
     gameId: 'queens',
     basePath: '/queens',
     status: state.status,
     isDaily,
+    isFreePlay: freePlay,
     validDifficulty,
     elapsedMs: state.elapsedMs,
     hintsUsed: state.hintsUsed,
@@ -299,6 +314,7 @@ export default function GamePage() {
     extraValue: state.board,
     dailyAlreadyCompletedRef,
     recordCompletion,
+    recordFreePlayCompletion,
   })
 
   // Perfect Run: fails the instant a wrong queen appears, using the same non-mutating
@@ -318,13 +334,19 @@ export default function GamePage() {
     setFailed(null)
     setLoading(true)
     try {
+      if (freePlay) {
+        const next = await getFreePlayLevel(validDifficulty)
+        sourceRef.current = { source: next.source }
+        dispatch({ type: 'LOAD', level: next.level, autoPlaceX: state.autoPlaceX })
+        return
+      }
       const next = await getNextLevel(validDifficulty)
       sourceRef.current = { source: next.source, bankIndex: next.bankIndex }
       dispatch({ type: 'LOAD', level: next.level, autoPlaceX: state.autoPlaceX })
     } finally {
       setLoading(false)
     }
-  }, [validDifficulty, state.autoPlaceX])
+  }, [validDifficulty, state.autoPlaceX, freePlay])
 
   const handleCellClick = useCallback(
     (row: number, col: number) => {
@@ -477,7 +499,13 @@ export default function GamePage() {
         checkMessage={checkMessage}
       />
 
-      {failed && <FailSheet reason={failed.reason} chaptersHref="/queens/chapters" onTryAgain={handleTryAgain} />}
+      {failed && (
+        <FailSheet
+          reason={failed.reason}
+          chaptersHref={freePlay ? '/queens/chapters?tab=free' : '/queens/chapters'}
+          onTryAgain={handleTryAgain}
+        />
+      )}
 
       {awaitingBossConfirm && modifiers && bossChapter !== null && (
         <BossGateSheet

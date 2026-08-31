@@ -31,8 +31,16 @@ interface CompleteSheetProps {
   dailyStreak?: number
   /** Set when this completion also crossed a chapter boundary — see useGameCompletion. */
   chapterComplete?: ChapterCompleteInfo
+  /** True for a Free Play run — never has a Best/Average to show (Free Play never
+   *  writes a *Progress record, see storage/db.ts's recordFreePlayCompletion), so that
+   *  tile is hidden outright rather than showing chapter-run numbers next to a
+   *  Free Play result, which would misrepresent them as this run's stats. */
+  freePlay?: boolean
   /** This game's Chapters screen — the secondary button links here instead of Home. */
   chaptersHref: string
+  /** Label for the secondary button — defaults to "Back to chapters"; Free Play runs
+   *  pass "Back to Free Play" since chaptersHref points back into that tab instead. */
+  chaptersLabel?: string
   onNextLevel: () => void
   onReplay: () => void
 }
@@ -92,7 +100,9 @@ export function CompleteSheet({
   isDaily,
   dailyStreak,
   chapterComplete,
+  freePlay,
   chaptersHref,
+  chaptersLabel = 'Back to chapters',
   onNextLevel,
   onReplay,
 }: CompleteSheetProps) {
@@ -319,7 +329,7 @@ export function CompleteSheet({
             <span className="text-[15px] font-bold text-ink">{dailyStreak ?? 0} day streak</span>
           </div>
         ) : (
-          !zenMode && (
+          !zenMode && !freePlay && (
             <div className="anim-rise flex w-full rounded-2xl bg-accent-tint py-3" style={{ animationDelay: '420ms' }}>
               <div className="flex flex-1 flex-col items-center gap-0.5">
                 <span className="font-mono text-[15px] font-bold text-accent">
@@ -348,7 +358,7 @@ export function CompleteSheet({
               Replay
             </button>
             <Link to={chaptersHref} className="flex-1 rounded-full bg-bg py-3 font-semibold text-ink-muted">
-              Back to chapters
+              {chaptersLabel}
             </Link>
           </div>
         </div>
