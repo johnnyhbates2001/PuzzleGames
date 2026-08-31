@@ -30,6 +30,7 @@ const GAME_LABELS: Record<string, string> = {
   zip: 'Zip',
   patches: 'Patches',
   nonogram: 'Nonogram',
+  wordle: 'Wordle',
 }
 
 function perGameExpertAchievements(): AchievementDef[] {

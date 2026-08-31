@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { getDailyNonogramLevel, getDailyQueensLevel, hashSeed } from './dailyChallenge'
+import { getDailyNonogramLevel, getDailyQueensLevel, getDailyWordleLevel, hashSeed } from './dailyChallenge'
+
+const WORDLE_POOL = ['crane', 'stare', 'apple', 'grape', 'mango', 'zesty', 'burnt', 'quilt']
 
 describe('hashSeed', () => {
   it('is deterministic for the same input', () => {
@@ -40,5 +42,19 @@ describe('getDailyNonogramLevel', () => {
     const a = getDailyNonogramLevel('2026-08-24')
     const b = getDailyNonogramLevel('2026-08-25')
     expect(a.solution).not.toEqual(b.solution)
+  })
+})
+
+describe('getDailyWordleLevel', () => {
+  it('generates the identical word for the same date', () => {
+    const a = getDailyWordleLevel('2026-08-24', WORDLE_POOL)
+    const b = getDailyWordleLevel('2026-08-24', WORDLE_POOL)
+    expect(a.answer).toBe(b.answer)
+    expect(a.id).toBe(b.id)
+  })
+
+  it('picks a word from the given pool', () => {
+    const level = getDailyWordleLevel('2026-08-24', WORDLE_POOL)
+    expect(WORDLE_POOL).toContain(level.answer)
   })
 })

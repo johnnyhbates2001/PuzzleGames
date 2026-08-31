@@ -1,5 +1,12 @@
 import type { Difficulty } from '../engine/types'
-import { getProgress, getSudokuProgress, getZipProgress, getPatchesProgress, getNonogramProgress } from '../storage/db'
+import {
+  getProgress,
+  getSudokuProgress,
+  getZipProgress,
+  getPatchesProgress,
+  getNonogramProgress,
+  getWordleProgress,
+} from '../storage/db'
 
 export const LEVELS_PER_CHAPTER = 20
 export const CHAPTERS_PER_TIER = 10
@@ -11,7 +18,7 @@ export interface ChapterMeta {
   skinId?: string
 }
 
-// Shared across all 5 games to keep initial content-authoring low — each game can
+// Shared across all 6 games to keep initial content-authoring low — each game can
 // diverge later. Index 0 = chapter 1.
 export const CHAPTER_META: ChapterMeta[] = [
   { name: 'First Steps' },
@@ -129,7 +136,7 @@ export function buildChapterNodes(currentLevelIndexByDifficulty: Record<Difficul
   return nodes
 }
 
-const ALL_PROGRESS_GETTERS = [getProgress, getSudokuProgress, getZipProgress, getPatchesProgress, getNonogramProgress]
+const ALL_PROGRESS_GETTERS = [getProgress, getSudokuProgress, getZipProgress, getPatchesProgress, getNonogramProgress, getWordleProgress]
 const ALL_DIFFICULTIES: Difficulty[] = ['easy', 'medium', 'hard']
 
 /** Highest story chapter number completed across every game/difficulty — used for the
@@ -184,7 +191,7 @@ export function endlessProgress(hardCurrentLevelIndex: number): EndlessProgress 
   }
 }
 
-const ALL_HARD_PROGRESS_GETTERS = [getProgress, getSudokuProgress, getZipProgress, getPatchesProgress, getNonogramProgress]
+const ALL_HARD_PROGRESS_GETTERS = [getProgress, getSudokuProgress, getZipProgress, getPatchesProgress, getNonogramProgress, getWordleProgress]
 
 /** Highest Endless rank reached (as a RANKS index) across every game's hard difficulty —
  *  used for the Endless-rank-gated Shop cosmetics (e.g. Eclipse/Coastal/Wildfire board

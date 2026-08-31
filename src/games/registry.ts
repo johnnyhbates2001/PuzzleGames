@@ -37,4 +37,10 @@ export const GAMES: GameDefinition[] = [
     description: 'Fill cells to match the row and column clues and reveal the picture.',
     route: '/nonogram',
   },
+  {
+    id: 'wordle',
+    title: 'Wordle',
+    description: 'Guess the hidden word — every guess tells you which letters are right.',
+    route: '/wordle',
+  },
 ]

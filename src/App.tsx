@@ -20,6 +20,9 @@ import PatchesCompletePage from './pages/PatchesCompletePage'
 import NonogramDifficultyPage from './pages/NonogramDifficultyPage'
 import NonogramGamePage from './pages/NonogramGamePage'
 import NonogramCompletePage from './pages/NonogramCompletePage'
+import WordleDifficultyPage from './pages/WordleDifficultyPage'
+import WordleGamePage from './pages/WordleGamePage'
+import WordleCompletePage from './pages/WordleCompletePage'
 import ErrorPage from './pages/ErrorPage'
 import { ScrollReset } from './components/ScrollReset'
 import { UpdateToast } from './components/UpdateToast'
@@ -81,6 +84,12 @@ const router = createBrowserRouter([
       { path: 'nonogram/free/:difficulty/complete', element: <NonogramCompletePage freePlay /> },
       { path: 'nonogram/:difficulty', element: <NonogramGamePage /> },
       { path: 'nonogram/:difficulty/complete', element: <NonogramCompletePage /> },
+      { path: 'wordle', element: <WordleDifficultyPage /> },
+      { path: 'wordle/chapters', element: <ChaptersPage gameId="wordle" /> },
+      { path: 'wordle/free/:difficulty', element: <WordleGamePage freePlay /> },
+      { path: 'wordle/free/:difficulty/complete', element: <WordleCompletePage freePlay /> },
+      { path: 'wordle/:difficulty', element: <WordleGamePage /> },
+      { path: 'wordle/:difficulty/complete', element: <WordleCompletePage /> },
     ],
   },
 ])
