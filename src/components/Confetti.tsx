@@ -1,5 +1,6 @@
 import { useMemo, type CSSProperties } from 'react'
 import { useRegionColors } from '../hooks/useSkin'
+import { useEquippedCosmetic } from '../hooks/useCosmetics'
 
 interface Piece {
   left: number
@@ -16,11 +17,24 @@ interface ConfettiProps {
   variant?: 'full' | 'light'
 }
 
+/** Emoji-burst confetti styles (see cosmetics.ts's 'confetti' category) — a single
+ *  large emoji per piece instead of a colored shape, for the three achievement-locked
+ *  styles that are more "badge shower" than confetti. */
+const EMOJI_BY_STYLE: Record<string, string> = {
+  'century-burst': '💯',
+  'puzzle-master-shower': '👑',
+  'collectors-rain': '🎨',
+}
+
 /** One-shot celebratory burst rendered once per completion screen — a fixed set of
  *  pieces frozen at mount (not re-randomized on re-render), each falling with its own
- *  timing/drift/rotation via CSS custom properties. Plays once, never loops. */
+ *  timing/drift/rotation via CSS custom properties. Plays once, never loops. Shape/size
+ *  vary by the equipped 'confetti' cosmetic; 'classic' (the pre-expansion default) is
+ *  small colored squares pulled from the active board skin. */
 export function Confetti({ variant = 'full' }: ConfettiProps) {
   const regionColors = useRegionColors()
+  const style = useEquippedCosmetic('confetti')
+  const emoji = EMOJI_BY_STYLE[style]
   const pieceCount = variant === 'full' ? 16 : 4
   const pieces = useMemo<Piece[]>(
     () =>
@@ -44,18 +58,22 @@ export function Confetti({ variant = 'full' }: ConfettiProps) {
         <span
           key={i}
           aria-hidden="true"
-          className="anim-confetti absolute top-0 size-2 rounded-[1px]"
+          className={`anim-confetti absolute top-0 flex items-center justify-center leading-none ${
+            emoji ? 'text-lg' : style === 'ribbons' ? 'h-3.5 w-1.5 rounded-[1px]' : style === 'fireworks' ? 'size-1.5 rounded-full' : 'size-2 rounded-[1px]'
+          }`}
           style={
             {
               left: `${p.left}%`,
-              backgroundColor: p.color,
+              backgroundColor: emoji ? undefined : p.color,
               animationDelay: `${p.delay}ms`,
               animationDuration: `${p.duration}ms`,
               '--drift': `${p.drift}px`,
               '--rotate': `${p.rotate}deg`,
             } as CSSProperties
           }
-        />
+        >
+          {emoji}
+        </span>
       ))}
     </div>
   )

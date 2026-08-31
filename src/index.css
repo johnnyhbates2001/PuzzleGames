@@ -58,16 +58,16 @@
    rather not have the app's default purple/pink accents. Self-contained like Light/Dark:
    picking it opts out of the system-dark media query below regardless of OS preference. */
 :root[data-theme='yellow'] {
-  --bg: oklch(97% 0.02 95);
-  --surface: oklch(99% 0.01 95);
-  --ink: oklch(22% 0.02 80);
-  --ink-muted: oklch(46% 0.03 80);
-  --accent: oklch(66% 0.16 85);
-  --accent-tint: oklch(93% 0.05 90);
+  --bg: oklch(97% 0.03 98);
+  --surface: oklch(99% 0.015 98);
+  --ink: oklch(20% 0.02 85);
+  --ink-muted: oklch(46% 0.03 85);
+  --accent: oklch(80% 0.19 95);
+  --accent-tint: oklch(95% 0.06 95);
   --danger: oklch(45% 0.18 25);
-  --border-dashed: oklch(65% 0.03 85 / 0.4);
-  --grid-gap: oklch(90% 0.02 90);
-  --grid-line-strong: oklch(60% 0.03 85);
+  --border-dashed: oklch(70% 0.04 90 / 0.4);
+  --grid-gap: oklch(91% 0.025 92);
+  --grid-line-strong: oklch(65% 0.04 90);
 }
 
 /* Dark palette applies when the system prefers dark (and the user hasn't explicitly
@@ -135,12 +135,12 @@
    per-game accent — both hardcode a violet/pink hue outside the normal --accent flow
    above, so the Yellow theme needs its own overrides for them specifically. */
 :root[data-theme='yellow'] [data-force-theme='dark'] {
-  --color-accent: oklch(74% 0.15 85);
-  --color-accent-tint: oklch(32% 0.06 85);
-  --color-heat-2: oklch(40% 0.09 85);
-  --color-heat-3: oklch(58% 0.14 85);
-  --color-heat-4: oklch(78% 0.15 85);
-  --color-streak: oklch(78% 0.15 85);
+  --color-accent: oklch(84% 0.17 95);
+  --color-accent-tint: oklch(34% 0.07 95);
+  --color-heat-2: oklch(42% 0.10 95);
+  --color-heat-3: oklch(60% 0.15 95);
+  --color-heat-4: oklch(80% 0.17 95);
+  --color-streak: oklch(80% 0.17 95);
 }
 :root[data-theme='yellow'] [data-game='nonogram'] {
   --color-accent: oklch(52% 0.14 205);
@@ -202,6 +202,61 @@
 :root[data-theme='dark'] [data-game='nonogram'] {
   --color-accent: oklch(68% 0.16 340);
   --color-accent-tint: oklch(31% 0.05 340);
+}
+
+/* Accent themes (Shop Expansion) — a purchasable app-wide accent recolor, deliberately
+   separate from per-game [data-game] identity and from board skins: it only touches the
+   shared --accent/--accent-tint (Home, generic buttons/highlights) and the always-dark
+   screens' --color-accent (Shop, Stats), never a game's own accent. See
+   AccentThemeEffect.tsx, which stamps data-accent-theme on <html>, and cosmetics.ts's
+   'accentTheme' category. */
+:root[data-accent-theme='coral'] {
+  --accent: oklch(64% 0.18 30);
+  --accent-tint: oklch(94% 0.04 30);
+}
+:root[data-accent-theme='emerald'] {
+  --accent: oklch(62% 0.16 155);
+  --accent-tint: oklch(94% 0.045 155);
+}
+:root[data-accent-theme='sky'] {
+  --accent: oklch(66% 0.14 240);
+  --accent-tint: oklch(94% 0.035 240);
+}
+:root[data-accent-theme='rose'] {
+  --accent: oklch(66% 0.16 355);
+  --accent-tint: oklch(94% 0.045 355);
+}
+:root[data-accent-theme='diamond-chrome'] {
+  --accent: oklch(75% 0.03 230);
+  --accent-tint: oklch(95% 0.015 230);
+}
+:root[data-accent-theme='master-gold'] {
+  --accent: oklch(78% 0.15 85);
+  --accent-tint: oklch(95% 0.05 85);
+}
+:root[data-accent-theme='coral'] [data-force-theme='dark'] {
+  --color-accent: oklch(70% 0.16 30);
+  --color-accent-tint: oklch(32% 0.05 30);
+}
+:root[data-accent-theme='emerald'] [data-force-theme='dark'] {
+  --color-accent: oklch(68% 0.15 155);
+  --color-accent-tint: oklch(30% 0.05 155);
+}
+:root[data-accent-theme='sky'] [data-force-theme='dark'] {
+  --color-accent: oklch(70% 0.13 240);
+  --color-accent-tint: oklch(30% 0.045 240);
+}
+:root[data-accent-theme='rose'] [data-force-theme='dark'] {
+  --color-accent: oklch(72% 0.15 355);
+  --color-accent-tint: oklch(31% 0.05 355);
+}
+:root[data-accent-theme='diamond-chrome'] [data-force-theme='dark'] {
+  --color-accent: oklch(80% 0.025 230);
+  --color-accent-tint: oklch(34% 0.02 230);
+}
+:root[data-accent-theme='master-gold'] [data-force-theme='dark'] {
+  --color-accent: oklch(82% 0.16 85);
+  --color-accent-tint: oklch(34% 0.06 85);
 }
 
 /* Motion (design section 05) — short, interruptible, best-effort against the spec's
@@ -559,6 +614,73 @@
   }
   .anim-confetti {
     animation: confetti-fall 1s ease-in both;
+  }
+
+  /* Celebration animations (Shop Expansion) — swap for CompleteSheet's default
+     pop-in checkmark badge (see cosmetics.ts's 'celebration' category and
+     CompleteSheet.tsx's CELEBRATION_CLASS). */
+  @keyframes celebrate-bounce {
+    0%,
+    100% {
+      transform: scale(1);
+    }
+    50% {
+      transform: scale(1.22);
+    }
+  }
+  .anim-celebrate-bounce {
+    animation: celebrate-bounce 900ms ease-in-out 1;
+  }
+  @keyframes celebrate-shock {
+    0% {
+      box-shadow: 0 0 0 0 currentColor;
+      opacity: 0.9;
+    }
+    100% {
+      box-shadow: 0 0 0 14px currentColor;
+      opacity: 0;
+    }
+  }
+  .anim-celebrate-shock {
+    animation: celebrate-shock 900ms ease-out 1;
+  }
+  @keyframes celebrate-flame {
+    0%,
+    100% {
+      transform: scale(1) rotate(-3deg);
+    }
+    50% {
+      transform: scale(1.15) rotate(3deg);
+    }
+  }
+  .anim-celebrate-flame {
+    animation: celebrate-flame 500ms ease-in-out 3;
+  }
+  @keyframes celebrate-rocket {
+    0%,
+    100% {
+      transform: translateY(0);
+    }
+    50% {
+      transform: translateY(-8px);
+    }
+  }
+  .anim-celebrate-rocket {
+    animation: celebrate-rocket 700ms ease-in-out 2;
+  }
+
+  /* Zip 'Pulse' line style (Shop Expansion) — see ZipBoard.tsx's path polyline. */
+  @keyframes zip-line-pulse {
+    0%,
+    100% {
+      opacity: 0.55;
+    }
+    50% {
+      opacity: 1;
+    }
+  }
+  .anim-zip-pulse {
+    animation: zip-line-pulse 1.4s ease-in-out infinite;
   }
 
   /* Page transitions — react-router adds html.transitioning during an active View

@@ -1,23 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { TabBar } from '../components/TabBar'
 import { FlameIcon, GemIcon, CrownIcon, StarIcon, TargetIcon } from '../components/icons'
-import { GAMES } from '../games/registry'
-import { SKINS } from '../skins'
 import { ACHIEVEMENTS, type AchievementContext, type AchievementIconGroup } from '../achievements/definitions'
-import {
-  getDailyStreak,
-  getNonogramProgress,
-  getPatchesProgress,
-  getProgress,
-  getSettings,
-  getStreak,
-  getSudokuProgress,
-  getZipProgress,
-  markAchievementsSeen,
-  type DifficultyProgress,
-} from '../storage/db'
-import type { Difficulty } from '../engine/types'
-import type { DailyGameId } from '../games/dailyChallenge'
+import { buildAchievementContext } from '../achievements/context'
+import { getSettings, markAchievementsSeen } from '../storage/db'
 
 const ICON_BY_GROUP: Record<AchievementIconGroup, (props: { size?: number }) => React.JSX.Element> = {
   star: StarIcon,
@@ -27,50 +13,13 @@ const ICON_BY_GROUP: Record<AchievementIconGroup, (props: { size?: number }) => 
   crown: CrownIcon,
 }
 
-const DIFFICULTIES: Difficulty[] = ['easy', 'medium', 'hard']
-
-const PROGRESS_GETTER: Record<string, (d: Difficulty) => Promise<DifficultyProgress>> = {
-  queens: getProgress,
-  sudoku: getSudokuProgress,
-  zip: getZipProgress,
-  patches: getPatchesProgress,
-  nonogram: getNonogramProgress,
-}
-
-async function solvedForGame(gameId: string): Promise<number> {
-  const getter = PROGRESS_GETTER[gameId]
-  const results = await Promise.all(DIFFICULTIES.map((d) => getter(d)))
-  return results.reduce((sum, p) => sum + p.completedCount, 0)
-}
-
-async function buildContext(): Promise<AchievementContext> {
-  const [settings, streak, dailyStreaks, solvedEntries] = await Promise.all([
-    getSettings(),
-    getStreak(),
-    Promise.all(GAMES.map((g) => getDailyStreak(g.id as DailyGameId))),
-    Promise.all(GAMES.map(async (g) => [g.id, await solvedForGame(g.id)] as const)),
-  ])
-  const solvedByGame = Object.fromEntries(solvedEntries)
-  const totalSolved = solvedEntries.reduce((sum, [, n]) => sum + n, 0)
-  const maxDailyStreak = dailyStreaks.length > 0 ? Math.max(...dailyStreaks) : 0
-  return {
-    totalSolved,
-    solvedByGame,
-    streak,
-    maxDailyStreak,
-    unassistedCompletions: settings.unassistedCompletions,
-    ownedSkinCount: settings.ownedSkins.length,
-    totalSkinCount: SKINS.length,
-  }
-}
-
 export default function AwardsPage() {
   const [ctx, setCtx] = useState<AchievementContext | null>(null)
   const [seen, setSeen] = useState<string[]>([])
 
   useEffect(() => {
     let cancelled = false
-    buildContext().then((c) => {
+    buildAchievementContext().then((c) => {
       if (cancelled) return
       setCtx(c)
       const unlockedIds = ACHIEVEMENTS.filter((a) => a.check(c)).map((a) => a.id)

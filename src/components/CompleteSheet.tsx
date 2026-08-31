@@ -7,6 +7,7 @@ import { getSettings } from '../storage/db'
 import { getSkin } from '../skins'
 import { Confetti } from './Confetti'
 import { CheckIcon, FlameIcon } from './icons'
+import { useEquippedCosmetic } from '../hooks/useCosmetics'
 import type { ChapterCompleteInfo } from '../hooks/useGameCompletion'
 
 interface CompleteSheetProps {
@@ -97,6 +98,7 @@ export function CompleteSheet({
 }: CompleteSheetProps) {
   const { playSound } = useAudio()
   const reducedMotion = useReducedMotion()
+  const celebration = useEquippedCosmetic('celebration')
   const [headline] = useState(() => {
     const pool = Math.random() < PERSONAL_CHANCE ? PERSONAL_HEADLINES : PLAIN_HEADLINES
     return pool[Math.floor(Math.random() * pool.length)]
@@ -225,7 +227,32 @@ export function CompleteSheet({
           className="anim-pop-in absolute -top-8 flex size-16 items-center justify-center rounded-full border-4 border-surface bg-accent text-white"
           style={{ animationDelay: '140ms', animationFillMode: 'both' }}
         >
-          <CheckIcon size={26} />
+          {celebration === 'shockwave' && (
+            <span
+              className="anim-celebrate-shock absolute inset-0 rounded-full"
+              style={{ animationDelay: '540ms', animationFillMode: 'both' }}
+            />
+          )}
+          <span
+            className={
+              celebration === 'bounce-pop'
+                ? 'anim-celebrate-bounce'
+                : celebration === 'streak-flame'
+                  ? 'anim-celebrate-flame'
+                  : celebration === 'rocket-launch'
+                    ? 'anim-celebrate-rocket'
+                    : ''
+            }
+            style={celebration !== 'classic' ? { animationDelay: '540ms', animationFillMode: 'both' } : undefined}
+          >
+            {celebration === 'streak-flame' ? (
+              <FlameIcon size={26} />
+            ) : celebration === 'rocket-launch' ? (
+              <span className="text-2xl leading-none">🚀</span>
+            ) : (
+              <CheckIcon size={26} />
+            )}
+          </span>
         </span>
 
         <div className="mt-4">

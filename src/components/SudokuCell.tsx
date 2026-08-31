@@ -1,5 +1,6 @@
-import { memo } from 'react'
+import { memo, type CSSProperties } from 'react'
 import { useLingeringFlag } from '../hooks/useLingeringFlag'
+import { useEquippedCosmetic } from '../hooks/useCosmetics'
 
 const CONFLICT_TINT_HOLD_MS = 900
 
@@ -53,6 +54,24 @@ function backgroundClass(selected: boolean, sameValue: boolean, peer: boolean): 
   return 'bg-surface'
 }
 
+/** Sudoku 'digit styles' cosmetic (see cosmetics.ts) — a font-family/weight/style swap
+ *  on placed digits, applied on top of the given/entered color logic below rather than
+ *  replacing it, so a styled digit still tints red on conflict same as Classic. */
+function digitStyleCss(style: string): CSSProperties {
+  switch (style) {
+    case 'rounded':
+      return { fontFamily: "ui-rounded, 'SF Pro Rounded', sans-serif", fontWeight: 600 }
+    case 'mono':
+      return { fontFamily: "'Courier New', monospace", fontWeight: 700 }
+    case 'handwritten':
+      return { fontFamily: 'cursive', fontStyle: 'italic', fontWeight: 600 }
+    case 'neon':
+      return { textShadow: '0 0 8px currentColor, 0 0 2px currentColor' }
+    default:
+      return {}
+  }
+}
+
 function SudokuCellImpl({
   row,
   col,
@@ -75,6 +94,7 @@ function SudokuCellImpl({
   onClick,
 }: SudokuCellProps) {
   const tinted = useLingeringFlag(conflict, CONFLICT_TINT_HOLD_MS)
+  const digitStyle = useEquippedCosmetic('sudokuDigitStyle')
   const showGhost = retractGhostValue !== undefined && value === 0
   const delayMs = sweepDelayMs ?? unitCompleteDelayMs
 
@@ -104,6 +124,7 @@ function SudokuCellImpl({
       {value !== 0 ? (
         <span
           className={`${given ? '' : 'anim-pop-in'} ${given ? 'font-bold text-ink' : tinted ? 'font-semibold text-danger' : 'font-semibold text-accent'}`}
+          style={digitStyleCss(digitStyle)}
         >
           {value}
         </span>

@@ -289,6 +289,23 @@ export function GemIcon({ size = 22, className }: IconProps) {
   )
 }
 
+export function DotMarkerIcon({ size = 22, className }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" width={size} height={size} className={className} fill="currentColor">
+      <circle cx="12" cy="12" r="7" />
+    </svg>
+  )
+}
+
+export function ChessKingIcon({ size = 22, className }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" width={size} height={size} className={className} fill="currentColor">
+      <path d="M11 2.2h2v2.6h2.4v2h-2.4v1.7c3.4.8 5.6 3.5 5.6 7v1H5.4v-1c0-3.5 2.2-6.2 5.6-7V6.8H8.6v-2H11z" />
+      <path d="M4.6 18.5h14.8l.9 3.3H3.7z" />
+    </svg>
+  )
+}
+
 export function AwardsTabIcon({ size = 21, className }: IconProps) {
   return (
     <svg viewBox="0 0 24 24" width={size} height={size} className={className} fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">

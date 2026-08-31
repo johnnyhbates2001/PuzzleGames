@@ -1,6 +1,7 @@
-import { memo } from 'react'
+import { memo, type CSSProperties } from 'react'
 import type { PatchShape } from '../engine/patches/types'
 import { useLingeringFlag } from '../hooks/useLingeringFlag'
+import { useEquippedCosmetic } from '../hooks/useCosmetics'
 
 const CONFLICT_TINT_HOLD_MS = 900
 
@@ -41,6 +42,28 @@ const SHAPE_BADGE_CLASS: Record<PatchShape, string> = {
   wide: 'aspect-[3/2]',
 }
 
+const SCALLOP_CLIP_PATH =
+  'polygon(50% 0%,61% 15%,78% 8%,80% 27%,97% 33%,88% 50%,97% 67%,80% 73%,78% 92%,61% 85%,50% 100%,39% 85%,22% 92%,20% 73%,3% 67%,12% 50%,3% 33%,20% 27%,22% 8%,39% 15%)'
+const HEXAGON_CLIP_PATH = 'polygon(25% 5%,75% 5%,100% 50%,75% 95%,25% 95%,0% 50%)'
+
+/** Patches 'badge shapes' cosmetic (see cosmetics.ts) — a border-radius/clip-path swap
+ *  on the clue badge, layered on top of the existing rounded-md default rather than
+ *  replacing the class entirely. */
+function badgeShapeCss(shape: string): CSSProperties {
+  switch (shape) {
+    case 'circle':
+      return { borderRadius: '50%' }
+    case 'hexagon':
+      return { clipPath: HEXAGON_CLIP_PATH, borderRadius: 0 }
+    case 'diamond':
+      return { clipPath: 'polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%)', borderRadius: 0 }
+    case 'scallop':
+      return { clipPath: SCALLOP_CLIP_PATH, borderRadius: 0 }
+    default:
+      return {}
+  }
+}
+
 function PatchesCellImpl({
   row,
   col,
@@ -59,6 +82,7 @@ function PatchesCellImpl({
   onHintPulseEnd,
 }: PatchesCellProps) {
   const tinted = useLingeringFlag(mismatched, CONFLICT_TINT_HOLD_MS)
+  const badgeShape = useEquippedCosmetic('patchesBadgeShape')
 
   function handleAnimationEnd(e: React.AnimationEvent<HTMLButtonElement>) {
     if (e.animationName === 'hint-pulse') onHintPulseEnd?.()
@@ -108,6 +132,7 @@ function PatchesCellImpl({
               ? 'bg-white/90 text-[oklch(30%_0.03_60)] shadow-[0_1px_3px_rgb(0_0_0/0.1)]'
               : 'bg-surface text-accent shadow-[inset_0_0_0_2px_var(--color-accent)]'
           }`}
+          style={badgeShapeCss(badgeShape)}
         >
           {clueArea}
         </span>

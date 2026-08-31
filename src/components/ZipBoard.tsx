@@ -1,6 +1,7 @@
 import { useRef } from 'react'
 import { coordKey, edgeKey, type Coord, type ZipLevelRecord } from '../engine/zip/types'
 import { ZipCell } from './ZipCell'
+import { useEquippedCosmetic } from '../hooks/useCosmetics'
 
 interface ZipBoardProps {
   level: ZipLevelRecord
@@ -34,6 +35,23 @@ const SWEEP_STEP_MS = 42
 // Stroke width as a fraction of one grid cell (viewBox units == cells) — ~21px on a
 // typical ~50px cell, matching the revised design's single continuous 21px stroke.
 const STROKE_WIDTH = 0.42
+
+/** Zip 'line styles' cosmetic (see cosmetics.ts). Most styles just tweak the main
+ *  polyline's dasharray/class; 'glow' and 'braided' layer an extra polyline behind/on
+ *  top instead, since a CSS `filter` on an SVG element scaled by its own viewBox is
+ *  unreliable across browsers — an extra stroke is simpler and always renders. */
+function zipLineStyleProps(style: string): { dasharray?: string; className?: string } {
+  switch (style) {
+    case 'dashed':
+      return { dasharray: '0.32 0.22' }
+    case 'dotted':
+      return { dasharray: '0.05 0.22' }
+    case 'pulse':
+      return { className: 'anim-zip-pulse' }
+    default:
+      return {}
+  }
+}
 
 function cellFromPoint(clientX: number, clientY: number): { row: number; col: number } | null {
   const el = document.elementFromPoint(clientX, clientY)
@@ -90,6 +108,10 @@ export function ZipBoard({
     lastCellKeyRef.current = null
   }
 
+  const lineStyle = useEquippedCosmetic('zipLineStyle')
+  const lineStyleProps = zipLineStyleProps(lineStyle)
+  const points = path.map((p) => `${p.col + 0.5},${p.row + 0.5}`).join(' ')
+
   const pathIndexOf = new Map<string, number>()
   path.forEach((c, i) => pathIndexOf.set(coordKey(c), i))
   const cpIndexOf = new Map<string, number>()
@@ -142,14 +164,38 @@ export function ZipBoard({
           className="pointer-events-none absolute inset-0 size-full"
           preserveAspectRatio="none"
         >
+          {lineStyle === 'glow' && (
+            <polyline
+              points={points}
+              fill="none"
+              stroke="var(--color-accent)"
+              strokeWidth={STROKE_WIDTH * 2.1}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              opacity={0.4}
+            />
+          )}
           <polyline
-            points={path.map((p) => `${p.col + 0.5},${p.row + 0.5}`).join(' ')}
+            points={points}
             fill="none"
             stroke="var(--color-accent)"
             strokeWidth={STROKE_WIDTH}
             strokeLinecap="round"
             strokeLinejoin="round"
+            strokeDasharray={lineStyleProps.dasharray}
+            className={lineStyleProps.className}
           />
+          {lineStyle === 'braided' && (
+            <polyline
+              points={points}
+              fill="none"
+              stroke="var(--color-bg)"
+              strokeWidth={STROKE_WIDTH * 0.4}
+              strokeLinecap="round"
+              strokeDasharray="0.22 0.22"
+              opacity={0.6}
+            />
+          )}
         </svg>
       )}
     </div>

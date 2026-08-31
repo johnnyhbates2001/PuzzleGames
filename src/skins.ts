@@ -7,9 +7,10 @@ export interface Skin {
   colors: string[]
   /** Coin price to buy. null = free (still needs equipping, not auto-owned). */
   price: number | null
-  /** Gated behind either a total solve-count or a story-chapter milestone (reached in
-   *  any game — see games/chapters.ts) instead of coins. */
-  locked?: { solvesNeeded: number } | { chapterNeeded: number }
+  /** Gated behind a total solve-count, a story-chapter milestone (reached in any game),
+   *  or an Endless rank (reached in any game's hard difficulty — see games/chapters.ts's
+   *  RANKS/getHighestEndlessRankIndex) instead of coins. */
+  locked?: { solvesNeeded: number } | { chapterNeeded: number } | { endlessRank: string }
 }
 
 export const DEFAULT_SKIN_ID = 'candy'
@@ -147,6 +148,68 @@ export const SKINS: Skin[] = [
     price: null,
     locked: { chapterNeeded: 30 },
     colors: ['#FDE68A', '#F5F5F4', '#FBBF24', '#FFFFFF', '#D97706', '#FEF3C7'],
+  },
+  // Shop Expansion — 8 new purchasable/Endless-rank skins (see
+  // theme_and_shop_update/README.md). Endless-rank ones use the new `endlessRank` lock
+  // kind, checked against getHighestEndlessRankIndex() rather than solves/chapters.
+  {
+    id: 'coral-reef',
+    name: 'Coral Reef',
+    tag: 'Warm coral & teal',
+    price: 280,
+    colors: ['#FF8A65', '#4DD0E1', '#FFAB91', '#26C6DA', '#FFCCBC', '#00ACC1'],
+  },
+  {
+    id: 'blueprint',
+    name: 'Blueprint',
+    tag: 'Navy technical',
+    price: 320,
+    colors: ['#0D1B2A', '#1B3A5C', '#3E5C76', '#F0F4F8', '#748CAB', '#1B263B'],
+  },
+  {
+    id: 'orchid',
+    name: 'Orchid',
+    tag: 'Pink & violet',
+    price: 350,
+    colors: ['#C77DFF', '#9D4EDD', '#E0AAFF', '#7B2CBF', '#F3D9FA', '#5A189A'],
+  },
+  {
+    id: 'copper',
+    name: 'Copper',
+    tag: 'Metallic bronze',
+    price: 300,
+    colors: ['#B87333', '#8C5A2B', '#D9A066', '#6B4226', '#EBC79E', '#A9662E'],
+  },
+  {
+    id: 'mint-fizz',
+    name: 'Mint Fizz',
+    tag: 'Mint & lime',
+    price: 260,
+    colors: ['#B9FBC0', '#77DD77', '#D4F8E8', '#4CAF50', '#E9FFE1', '#8FD9A8'],
+  },
+  {
+    id: 'eclipse',
+    name: 'Eclipse',
+    tag: 'Locked · Endless Gold rank',
+    price: null,
+    locked: { endlessRank: 'Gold' },
+    colors: ['#0A0A0A', '#D4AF37', '#1C1C1C', '#F4E4A6', '#2E2E2E', '#B8860B'],
+  },
+  {
+    id: 'coastal',
+    name: 'Coastal',
+    tag: 'Locked · Endless Diamond rank',
+    price: null,
+    locked: { endlessRank: 'Diamond' },
+    colors: ['#0B4F6C', '#01BAEF', '#E0FBFC', '#D4A373', '#146C94', '#F1EBDD'],
+  },
+  {
+    id: 'wildfire',
+    name: 'Wildfire',
+    tag: 'Locked · Endless Master I rank',
+    price: null,
+    locked: { endlessRank: 'Master I' },
+    colors: ['#7A0C0C', '#D62828', '#F77F00', '#3A0202', '#FCBF49', '#9E2A2B'],
   },
 ]
 

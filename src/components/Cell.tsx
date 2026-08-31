@@ -1,8 +1,10 @@
 import { memo } from 'react'
 import type { CellState } from '../state/types'
 import { hasX } from '../state/types'
-import { CrownIcon, XMarkIcon } from './icons'
+import { XMarkIcon } from './icons'
+import { QueensMarkerGlyph } from './QueensMarkerGlyph'
 import { useLingeringFlag } from '../hooks/useLingeringFlag'
+import { useEquippedCosmetic } from '../hooks/useCosmetics'
 
 const CONFLICT_TINT_HOLD_MS = 900
 
@@ -60,6 +62,7 @@ function CellImpl({
   onClick,
 }: CellProps) {
   const tinted = useLingeringFlag(conflict, CONFLICT_TINT_HOLD_MS)
+  const marker = useEquippedCosmetic('queensMarker')
   const showGhost = retracting && !cell.queen
   return (
     <button
@@ -78,11 +81,11 @@ function CellImpl({
     >
       {cell.queen ? (
         <span className={`anim-pop-in flex text-[min(6vw,28px)] ${tinted ? 'text-danger' : 'text-slate-900'}`}>
-          <CrownIcon className="size-[1em]" />
+          <QueensMarkerGlyph marker={marker} className="size-[1em]" />
         </span>
       ) : showGhost ? (
         <span className="anim-retract flex text-[min(6vw,28px)] text-slate-900" onAnimationEnd={onRetractEnd}>
-          <CrownIcon className="size-[1em]" />
+          <QueensMarkerGlyph marker={marker} className="size-[1em]" />
         </span>
       ) : hasX(cell) ? (
         <span

@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react'
 import { getSettings, setHapticsEnabled as setHapticsEnabledDb, setSoundEnabled as setSoundEnabledDb } from '../storage/db'
-import { playRawSound, vibrate, type SoundName } from '../audio/sfx'
+import { playRawSound, vibrate, type SoundName, type SoundPackId } from '../audio/sfx'
+import { useEquippedCosmetic } from './useCosmetics'
 
 interface AudioContextValue {
   soundEnabled: boolean
@@ -19,6 +20,7 @@ const AudioSettingsContext = createContext<AudioContextValue | null>(null)
 export function AudioProvider({ children }: { children: ReactNode }) {
   const [soundEnabled, setSoundEnabledState] = useState(true)
   const [hapticsEnabled, setHapticsEnabledState] = useState(true)
+  const soundPack = useEquippedCosmetic('soundPack') as SoundPackId
 
   useEffect(() => {
     let cancelled = false
@@ -44,9 +46,9 @@ export function AudioProvider({ children }: { children: ReactNode }) {
 
   const playSound = useCallback(
     (name: SoundName) => {
-      if (soundEnabled) playRawSound(name)
+      if (soundEnabled) playRawSound(name, soundPack)
     },
-    [soundEnabled],
+    [soundEnabled, soundPack],
   )
 
   const buzz = useCallback(

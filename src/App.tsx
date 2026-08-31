@@ -26,6 +26,8 @@ import { UpdateToast } from './components/UpdateToast'
 import { SplashScreen } from './components/SplashScreen'
 import { SkinProvider } from './hooks/useSkin'
 import { AudioProvider } from './hooks/useAudio'
+import { CosmeticsProvider } from './hooks/useCosmetics'
+import { AccentThemeEffect } from './components/AccentThemeEffect'
 
 const SPLASH_SEEN_KEY = 'splashShown'
 
@@ -95,10 +97,13 @@ function App() {
 
   return (
     <SkinProvider>
-      <AudioProvider>
-        {showSplash && <SplashScreen onDone={dismissSplash} />}
-        <RouterProvider router={router} />
-      </AudioProvider>
+      <CosmeticsProvider>
+        <AudioProvider>
+          <AccentThemeEffect />
+          {showSplash && <SplashScreen onDone={dismissSplash} />}
+          <RouterProvider router={router} />
+        </AudioProvider>
+      </CosmeticsProvider>
     </SkinProvider>
   )
 }

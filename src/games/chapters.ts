@@ -155,7 +155,7 @@ export async function getHighestChapterCompleted(): Promise<number> {
 // documents that 8x8 is already right at Apple's 44pt tap-target minimum on the
 // smallest supported iPhone, so growing the grid further would regress usability on
 // that device. Endless variety comes from fresh procedural puzzles and rank alone.
-const RANKS = ['Bronze', 'Silver', 'Gold', 'Diamond', 'Master I', 'Master II', 'Master III', 'Master IV', 'Master V']
+export const RANKS = ['Bronze', 'Silver', 'Gold', 'Diamond', 'Master I', 'Master II', 'Master III', 'Master IV', 'Master V']
 const CHAPTERS_PER_RANK = 5
 
 export interface EndlessProgress {
@@ -182,6 +182,21 @@ export function endlessProgress(hardCurrentLevelIndex: number): EndlessProgress 
     rank,
     isBoss: levelInChapter === LEVELS_PER_CHAPTER - 1,
   }
+}
+
+const ALL_HARD_PROGRESS_GETTERS = [getProgress, getSudokuProgress, getZipProgress, getPatchesProgress, getNonogramProgress]
+
+/** Highest Endless rank reached (as a RANKS index) across every game's hard difficulty —
+ *  used for the Endless-rank-gated Shop cosmetics (e.g. Eclipse/Coastal/Wildfire board
+ *  skins). -1 if no game has reached Endless yet, matching RANKS.indexOf's not-found
+ *  convention so callers can compare directly against a locked item's own rank index. */
+export async function getHighestEndlessRankIndex(): Promise<number> {
+  const results = await Promise.all(ALL_HARD_PROGRESS_GETTERS.map((getter) => getter('hard')))
+  return results.reduce((max, p) => {
+    const rank = endlessProgress(p.currentLevelIndex)?.rank
+    if (!rank) return max
+    return Math.max(max, RANKS.indexOf(rank))
+  }, -1)
 }
 
 export interface LevelModifiers {

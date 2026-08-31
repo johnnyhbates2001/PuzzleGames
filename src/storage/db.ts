@@ -9,6 +9,7 @@ import type { Mark as NonogramMark } from '../engine/nonogram/validator'
 import type { CellState } from '../state/types'
 import type { SudokuCellState } from '../state/sudokuTypes'
 import type { DailyGameId } from '../games/dailyChallenge'
+import type { CosmeticCategory } from '../cosmetics'
 
 const DB_NAME = 'queens-pwa'
 const DB_VERSION = 8
@@ -35,6 +36,14 @@ export interface Settings {
    *  useAutoOpenRulesOnce, which reads/writes this so the sheet only self-opens the
    *  player's first visit to each game's Difficulty page. */
   tutorialSeen: string[]
+  /** Owned/equipped ids for the 10 Shop Expansion cosmetic categories (see cosmetics.ts)
+   *  — keyed by category, one generalized system rather than 10 near-identical ones
+   *  (board skins keep their own dedicated ownedSkins/equippedSkin fields above since
+   *  that system predates this expansion). Absent category keys mean "only the
+   *  category's free default is owned/equipped" — see cosmetics.ts's CosmeticCategoryDef
+   *  defaultId, which every category has whether or not it appears here. */
+  ownedCosmetics: Partial<Record<CosmeticCategory, string[]>>
+  equippedCosmetics: Partial<Record<CosmeticCategory, string>>
 }
 
 export interface DifficultyProgress {
@@ -152,6 +161,8 @@ const DEFAULT_SETTINGS: Settings = {
   lastSeenStreak: 0,
   zenMode: false,
   tutorialSeen: [],
+  ownedCosmetics: {},
+  equippedCosmetics: {},
 }
 
 function defaultProgress(difficulty: Difficulty): DifficultyProgress {
@@ -307,6 +318,32 @@ export async function equipSkin(skinId: string): Promise<void> {
   const db = await getDB()
   const current = await getSettings()
   await db.put('settings', { ...current, equippedSkin: skinId }, 'global')
+}
+
+/** Generalized cosmetic buy/equip — see Settings.ownedCosmetics/equippedCosmetics and
+ *  cosmetics.ts. Mirrors buySkin/equipSkin exactly, just keyed by category. */
+export async function buyCosmetic(category: CosmeticCategory, id: string, price: number): Promise<boolean> {
+  const db = await getDB()
+  const current = await getSettings()
+  const owned = current.ownedCosmetics[category] ?? []
+  if (owned.includes(id)) return true
+  if (current.coins < price) return false
+  await db.put(
+    'settings',
+    {
+      ...current,
+      coins: current.coins - price,
+      ownedCosmetics: { ...current.ownedCosmetics, [category]: [...owned, id] },
+    },
+    'global',
+  )
+  return true
+}
+
+export async function equipCosmetic(category: CosmeticCategory, id: string): Promise<void> {
+  const db = await getDB()
+  const current = await getSettings()
+  await db.put('settings', { ...current, equippedCosmetics: { ...current.equippedCosmetics, [category]: id } }, 'global')
 }
 
 /** Local (not UTC) date key, so a streak day lines up with the player's own calendar day. */
