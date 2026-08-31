@@ -62,10 +62,8 @@ export default function ShopPage() {
   }
 
   return (
-    <main
-      data-force-theme="dark"
-      className="mx-auto flex min-h-svh max-w-lg flex-col gap-4 bg-bg px-4 py-[max(2rem,env(safe-area-inset-top))] pb-[max(6.5rem,calc(env(safe-area-inset-bottom)+5.5rem))] text-ink"
-    >
+    <main className="mx-auto flex min-h-svh max-w-lg flex-col gap-4 bg-bg px-4 py-[max(2rem,env(safe-area-inset-top))] pb-[max(6.5rem,calc(env(safe-area-inset-bottom)+5.5rem))] text-ink">
+
       <div className="flex items-center justify-between">
         <div>
           <h1 className="font-display text-[30px] font-extrabold tracking-tight">Shop</h1>

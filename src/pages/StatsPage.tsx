@@ -81,10 +81,8 @@ export default function StatsPage() {
   }, [])
 
   return (
-    <main
-      data-force-theme="dark"
-      className="mx-auto flex min-h-svh max-w-lg flex-col gap-4 bg-bg px-4 py-[max(2rem,env(safe-area-inset-top))] pb-[max(6.5rem,calc(env(safe-area-inset-bottom)+5.5rem))] text-ink"
-    >
+    <main className="mx-auto flex min-h-svh max-w-lg flex-col gap-4 bg-bg px-4 py-[max(2rem,env(safe-area-inset-top))] pb-[max(6.5rem,calc(env(safe-area-inset-bottom)+5.5rem))] text-ink">
+
       <h1 className="font-display text-[30px] font-extrabold tracking-tight">Stats</h1>
 
       <div className="flex items-center gap-3 rounded-[22px] bg-surface p-4">
@@ -99,8 +97,8 @@ export default function StatsPage() {
       </div>
 
       <div className="flex gap-2.5">
-        <StatTile value={String(totalSolved)} label="Solved" color="oklch(96% 0.01 260)" />
-        <StatTile value={String(coins)} label="Coins" color="oklch(80% 0.14 85)" />
+        <StatTile value={String(totalSolved)} label="Solved" color="var(--color-ink)" />
+        <StatTile value={String(coins)} label="Coins" color="var(--color-coin)" />
         <StatTile value={`${skinCount}/${SKINS.length}`} label="Skins" color="var(--color-accent)" />
       </div>
 
@@ -126,7 +124,7 @@ export default function StatsPage() {
         {games.map((g, i) => (
           <div
             key={g.id}
-            className={`flex items-center gap-3 py-3 ${i < games.length - 1 ? 'border-b border-[oklch(30%_0.014_260)]' : ''}`}
+            className={`flex items-center gap-3 py-3 ${i < games.length - 1 ? 'border-b border-ink/10' : ''}`}
           >
             <span className="size-2.5 shrink-0 rounded-full bg-accent" />
             <span className="flex-1 text-[15px] font-bold">{g.title}</span>
