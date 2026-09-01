@@ -93,6 +93,7 @@ export default function NonogramDifficultyPage() {
         title="Nonogram"
         steps={GAME_RULES.nonogram.steps}
         tip={GAME_RULES.nonogram.tip}
+        gameId="nonogram"
       />
     </main>
   )

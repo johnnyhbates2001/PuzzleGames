@@ -19,13 +19,14 @@ import { getFreePlayZipLevel, getNextZipLevel } from '../games/zipLevels'
 import { getDailyZipLevel, todayDateKey } from '../games/dailyChallenge'
 import { endlessProgress, modifierLabel, modifiersForLevel, type LevelModifiers } from '../games/chapters'
 import { useGameLifecycle } from '../hooks/useGameLifecycle'
-import { useGameCompletion } from '../hooks/useGameCompletion'
+import { useGameCompletion, type ChapterReplaySession } from '../hooks/useGameCompletion'
 import { useAudio } from '../hooks/useAudio'
 import { ZipBoard } from '../components/ZipBoard'
 import { ZipControls } from '../components/ZipControls'
 import { GameHeader } from '../components/GameHeader'
 import { HintSheet, type HintOption } from '../components/HintSheet'
 import { FailSheet } from '../components/FailSheet'
+import { formatElapsed } from '../components/Timer'
 import { BossGateSheet } from '../components/BossGateSheet'
 import { LevelContext } from '../components/LevelContext'
 import { BoltIcon, EyeIcon, FlagIcon } from '../components/icons'
@@ -74,6 +75,7 @@ function diffZipCells(prev: Coord[], next: Coord[]): { removed: Coord[]; added: 
 
 interface ReplayLocationState {
   replayLevel?: ZipLevelRecord
+  chapterReplay?: ChapterReplaySession
 }
 
 export default function ZipGamePage({ freePlay = false }: { freePlay?: boolean }) {
@@ -111,6 +113,7 @@ export default function ZipGamePage({ freePlay = false }: { freePlay?: boolean }
   // would otherwise let a player farm coins by re-solving the same puzzle all day).
   const dailyAlreadyCompletedRef = useRef(false)
   const initialReplayLevelRef = useRef((location.state as ReplayLocationState | null)?.replayLevel)
+  const initialChapterReplayRef = useRef((location.state as ReplayLocationState | null)?.chapterReplay)
 
   const finishLoad = useCallback(
     async (inProgress: ZipInProgressLevel | undefined) => {
@@ -152,6 +155,16 @@ export default function ZipGamePage({ freePlay = false }: { freePlay?: boolean }
       setFailed(null)
       setAwaitingBossConfirm(false)
       try {
+        const chapterReplay = initialChapterReplayRef.current
+        if (chapterReplay) {
+          const settings = await getSettings()
+          if (cancelled) return
+          setCoins(settings.coins)
+          sourceRef.current = { source: 'bank' }
+          dispatch({ type: 'LOAD', level: chapterReplay.levels[chapterReplay.index] as ZipLevelRecord })
+          return
+        }
+
         const replayLevel = initialReplayLevelRef.current
         if (replayLevel) {
           getSettings().then((s) => !cancelled && setCoins(s.coins))
@@ -247,7 +260,7 @@ export default function ZipGamePage({ freePlay = false }: { freePlay?: boolean }
   // always restarts fresh from the same deterministic puzzle within a day. Free Play
   // skips it too — every visit is meant to generate a brand new puzzle, not resume.
   useEffect(() => {
-    if (loading || !validDifficulty || isDaily || freePlay || state.status !== 'playing') return
+    if (loading || !validDifficulty || isDaily || freePlay || initialChapterReplayRef.current || state.status !== 'playing') return
     saveZipInProgress({
       difficulty: validDifficulty as Difficulty,
       level: state.level,
@@ -265,6 +278,7 @@ export default function ZipGamePage({ freePlay = false }: { freePlay?: boolean }
     status: state.status,
     isDaily,
     isFreePlay: freePlay,
+    chapterReplay: initialChapterReplayRef.current ?? null,
     validDifficulty,
     elapsedMs: state.elapsedMs,
     hintsUsed: state.hintsUsed,
@@ -306,6 +320,16 @@ export default function ZipGamePage({ freePlay = false }: { freePlay?: boolean }
       setLoading(false)
     }
   }, [validDifficulty, freePlay])
+
+  // Context chips for FailSheet — only meaningful while `failed` is set (a boss-
+  // modifier watcher just fired), so no need to compute this on every render.
+  const failChips = useMemo(() => {
+    if (!failed) return undefined
+    const chips: string[] = []
+    if (modifiers?.timed) chips.push(`Timed · ${formatElapsed(TIMED_BUDGET_MS)}`)
+    chips.push(`Reached ${state.path.length} of ${state.level.size * state.level.size}`)
+    return chips
+  }, [failed, modifiers, state.path, state.level.size])
 
   const nextCheckpoint = useMemo(() => {
     const idx = state.level.checkpoints.findIndex(
@@ -466,6 +490,7 @@ export default function ZipGamePage({ freePlay = false }: { freePlay?: boolean }
           reason={failed.reason}
           chaptersHref={freePlay ? '/zip/chapters?tab=free' : '/zip/chapters'}
           onTryAgain={handleTryAgain}
+          chips={failChips}
         />
       )}
 

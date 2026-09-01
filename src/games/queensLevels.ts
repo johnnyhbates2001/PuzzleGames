@@ -1,6 +1,7 @@
 import type { Difficulty, LevelRecord } from '../engine/types'
 import { generateLevel } from '../engine/generator'
 import { getProgress } from '../storage/db'
+import { CHAPTERS_PER_TIER, LEVELS_PER_CHAPTER } from './chapters'
 
 export interface NextLevelResult {
   level: LevelRecord
@@ -63,4 +64,15 @@ export async function getFreePlayLevel(difficulty: Difficulty): Promise<FreePlay
   }
   const bank = await loadBank(difficulty)
   return { level: bank[Math.floor(Math.random() * bank.length)], source: 'bank' }
+}
+
+/** Every level in one story chapter, in order — always all 20, since every chapter
+ *  (10 per difficulty tier) is fully bank-sourced (each bank has exactly 200 levels;
+ *  see games/chapters.ts). Powers "replay this chapter" from ChaptersPage's
+ *  CompleteRow — reuses the same bank chunk getNextLevel already loads. */
+export async function getChapterLevels(difficulty: Difficulty, chapterNumber: number): Promise<LevelRecord[]> {
+  const bank = await loadBank(difficulty)
+  const chapterInTier = (chapterNumber - 1) % CHAPTERS_PER_TIER
+  const start = chapterInTier * LEVELS_PER_CHAPTER
+  return bank.slice(start, start + LEVELS_PER_CHAPTER)
 }

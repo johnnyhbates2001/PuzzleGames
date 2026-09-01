@@ -18,6 +18,12 @@ import { ZIP_SIZE } from '../engine/zip/types'
 import { PATCHES_SIZE } from '../engine/patches/types'
 import { NONOGRAM_SIZE } from '../engine/nonogram/types'
 import { WORDLE_RULES } from '../engine/wordle/types'
+import { getChapterLevels as getQueensChapterLevels } from './queensLevels'
+import { getChapterLevels as getSudokuChapterLevels } from './sudokuLevels'
+import { getChapterLevels as getZipChapterLevels } from './zipLevels'
+import { getChapterLevels as getPatchesChapterLevels } from './patchesLevels'
+import { getChapterLevels as getNonogramChapterLevels } from './nonogramLevels'
+import { getChapterLevels as getWordleChapterLevels } from './wordleLevels'
 
 /** Small per-game tile art shown on Home and in each game's Chapters/Free-play rows —
  *  Queens has no bespoke preview component, so it falls back to the static app icon. */
@@ -37,6 +43,19 @@ export const PROGRESS_GETTER: Record<string, (d: Difficulty) => Promise<Difficul
   patches: getPatchesProgress,
   nonogram: getNonogramProgress,
   wordle: getWordleProgress,
+}
+
+/** Fetches one story chapter's 20 levels, in order — powers "replay this chapter"
+ *  from ChaptersPage's CompleteRow. Return type is loosely `unknown[]` since
+ *  ChaptersPage is generic across games and only ever passes these straight through
+ *  to Game*Page's LOAD dispatch, never inspecting their contents. */
+export const CHAPTER_LEVELS_GETTER: Record<string, (d: Difficulty, chapterNumber: number) => Promise<unknown[]>> = {
+  queens: getQueensChapterLevels,
+  sudoku: getSudokuChapterLevels,
+  zip: getZipChapterLevels,
+  patches: getPatchesChapterLevels,
+  nonogram: getNonogramChapterLevels,
+  wordle: getWordleChapterLevels,
 }
 
 // Every game now has a chapter map, routed to as the primary entry point instead of

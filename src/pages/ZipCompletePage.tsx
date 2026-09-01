@@ -3,9 +3,17 @@ import { useLocation, useParams } from 'react-router-dom'
 import { AppLink as Link } from '../components/AppLink'
 import { useAppNavigate as useNavigate } from '../hooks/useAppNavigate'
 import type { Coord, Difficulty, ZipLevelRecord } from '../engine/zip/types'
-import { averageTimeMs, getZipProgress } from '../storage/db'
+import { getStreak, getZipProgress } from '../storage/db'
 import { ZipBoard } from '../components/ZipBoard'
 import { CompleteSheet } from '../components/CompleteSheet'
+import type { ChapterCompleteInfo } from '../hooks/useGameCompletion'
+
+interface ChapterReplayState {
+  chapterNumber: number
+  chapterName: string
+  levels: ZipLevelRecord[]
+  index: number
+}
 
 interface CompleteLocationState {
   timeMs: number
@@ -16,6 +24,9 @@ interface CompleteLocationState {
   isPersonalBest?: boolean
   dailyBonusApplied?: boolean
   dailyStreak?: number
+  chapterComplete?: ChapterCompleteInfo
+  chapterReplay?: ChapterReplayState
+  sessionDone?: boolean
 }
 
 const LABELS: Record<Difficulty, string> = { easy: 'Easy', medium: 'Medium', hard: 'Hard' }
@@ -28,26 +39,35 @@ export default function ZipCompletePage({ freePlay = false }: { freePlay?: boole
   const { difficulty } = useParams<{ difficulty: string }>()
   const location = useLocation()
   const navigate = useNavigate()
-  const [avgMs, setAvgMs] = useState<number | null>(null)
   const [bestMs, setBestMs] = useState<number | null>(null)
+  const [streak, setStreak] = useState<number | undefined>(undefined)
 
   const isDaily = difficulty === 'daily'
   const validDifficulty = isValidDifficulty(difficulty) ? difficulty : null
   const completion = location.state as CompleteLocationState | null
+  const isChapterReplay = !!completion?.chapterReplay
 
   useEffect(() => {
-    if (!validDifficulty || freePlay) return
+    if (!validDifficulty || freePlay || isChapterReplay) return
     let cancelled = false
     getZipProgress(validDifficulty).then((progress) => {
-      if (!cancelled) {
-        setAvgMs(averageTimeMs(progress))
-        setBestMs(progress.bestTimeMs)
-      }
+      if (!cancelled) setBestMs(progress.bestTimeMs)
     })
     return () => {
       cancelled = true
     }
-  }, [validDifficulty, freePlay])
+  }, [validDifficulty, freePlay, isChapterReplay])
+
+  useEffect(() => {
+    if (isDaily) return
+    let cancelled = false
+    getStreak().then((s) => {
+      if (!cancelled) setStreak(s)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [isDaily])
 
   if ((!validDifficulty && !isDaily) || !completion) {
     return (
@@ -63,7 +83,19 @@ export default function ZipCompletePage({ freePlay = false }: { freePlay?: boole
     )
   }
 
-  const { timeMs, levelNumber, level, path, coinsAwarded, isPersonalBest, dailyBonusApplied, dailyStreak } = completion
+  const {
+    timeMs,
+    levelNumber,
+    level,
+    path,
+    coinsAwarded,
+    isPersonalBest,
+    dailyBonusApplied,
+    dailyStreak,
+    chapterComplete,
+    chapterReplay,
+    sessionDone,
+  } = completion
 
   return (
     <main data-game="zip" className="fixed inset-0 overflow-hidden bg-bg">
@@ -82,22 +114,40 @@ export default function ZipCompletePage({ freePlay = false }: { freePlay?: boole
         levelNumber={isDaily ? undefined : levelNumber}
         timeMs={timeMs}
         bestMs={bestMs}
-        avgMs={avgMs}
+        streak={streak}
         coinsAwarded={coinsAwarded}
         isPersonalBest={!!isPersonalBest}
         dailyBonusApplied={dailyBonusApplied}
         isDaily={isDaily}
         dailyStreak={dailyStreak}
-        freePlay={freePlay}
+        chapterComplete={chapterComplete}
+        chapterReplay={chapterReplay && { ...chapterReplay, sessionFinished: !!sessionDone }}
         chaptersHref={isDaily ? '/' : freePlay ? '/zip/chapters?tab=free' : '/zip/chapters'}
         chaptersLabel={isDaily ? 'Back to Home' : freePlay ? 'Back to Free Play' : undefined}
-        onNextLevel={() => navigate(`/zip/${freePlay ? 'free/' : ''}${validDifficulty}`, { replace: true })}
-        onReplay={() =>
+        onNextLevel={() => {
+          if (chapterReplay && !sessionDone) {
+            navigate(`/zip/${validDifficulty}`, { state: { chapterReplay }, replace: true })
+            return
+          }
+          if (chapterReplay && sessionDone) {
+            navigate('/zip/chapters', { replace: true })
+            return
+          }
+          navigate(`/zip/${freePlay ? 'free/' : ''}${validDifficulty}`, { replace: true })
+        }}
+        onReplay={() => {
+          if (chapterReplay) {
+            navigate(`/zip/${validDifficulty}`, {
+              state: { chapterReplay: { ...chapterReplay, index: chapterReplay.index - 1 } },
+              replace: true,
+            })
+            return
+          }
           navigate(isDaily ? '/zip/daily' : `/zip/${freePlay ? 'free/' : ''}${validDifficulty}`, {
             state: { replayLevel: level },
             replace: true,
           })
-        }
+        }}
       />
     </main>
   )

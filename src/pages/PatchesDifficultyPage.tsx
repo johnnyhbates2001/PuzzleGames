@@ -93,6 +93,7 @@ export default function PatchesDifficultyPage() {
         title="Patches"
         steps={GAME_RULES.patches.steps}
         tip={GAME_RULES.patches.tip}
+        gameId="patches"
       />
     </main>
   )

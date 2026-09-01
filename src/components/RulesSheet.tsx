@@ -1,6 +1,7 @@
 import { CloseIcon, HelpCircleIcon, LightbulbIcon } from './icons'
 import { useDismissable } from '../hooks/useDismissable'
 import { useSheetDrag } from '../hooks/useSheetDrag'
+import { RulesMiniBoard } from './RulesMiniBoard'
 
 interface RulesSheetProps {
   open: boolean
@@ -8,11 +9,14 @@ interface RulesSheetProps {
   title: string
   steps: string[]
   tip?: string
+  /** GameDefinition.id — drives the small worked-example mini-board beside the
+   *  title (see RulesMiniBoard.tsx). Omitted, the header falls back to title-only. */
+  gameId?: string
 }
 
 const EXIT_DURATION_MS = 240
 
-export function RulesSheet({ open, onClose, title, steps, tip }: RulesSheetProps) {
+export function RulesSheet({ open, onClose, title, steps, tip, gameId }: RulesSheetProps) {
   const { shouldRender, exiting } = useDismissable(open, EXIT_DURATION_MS)
   const { dragY, dragging, handleProps } = useSheetDrag(onClose)
   if (!shouldRender) return null
@@ -31,13 +35,16 @@ export function RulesSheet({ open, onClose, title, steps, tip }: RulesSheetProps
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mx-auto mb-3 h-1 w-9 touch-none rounded-full bg-bg" {...handleProps} />
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="font-display text-xl font-extrabold text-ink">How to play {title}</h2>
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3.5">
+            {gameId && <RulesMiniBoard gameId={gameId} />}
+            <h2 className="font-display text-xl font-extrabold text-ink">How to play {title}</h2>
+          </div>
           <button
             type="button"
             aria-label="Close"
             onClick={onClose}
-            className="flex size-11 items-center justify-center rounded-full text-ink-muted"
+            className="flex size-11 shrink-0 items-center justify-center rounded-full text-ink-muted"
           >
             <CloseIcon />
           </button>

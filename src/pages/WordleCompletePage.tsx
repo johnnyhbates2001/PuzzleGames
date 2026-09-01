@@ -4,9 +4,17 @@ import { AppLink as Link } from '../components/AppLink'
 import { useAppNavigate as useNavigate } from '../hooks/useAppNavigate'
 import type { Difficulty, WordleLevelRecord } from '../engine/wordle/types'
 import type { SubmittedGuess } from '../engine/wordle/validator'
-import { averageTimeMs, getWordleProgress } from '../storage/db'
+import { getStreak, getWordleProgress } from '../storage/db'
 import { WordleBoard } from '../components/WordleBoard'
 import { CompleteSheet } from '../components/CompleteSheet'
+import type { ChapterCompleteInfo } from '../hooks/useGameCompletion'
+
+interface ChapterReplayState {
+  chapterNumber: number
+  chapterName: string
+  levels: WordleLevelRecord[]
+  index: number
+}
 
 interface CompleteLocationState {
   timeMs: number
@@ -17,6 +25,9 @@ interface CompleteLocationState {
   isPersonalBest?: boolean
   dailyBonusApplied?: boolean
   dailyStreak?: number
+  chapterComplete?: ChapterCompleteInfo
+  chapterReplay?: ChapterReplayState
+  sessionDone?: boolean
 }
 
 const LABELS: Record<Difficulty, string> = { easy: 'Easy', medium: 'Medium', hard: 'Hard' }
@@ -29,26 +40,35 @@ export default function WordleCompletePage({ freePlay = false }: { freePlay?: bo
   const { difficulty } = useParams<{ difficulty: string }>()
   const location = useLocation()
   const navigate = useNavigate()
-  const [avgMs, setAvgMs] = useState<number | null>(null)
   const [bestMs, setBestMs] = useState<number | null>(null)
+  const [streak, setStreak] = useState<number | undefined>(undefined)
 
   const isDaily = difficulty === 'daily'
   const validDifficulty = isValidDifficulty(difficulty) ? difficulty : null
   const completion = location.state as CompleteLocationState | null
+  const isChapterReplay = !!completion?.chapterReplay
 
   useEffect(() => {
-    if (!validDifficulty || freePlay) return
+    if (!validDifficulty || freePlay || isChapterReplay) return
     let cancelled = false
     getWordleProgress(validDifficulty).then((progress) => {
-      if (!cancelled) {
-        setAvgMs(averageTimeMs(progress))
-        setBestMs(progress.bestTimeMs)
-      }
+      if (!cancelled) setBestMs(progress.bestTimeMs)
     })
     return () => {
       cancelled = true
     }
-  }, [validDifficulty, freePlay])
+  }, [validDifficulty, freePlay, isChapterReplay])
+
+  useEffect(() => {
+    if (isDaily) return
+    let cancelled = false
+    getStreak().then((s) => {
+      if (!cancelled) setStreak(s)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [isDaily])
 
   if ((!validDifficulty && !isDaily) || !completion) {
     return (
@@ -64,7 +84,19 @@ export default function WordleCompletePage({ freePlay = false }: { freePlay?: bo
     )
   }
 
-  const { timeMs, levelNumber, level, guesses, coinsAwarded, isPersonalBest, dailyBonusApplied, dailyStreak } = completion
+  const {
+    timeMs,
+    levelNumber,
+    level,
+    guesses,
+    coinsAwarded,
+    isPersonalBest,
+    dailyBonusApplied,
+    dailyStreak,
+    chapterComplete,
+    chapterReplay,
+    sessionDone,
+  } = completion
 
   return (
     <main data-game="wordle" className="fixed inset-0 overflow-hidden bg-bg">
@@ -81,22 +113,40 @@ export default function WordleCompletePage({ freePlay = false }: { freePlay?: bo
         levelNumber={isDaily ? undefined : levelNumber}
         timeMs={timeMs}
         bestMs={bestMs}
-        avgMs={avgMs}
+        streak={streak}
         coinsAwarded={coinsAwarded}
         isPersonalBest={!!isPersonalBest}
         dailyBonusApplied={dailyBonusApplied}
         isDaily={isDaily}
         dailyStreak={dailyStreak}
-        freePlay={freePlay}
+        chapterComplete={chapterComplete}
+        chapterReplay={chapterReplay && { ...chapterReplay, sessionFinished: !!sessionDone }}
         chaptersHref={isDaily ? '/' : freePlay ? '/wordle/chapters?tab=free' : '/wordle/chapters'}
         chaptersLabel={isDaily ? 'Back to Home' : freePlay ? 'Back to Free Play' : undefined}
-        onNextLevel={() => navigate(`/wordle/${freePlay ? 'free/' : ''}${validDifficulty}`, { replace: true })}
-        onReplay={() =>
+        onNextLevel={() => {
+          if (chapterReplay && !sessionDone) {
+            navigate(`/wordle/${validDifficulty}`, { state: { chapterReplay }, replace: true })
+            return
+          }
+          if (chapterReplay && sessionDone) {
+            navigate('/wordle/chapters', { replace: true })
+            return
+          }
+          navigate(`/wordle/${freePlay ? 'free/' : ''}${validDifficulty}`, { replace: true })
+        }}
+        onReplay={() => {
+          if (chapterReplay) {
+            navigate(`/wordle/${validDifficulty}`, {
+              state: { chapterReplay: { ...chapterReplay, index: chapterReplay.index - 1 } },
+              replace: true,
+            })
+            return
+          }
           navigate(isDaily ? '/wordle/daily' : `/wordle/${freePlay ? 'free/' : ''}${validDifficulty}`, {
             state: { replayLevel: level },
             replace: true,
           })
-        }
+        }}
       />
     </main>
   )

@@ -91,6 +91,7 @@ export default function SudokuDifficultyPage() {
         title="Sudoku"
         steps={GAME_RULES.sudoku.steps}
         tip={GAME_RULES.sudoku.tip}
+        gameId="sudoku"
       />
     </main>
   )

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useReducer, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import { useLocation, useParams } from 'react-router-dom'
 import { useAppNavigate as useNavigate } from '../hooks/useAppNavigate'
 import { rectCells, type Difficulty, type PatchesLevelRecord } from '../engine/patches/types'
@@ -19,13 +19,14 @@ import { getFreePlayPatchesLevel, getNextPatchesLevel } from '../games/patchesLe
 import { getDailyPatchesLevel, todayDateKey } from '../games/dailyChallenge'
 import { endlessProgress, modifierLabel, modifiersForLevel, type LevelModifiers } from '../games/chapters'
 import { useGameLifecycle } from '../hooks/useGameLifecycle'
-import { useGameCompletion } from '../hooks/useGameCompletion'
+import { useGameCompletion, type ChapterReplaySession } from '../hooks/useGameCompletion'
 import { useAudio } from '../hooks/useAudio'
 import { PatchesBoard } from '../components/PatchesBoard'
 import { PatchesControls } from '../components/PatchesControls'
 import { GameHeader } from '../components/GameHeader'
 import { HintSheet, type HintOption } from '../components/HintSheet'
 import { FailSheet } from '../components/FailSheet'
+import { formatElapsed } from '../components/Timer'
 import { BossGateSheet } from '../components/BossGateSheet'
 import { LevelContext } from '../components/LevelContext'
 import { BoltIcon, FlagIcon, SparkleIcon } from '../components/icons'
@@ -74,6 +75,7 @@ interface RetractGhost {
 
 interface ReplayLocationState {
   replayLevel?: PatchesLevelRecord
+  chapterReplay?: ChapterReplaySession
 }
 
 export default function PatchesGamePage({ freePlay = false }: { freePlay?: boolean }) {
@@ -112,6 +114,7 @@ export default function PatchesGamePage({ freePlay = false }: { freePlay?: boole
   // would otherwise let a player farm coins by re-solving the same puzzle all day).
   const dailyAlreadyCompletedRef = useRef(false)
   const initialReplayLevelRef = useRef((location.state as ReplayLocationState | null)?.replayLevel)
+  const initialChapterReplayRef = useRef((location.state as ReplayLocationState | null)?.chapterReplay)
 
   const finishLoad = useCallback(
     async (inProgress: PatchesInProgressLevel | undefined) => {
@@ -153,6 +156,16 @@ export default function PatchesGamePage({ freePlay = false }: { freePlay?: boole
       setFailed(null)
       setAwaitingBossConfirm(false)
       try {
+        const chapterReplay = initialChapterReplayRef.current
+        if (chapterReplay) {
+          const settings = await getSettings()
+          if (cancelled) return
+          setCoins(settings.coins)
+          sourceRef.current = { source: 'bank' }
+          dispatch({ type: 'LOAD', level: chapterReplay.levels[chapterReplay.index] as PatchesLevelRecord })
+          return
+        }
+
         const replayLevel = initialReplayLevelRef.current
         if (replayLevel) {
           getSettings().then((s) => !cancelled && setCoins(s.coins))
@@ -248,7 +261,7 @@ export default function PatchesGamePage({ freePlay = false }: { freePlay?: boole
   // always restarts fresh from the same deterministic puzzle within a day. Free Play
   // skips it too — every visit is meant to generate a brand new puzzle, not resume.
   useEffect(() => {
-    if (loading || !validDifficulty || isDaily || freePlay || state.status !== 'playing') return
+    if (loading || !validDifficulty || isDaily || freePlay || initialChapterReplayRef.current || state.status !== 'playing') return
     savePatchesInProgress({
       difficulty: validDifficulty as Difficulty,
       level: state.level,
@@ -266,6 +279,7 @@ export default function PatchesGamePage({ freePlay = false }: { freePlay?: boole
     status: state.status,
     isDaily,
     isFreePlay: freePlay,
+    chapterReplay: initialChapterReplayRef.current ?? null,
     validDifficulty,
     elapsedMs: state.elapsedMs,
     hintsUsed: state.hintsUsed,
@@ -356,6 +370,16 @@ export default function PatchesGamePage({ freePlay = false }: { freePlay?: boole
     },
     [state, playSound],
   )
+
+  // Context chips for FailSheet — only meaningful while `failed` is set (a boss-
+  // modifier watcher just fired), so no need to compute this on every render.
+  const failChips = useMemo(() => {
+    if (!failed) return undefined
+    const chips: string[] = []
+    if (modifiers?.timed) chips.push(`Timed · ${formatElapsed(TIMED_BUDGET_MS)}`)
+    chips.push(`Reached ${state.placed.length} of ${state.level.clues.length}`)
+    return chips
+  }, [failed, modifiers, state.placed, state.level.clues.length])
 
   if (!validDifficulty && !isDaily) {
     return <ErrorScreen message="Unknown difficulty." onBack={() => navigate('/patches')} />
@@ -462,6 +486,7 @@ export default function PatchesGamePage({ freePlay = false }: { freePlay?: boole
           reason={failed.reason}
           chaptersHref={freePlay ? '/patches/chapters?tab=free' : '/patches/chapters'}
           onTryAgain={handleTryAgain}
+          chips={failChips}
         />
       )}
 

@@ -93,6 +93,7 @@ export default function ZipDifficultyPage() {
         title="Zip"
         steps={GAME_RULES.zip.steps}
         tip={GAME_RULES.zip.tip}
+        gameId="zip"
       />
     </main>
   )

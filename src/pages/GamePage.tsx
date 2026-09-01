@@ -23,13 +23,14 @@ import { getFreePlayLevel, getNextLevel } from '../games/queensLevels'
 import { getDailyQueensLevel, todayDateKey } from '../games/dailyChallenge'
 import { endlessProgress, modifierLabel, modifiersForLevel, type LevelModifiers } from '../games/chapters'
 import { useGameLifecycle } from '../hooks/useGameLifecycle'
-import { useGameCompletion } from '../hooks/useGameCompletion'
+import { useGameCompletion, type ChapterReplaySession } from '../hooks/useGameCompletion'
 import { useAudio } from '../hooks/useAudio'
 import { Board } from '../components/Board'
 import { Controls } from '../components/Controls'
 import { GameHeader } from '../components/GameHeader'
 import { HintSheet, type HintOption } from '../components/HintSheet'
 import { FailSheet } from '../components/FailSheet'
+import { formatElapsed } from '../components/Timer'
 import { BossGateSheet } from '../components/BossGateSheet'
 import { LevelContext } from '../components/LevelContext'
 import { BoltIcon, EyeIcon, FlagIcon, SparkleIcon } from '../components/icons'
@@ -82,6 +83,7 @@ function diffQueenCells(prev: CellState[][], next: CellState[][]): { removed: Co
 
 interface ReplayLocationState {
   replayLevel?: LevelRecord
+  chapterReplay?: ChapterReplaySession
 }
 
 export default function GamePage({ freePlay = false }: { freePlay?: boolean }) {
@@ -127,6 +129,9 @@ export default function GamePage({ freePlay = false }: { freePlay?: boolean }) {
   // route (Complete -> Game is always a route change), so this never needs to react
   // to a later location.state change.
   const initialReplayLevelRef = useRef((location.state as ReplayLocationState | null)?.replayLevel)
+  // "Replay this chapter" session (see ChaptersPage.tsx's CompleteRow) — same
+  // captured-once-at-mount reasoning as initialReplayLevelRef above.
+  const initialChapterReplayRef = useRef((location.state as ReplayLocationState | null)?.chapterReplay)
 
   // Shared by the init effect's normal path and handleBeginBoss (post-gate) below —
   // dispatches the actual LOAD once we know we're clear to start playing.
@@ -179,6 +184,20 @@ export default function GamePage({ freePlay = false }: { freePlay?: boolean }) {
       setFailed(null)
       setAwaitingBossConfirm(false)
       try {
+        const chapterReplay = initialChapterReplayRef.current
+        if (chapterReplay) {
+          const settings = await getSettings()
+          if (cancelled) return
+          setCoins(settings.coins)
+          sourceRef.current = { source: 'bank' }
+          dispatch({
+            type: 'LOAD',
+            level: chapterReplay.levels[chapterReplay.index] as LevelRecord,
+            autoPlaceX: settings.autoPlaceX,
+          })
+          return
+        }
+
         const replayLevel = initialReplayLevelRef.current
         if (replayLevel) {
           const settings = await getSettings()
@@ -288,7 +307,7 @@ export default function GamePage({ freePlay = false }: { freePlay?: boolean }) {
   // always restarts fresh from the same deterministic puzzle within a day. Free Play
   // skips it too — every visit is meant to generate a brand new puzzle, not resume.
   useEffect(() => {
-    if (loading || !validDifficulty || isDaily || freePlay || state.status !== 'playing') return
+    if (loading || !validDifficulty || isDaily || freePlay || initialChapterReplayRef.current || state.status !== 'playing') return
     saveInProgress({
       difficulty: validDifficulty as Difficulty,
       level: state.level,
@@ -306,6 +325,7 @@ export default function GamePage({ freePlay = false }: { freePlay?: boolean }) {
     status: state.status,
     isDaily,
     isFreePlay: freePlay,
+    chapterReplay: initialChapterReplayRef.current ?? null,
     validDifficulty,
     elapsedMs: state.elapsedMs,
     hintsUsed: state.hintsUsed,
@@ -403,6 +423,17 @@ export default function GamePage({ freePlay = false }: { freePlay?: boolean }) {
     }
     return getConflicts(queens, state.level.regions)
   }, [state.board, state.level])
+
+  // Context chips for FailSheet — only meaningful while `failed` is set (a boss-
+  // modifier watcher just fired), so no need to compute this on every render.
+  const failChips = useMemo(() => {
+    if (!failed) return undefined
+    const chips: string[] = []
+    if (modifiers?.timed) chips.push(`Timed · ${formatElapsed(TIMED_BUDGET_MS)}`)
+    const placed = state.board.reduce((sum, row) => sum + row.filter((c) => c.queen).length, 0)
+    chips.push(`Reached ${placed} of ${state.level.size}`)
+    return chips
+  }, [failed, modifiers, state.board, state.level.size])
 
   if (!validDifficulty && !isDaily) {
     return <ErrorScreen message="Unknown difficulty." onBack={() => navigate('/queens')} />
@@ -504,6 +535,7 @@ export default function GamePage({ freePlay = false }: { freePlay?: boolean }) {
           reason={failed.reason}
           chaptersHref={freePlay ? '/queens/chapters?tab=free' : '/queens/chapters'}
           onTryAgain={handleTryAgain}
+          chips={failChips}
         />
       )}
 

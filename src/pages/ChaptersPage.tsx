@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { AppLink as Link } from '../components/AppLink'
+import { useAppNavigate as useNavigate } from '../hooks/useAppNavigate'
 import type { Difficulty } from '../engine/types'
 import type { DifficultyProgress } from '../storage/db'
 import {
@@ -16,7 +17,7 @@ import { RulesSheet } from '../components/RulesSheet'
 import { GAME_RULES } from '../games/rules'
 import { getSkin } from '../skins'
 import { GAMES } from '../games/registry'
-import { PREVIEW_BY_ID, PROGRESS_GETTER, SIZE_LABEL } from '../games/gamePreviews'
+import { CHAPTER_LEVELS_GETTER, PREVIEW_BY_ID, PROGRESS_GETTER, SIZE_LABEL } from '../games/gamePreviews'
 import {
   CheckIcon,
   ChevronLeftIcon,
@@ -142,7 +143,7 @@ export default function ChaptersPage({ gameId }: { gameId: string }) {
         (endless ? (
           <EndlessTab route={route} endless={endless} />
         ) : (
-          nodes && <ChaptersTrail nodes={nodes} route={route} />
+          nodes && <ChaptersTrail nodes={nodes} route={route} gameId={gameId} />
         ))}
 
       {tab === 'free' && <FreePlayTab gameId={gameId} route={route} />}
@@ -153,12 +154,13 @@ export default function ChaptersPage({ gameId }: { gameId: string }) {
         title={title}
         steps={GAME_RULES[gameId].steps}
         tip={GAME_RULES[gameId].tip}
+        gameId={gameId}
       />
     </main>
   )
 }
 
-function ChaptersTrail({ nodes, route }: { nodes: ChapterNodeState[]; route: string }) {
+function ChaptersTrail({ nodes, route, gameId }: { nodes: ChapterNodeState[]; route: string; gameId: string }) {
   const currentIdx = nodes.findIndex((n) => n.status === 'current')
   // Every game starts with chapter 1 already 'current' (see buildChapterNodes), so this
   // only comes back empty once the whole story is done — and that state routes to the
@@ -177,7 +179,7 @@ function ChaptersTrail({ nodes, route }: { nodes: ChapterNodeState[]; route: str
       <div className="absolute top-5 bottom-8 left-[21px] border-l-2 border-dashed border-border-dashed" />
 
       {completeNodes.map((node) => (
-        <CompleteRow key={node.chapterNumber} node={node} />
+        <CompleteRow key={node.chapterNumber} node={node} route={route} gameId={gameId} />
       ))}
 
       <CurrentRow node={current} route={route} />
@@ -212,25 +214,51 @@ function ChaptersTrail({ nodes, route }: { nodes: ChapterNodeState[]; route: str
   )
 }
 
-function CompleteRow({ node }: { node: ChapterNodeState }) {
+function CompleteRow({ node, route, gameId }: { node: ChapterNodeState; route: string; gameId: string }) {
+  const navigate = useNavigate()
   const skin = node.meta.skinId ? getSkin(node.meta.skinId) : null
+  const [loadingReplay, setLoadingReplay] = useState(false)
+
+  async function handleReplay() {
+    if (loadingReplay) return
+    setLoadingReplay(true)
+    try {
+      const levels = await CHAPTER_LEVELS_GETTER[gameId](node.difficulty, node.chapterNumber)
+      navigate(`${route}/${node.difficulty}`, {
+        state: { chapterReplay: { chapterNumber: node.chapterNumber, chapterName: node.meta.name, levels, index: 0 } },
+      })
+    } finally {
+      setLoadingReplay(false)
+    }
+  }
+
   return (
     <div className="relative flex items-center gap-3.5">
       <span className="flex size-11 shrink-0 items-center justify-center rounded-full bg-accent text-white shadow-[0_0_0_4px_var(--color-bg)]">
         <CheckIcon />
       </span>
-      <div className="flex-1 rounded-2xl bg-surface p-3.5 shadow-card">
-        <p className="text-[14.5px] font-bold text-ink">{node.meta.name}</p>
-        {skin && (
-          <div className="mt-2 flex items-center gap-2">
-            <span className="flex overflow-hidden rounded-[6px] shadow-[0_0_0_1px_var(--color-grid-gap)]">
-              {skin.colors.slice(0, 6).map((c, i) => (
-                <span key={i} className="size-[17px]" style={{ backgroundColor: c }} />
-              ))}
-            </span>
-            <span className="text-[11.5px] font-semibold text-accent">{skin.name} skin earned</span>
-          </div>
-        )}
+      <div className="flex flex-1 items-center gap-2 rounded-2xl bg-surface p-3.5 shadow-card">
+        <div className="flex-1">
+          <p className="text-[14.5px] font-bold text-ink">{node.meta.name}</p>
+          {skin && (
+            <div className="mt-2 flex items-center gap-2">
+              <span className="flex overflow-hidden rounded-[6px] shadow-[0_0_0_1px_var(--color-grid-gap)]">
+                {skin.colors.slice(0, 6).map((c, i) => (
+                  <span key={i} className="size-[17px]" style={{ backgroundColor: c }} />
+                ))}
+              </span>
+              <span className="text-[11.5px] font-semibold text-accent">{skin.name} skin earned</span>
+            </div>
+          )}
+        </div>
+        <button
+          type="button"
+          onClick={handleReplay}
+          disabled={loadingReplay}
+          className="flex h-[38px] shrink-0 items-center rounded-full bg-accent-tint px-4 text-[13.5px] font-bold text-accent disabled:opacity-50"
+        >
+          Replay
+        </button>
       </div>
     </div>
   )

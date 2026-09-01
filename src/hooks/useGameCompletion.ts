@@ -36,6 +36,15 @@ async function checkChapterComplete(
   return { chapterNumber, chapterName: meta.name, skinUnlocked: meta.skinId }
 }
 
+export interface ChapterReplaySession {
+  chapterNumber: number
+  chapterName: string
+  /** Always 20 — every story chapter is fully bank-sourced (see games/chapters.ts). */
+  levels: unknown[]
+  /** Which level of `levels` the current GamePage mount is playing. */
+  index: number
+}
+
 interface UseGameCompletionOptions<K extends string, V> {
   gameId: DailyGameId
   /** Route prefix for this game, e.g. '/queens' — completion navigates to
@@ -48,6 +57,12 @@ interface UseGameCompletionOptions<K extends string, V> {
    *  system: never advances currentLevelIndex, so it can't move a chapter, the bank
    *  pointer, or Endless rank. */
   isFreePlay: boolean
+  /** Set for a "replay this chapter" session (see ChaptersPage.tsx's CompleteRow) —
+   *  routes rewards through the same recordFreePlayCompletion path Free Play uses
+   *  (coins + streak credit, never touches currentLevelIndex/completedCount/
+   *  bestTimeMs or skin-unlock logic) but keeps navigating through the normal
+   *  complete route, carrying the session forward until all 20 levels are done. */
+  chapterReplay: ChapterReplaySession | null
   validDifficulty: Difficulty | null
   elapsedMs: number
   hintsUsed: number
@@ -84,6 +99,7 @@ export function useGameCompletion<K extends string, V>({
   status,
   isDaily,
   isFreePlay,
+  chapterReplay,
   validDifficulty,
   elapsedMs,
   hintsUsed,
@@ -126,6 +142,23 @@ export function useGameCompletion<K extends string, V>({
           dailyStreak: result.streak,
         })
       })
+    } else if (chapterReplay) {
+      recordFreePlayCompletion(validDifficulty as Difficulty, elapsedMs, hintsUsed > 0).then((result) => {
+        if (cancelled) return
+        const nextIndex = chapterReplay.index + 1
+        // Same route a normal completion uses (not Free Play's separate route) —
+        // chapterReplay in the nav state is what tells CompletePage this was a
+        // replay run, no URL distinction needed. CompletePage fetches the streak
+        // itself client-side (same as bestMs) rather than threading it through here.
+        scheduleNavigate(`${basePath}/${validDifficulty}/complete`, {
+          timeMs: elapsedMs,
+          level,
+          [extraKey]: extraValue,
+          coinsAwarded: result.coinsAwarded,
+          chapterReplay: { ...chapterReplay, index: nextIndex },
+          sessionDone: nextIndex >= chapterReplay.levels.length,
+        })
+      })
     } else if (isFreePlay) {
       recordFreePlayCompletion(validDifficulty as Difficulty, elapsedMs, hintsUsed > 0).then((result) => {
         if (cancelled) return
@@ -162,5 +195,5 @@ export function useGameCompletion<K extends string, V>({
     // status), so reacting to unrelated re-renders of those would be wrong, not
     // just redundant.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [status, validDifficulty, isDaily, isFreePlay, navigate, elapsedMs, level, extraValue])
+  }, [status, validDifficulty, isDaily, isFreePlay, chapterReplay, navigate, elapsedMs, level, extraValue])
 }

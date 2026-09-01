@@ -5,6 +5,9 @@ interface FailSheetProps {
   reason: 'timeout' | 'mistake'
   chaptersHref: string
   onTryAgain: () => void
+  /** Small context pills below the body copy, e.g. "Timed · 3:00" / "Reached 14 of
+   *  20" — see each Game*Page.tsx's boss-modifier watchers for how these are built. */
+  chips?: string[]
 }
 
 const COPY: Record<FailSheetProps['reason'], { headline: string; body: string }> = {
@@ -17,7 +20,7 @@ const COPY: Record<FailSheetProps['reason'], { headline: string; body: string }>
  *  a Timed or Perfect Run boss-level modifier ends the level early. Its full-viewport
  *  overlay is what actually blocks further board/Controls interaction — no per-handler
  *  guards needed in the page itself. */
-export function FailSheet({ reason, chaptersHref, onTryAgain }: FailSheetProps) {
+export function FailSheet({ reason, chaptersHref, onTryAgain, chips }: FailSheetProps) {
   const { headline, body } = COPY[reason]
 
   return (
@@ -31,6 +34,15 @@ export function FailSheet({ reason, chaptersHref, onTryAgain }: FailSheetProps) 
           <p className="mt-1 text-sm text-ink-muted">{body}</p>
           <p className="mt-0.5 text-sm text-ink-muted">Your chapter progress is safe.</p>
         </div>
+        {chips && chips.length > 0 && (
+          <div className="flex flex-wrap items-center justify-center gap-2">
+            {chips.map((chip) => (
+              <span key={chip} className="flex h-8 items-center rounded-full bg-bg px-3 text-xs font-bold text-ink-muted">
+                {chip}
+              </span>
+            ))}
+          </div>
+        )}
         <div className="flex w-full flex-col gap-2">
           <button type="button" onClick={onTryAgain} className="w-full rounded-full bg-accent py-3 font-semibold text-white">
             Try again

@@ -19,7 +19,7 @@ import { getFreePlayWordleLevel, getNextWordleLevel, loadAnswerPool, loadGuessDi
 import { getDailyWordleLevel, todayDateKey } from '../games/dailyChallenge'
 import { endlessProgress, modifierLabel, modifiersForLevel, type LevelModifiers } from '../games/chapters'
 import { useGameLifecycle } from '../hooks/useGameLifecycle'
-import { useGameCompletion } from '../hooks/useGameCompletion'
+import { useGameCompletion, type ChapterReplaySession } from '../hooks/useGameCompletion'
 import { useAudio } from '../hooks/useAudio'
 import { WordleBoard } from '../components/WordleBoard'
 import { WordleKeyboard } from '../components/WordleKeyboard'
@@ -51,6 +51,7 @@ const GUESS_ERROR_MS = 1400
 
 interface ReplayLocationState {
   replayLevel?: WordleLevelRecord
+  chapterReplay?: ChapterReplaySession
 }
 
 export default function WordleGamePage({ freePlay = false }: { freePlay?: boolean }) {
@@ -88,6 +89,7 @@ export default function WordleGamePage({ freePlay = false }: { freePlay?: boolea
   // would otherwise let a player farm coins by re-solving the same puzzle all day).
   const dailyAlreadyCompletedRef = useRef(false)
   const initialReplayLevelRef = useRef((location.state as ReplayLocationState | null)?.replayLevel)
+  const initialChapterReplayRef = useRef((location.state as ReplayLocationState | null)?.chapterReplay)
 
   useEffect(() => {
     let cancelled = false
@@ -153,6 +155,22 @@ export default function WordleGamePage({ freePlay = false }: { freePlay?: boolea
       setTimedOut(false)
       setAwaitingBossConfirm(false)
       try {
+        const chapterReplay = initialChapterReplayRef.current
+        if (chapterReplay) {
+          const settings = await getSettings()
+          if (cancelled) return
+          setCoins(settings.coins)
+          sourceRef.current = { source: 'bank' }
+          const rules = WORDLE_RULES[validDifficulty as Difficulty]
+          dispatch({
+            type: 'LOAD',
+            level: chapterReplay.levels[chapterReplay.index] as WordleLevelRecord,
+            attempts: rules.attempts,
+            hardMode: rules.hardMode,
+          })
+          return
+        }
+
         const replayLevel = initialReplayLevelRef.current
         if (replayLevel) {
           const settings = await getSettings()
@@ -239,7 +257,7 @@ export default function WordleGamePage({ freePlay = false }: { freePlay?: boolea
   // restarts fresh from the same deterministic word within a day. Free Play skips it
   // too — every visit is meant to generate a brand new word, not resume.
   useEffect(() => {
-    if (loading || !validDifficulty || isDaily || freePlay || state.status !== 'playing') return
+    if (loading || !validDifficulty || isDaily || freePlay || initialChapterReplayRef.current || state.status !== 'playing') return
     saveWordleInProgress({
       difficulty: validDifficulty as Difficulty,
       level: state.level,
@@ -272,6 +290,7 @@ export default function WordleGamePage({ freePlay = false }: { freePlay?: boolea
     status: state.status,
     isDaily,
     isFreePlay: freePlay,
+    chapterReplay: initialChapterReplayRef.current ?? null,
     validDifficulty,
     elapsedMs: state.elapsedMs,
     hintsUsed: state.hintsUsed,

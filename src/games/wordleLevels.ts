@@ -1,6 +1,7 @@
 import type { Difficulty, WordleLevelRecord } from '../engine/wordle/types'
 import { generateLevel } from '../engine/wordle/generator'
 import { getWordleProgress } from '../storage/db'
+import { CHAPTERS_PER_TIER, LEVELS_PER_CHAPTER } from './chapters'
 
 export interface NextWordleLevelResult {
   level: WordleLevelRecord
@@ -63,4 +64,15 @@ export interface FreePlayWordleLevelResult {
 export async function getFreePlayWordleLevel(difficulty: Difficulty): Promise<FreePlayWordleLevelResult> {
   const pool = await loadAnswerPool()
   return { level: generateLevel(difficulty, Math.random, pool), source: 'generated' }
+}
+
+/** Every level in one story chapter, in order — always all 20, since every chapter
+ *  (10 per difficulty tier) is fully bank-sourced (each bank has exactly 200 levels;
+ *  see games/chapters.ts). Powers "replay this chapter" from ChaptersPage's
+ *  CompleteRow — reuses the same bank chunk getNextWordleLevel already loads. */
+export async function getChapterLevels(difficulty: Difficulty, chapterNumber: number): Promise<WordleLevelRecord[]> {
+  const bank = await loadBank(difficulty)
+  const chapterInTier = (chapterNumber - 1) % CHAPTERS_PER_TIER
+  const start = chapterInTier * LEVELS_PER_CHAPTER
+  return bank.slice(start, start + LEVELS_PER_CHAPTER)
 }

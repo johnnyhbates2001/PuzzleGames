@@ -19,23 +19,30 @@ interface CompleteSheetProps {
   levelNumber?: number
   timeMs: number
   bestMs: number | null
-  avgMs: number | null
+  /** Global day-streak (see storage/db.ts's getStreak) — shown as this run's third
+   *  tile alongside Time/Best for every non-Daily completion (Free Play and chapter
+   *  replay included, since both still log daily activity — see
+   *  recordFreePlayCompletion). Omitted entirely only for the Daily Challenge sheet,
+   *  which keeps its own separate, larger streak banner (see dailyStreak below). */
+  streak?: number
   coinsAwarded: number
   isPersonalBest: boolean
   /** True the first time any game is solved on a given calendar day — see
    *  ShopPage's "Daily bonus" copy and storage/db.ts's finishCompletion. */
   dailyBonusApplied?: boolean
   /** True when this sheet is for the featured Daily Challenge puzzle rather than a
-   *  regular difficulty run — swaps the Best/Average tile for the daily streak. */
+   *  regular difficulty run — swaps the Time/Best/Streak tiles for a dedicated,
+   *  larger daily-streak banner. */
   isDaily?: boolean
   dailyStreak?: number
   /** Set when this completion also crossed a chapter boundary — see useGameCompletion. */
   chapterComplete?: ChapterCompleteInfo
-  /** True for a Free Play run — never has a Best/Average to show (Free Play never
-   *  writes a *Progress record, see storage/db.ts's recordFreePlayCompletion), so that
-   *  tile is hidden outright rather than showing chapter-run numbers next to a
-   *  Free Play result, which would misrepresent them as this run's stats. */
-  freePlay?: boolean
+  /** Set for a level completed as part of "replay this chapter" (see ChaptersPage.tsx's
+   *  CompleteRow and useGameCompletion's chapterReplay branch) — like Free Play, never
+   *  has a Best time. `sessionFinished` is true only on the session's 20th level: hides
+   *  "Next level" and shows a small replay-specific acknowledgment instead of the real
+   *  chapterComplete banner (which this never receives — replay never re-grants skins). */
+  chapterReplay?: { chapterNumber: number; chapterName: string; sessionFinished: boolean }
   /** This game's Chapters screen — the secondary button links here instead of Home. */
   chaptersHref: string
   /** Label for the secondary button — defaults to "Back to chapters"; Free Play runs
@@ -93,14 +100,14 @@ export function CompleteSheet({
   levelNumber,
   timeMs,
   bestMs,
-  avgMs,
+  streak,
   coinsAwarded,
   isPersonalBest,
   dailyBonusApplied,
   isDaily,
   dailyStreak,
   chapterComplete,
-  freePlay,
+  chapterReplay,
   chaptersHref,
   chaptersLabel = 'Back to chapters',
   onNextLevel,
@@ -275,28 +282,57 @@ export function CompleteSheet({
           </p>
         </div>
 
-        {!zenMode && (
-          <p
-            className="anim-rise font-mono text-[52px] font-extrabold leading-none tabular-nums text-ink"
+        {isDaily ? (
+          <div
+            className="anim-rise flex w-full items-center justify-center gap-2 rounded-2xl bg-accent-tint py-3.5"
             style={{ animationDelay: '320ms' }}
           >
-            {formatElapsed(timeMs)}
-          </p>
+            <span className="text-accent">
+              <FlameIcon size={18} />
+            </span>
+            <span className="text-[15px] font-bold text-ink">{dailyStreak ?? 0} day streak</span>
+          </div>
+        ) : (
+          !zenMode && (
+            <div className="anim-rise flex w-full gap-2" style={{ animationDelay: '320ms' }}>
+              <div className="flex flex-1 flex-col items-center gap-1.5 rounded-2xl bg-bg py-3.5">
+                <span className="font-mono text-[20px] font-bold text-ink tabular-nums">{formatElapsed(timeMs)}</span>
+                <span className="text-[10px] font-semibold uppercase tracking-wide text-ink-muted">Time</span>
+              </div>
+              <div className="flex flex-1 flex-col items-center gap-1.5 rounded-2xl bg-bg py-3.5">
+                <span className="font-mono text-[20px] font-bold text-accent tabular-nums">
+                  {bestMs !== null ? formatElapsed(bestMs) : '—'}
+                </span>
+                <span className="text-[10px] font-semibold uppercase tracking-wide text-ink-muted">Best</span>
+              </div>
+              <div className="flex flex-1 flex-col items-center gap-1.5 rounded-2xl bg-bg py-3.5">
+                <span className="font-mono text-[20px] font-bold text-ink tabular-nums">{streak ?? 0}</span>
+                <span className="text-[10px] font-semibold uppercase tracking-wide text-ink-muted">Streak</span>
+              </div>
+            </div>
+          )
         )}
 
         {coinsAwarded > 0 && (
           <div
-            className="anim-rise flex items-center gap-2 rounded-full border-[1.5px] border-[oklch(85%_0.08_85)] bg-[oklch(96%_0.03_85)] py-2 pr-4 pl-3"
+            className="anim-rise flex w-full flex-col gap-1.5 rounded-2xl border-[1.5px] border-[oklch(85%_0.08_85)] bg-[oklch(96%_0.03_85)] px-4 py-3"
             style={{ animationDelay: '380ms' }}
           >
-            <span ref={rewardCoinRef} className="size-5 rounded-full border-2 border-[oklch(68%_0.15_75)] bg-[oklch(80%_0.14_85)] box-border" />
-            <span className="text-[15px] font-extrabold text-[oklch(45%_0.11_75)]">+{coinsAwarded} coins</span>
-            {isPersonalBest && <span className="text-xs font-semibold text-[oklch(55%_0.08_75)]">personal best</span>}
-            {dailyBonusApplied && (
-              <span className="flex items-center gap-1 text-xs font-semibold text-[oklch(55%_0.08_75)]">
-                <FlameIcon size={12} />
-                daily bonus ×2
-              </span>
+            <div className="flex items-center gap-3">
+              <span ref={rewardCoinRef} className="size-6 shrink-0 rounded-full border-[3px] border-[oklch(68%_0.15_75)] bg-[oklch(80%_0.14_85)] box-border" />
+              <span className="flex-1 text-[13.5px] font-bold text-[oklch(38%_0.09_75)]">Earned this level</span>
+              <span className="font-mono text-[17px] font-extrabold text-[oklch(38%_0.09_75)]">+{coinsAwarded}</span>
+            </div>
+            {(isPersonalBest || dailyBonusApplied) && (
+              <div className="flex items-center gap-3 pl-9 text-xs font-semibold text-[oklch(55%_0.08_75)]">
+                {isPersonalBest && <span>personal best</span>}
+                {dailyBonusApplied && (
+                  <span className="flex items-center gap-1">
+                    <FlameIcon size={12} />
+                    daily bonus ×2
+                  </span>
+                )}
+              </div>
             )}
           </div>
         )}
@@ -318,37 +354,20 @@ export function CompleteSheet({
           </div>
         )}
 
-        {isDaily ? (
+        {chapterReplay?.sessionFinished && (
           <div
-            className="anim-rise flex w-full items-center justify-center gap-2 rounded-2xl bg-accent-tint py-3.5"
-            style={{ animationDelay: '420ms' }}
+            className="anim-rise flex w-full flex-col items-center gap-1 rounded-2xl bg-accent-tint py-3.5"
+            style={{ animationDelay: '400ms' }}
           >
-            <span className="text-accent">
-              <FlameIcon size={18} />
+            <span className="text-[11px] font-bold tracking-wide text-accent uppercase opacity-80">
+              Chapter {chapterReplay.chapterNumber} replayed
             </span>
-            <span className="text-[15px] font-bold text-ink">{dailyStreak ?? 0} day streak</span>
+            <span className="text-[15px] font-bold text-ink">{chapterReplay.chapterName}</span>
           </div>
-        ) : (
-          !zenMode && !freePlay && (
-            <div className="anim-rise flex w-full rounded-2xl bg-accent-tint py-3" style={{ animationDelay: '420ms' }}>
-              <div className="flex flex-1 flex-col items-center gap-0.5">
-                <span className="font-mono text-[15px] font-bold text-accent">
-                  {bestMs !== null ? formatElapsed(bestMs) : '—'}
-                </span>
-                <span className="text-[10px] font-semibold uppercase tracking-wide text-ink-muted">Best</span>
-              </div>
-              <div className="flex flex-1 flex-col items-center gap-0.5">
-                <span className="font-mono text-[15px] font-bold text-ink">
-                  {avgMs !== null ? formatElapsed(avgMs) : '—'}
-                </span>
-                <span className="text-[10px] font-semibold uppercase tracking-wide text-ink-muted">Average</span>
-              </div>
-            </div>
-          )
         )}
 
         <div className="anim-rise flex w-full flex-col gap-2" style={{ animationDelay: '500ms' }}>
-          {!isDaily && (
+          {!isDaily && !chapterReplay?.sessionFinished && (
             <button type="button" onClick={onNextLevel} className="w-full rounded-full bg-accent py-3 font-semibold text-white">
               Next level
             </button>

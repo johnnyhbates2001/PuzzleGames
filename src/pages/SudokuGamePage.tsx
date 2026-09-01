@@ -20,7 +20,7 @@ import { getFreePlaySudokuLevel, getNextSudokuLevel } from '../games/sudokuLevel
 import { getDailySudokuLevel, todayDateKey } from '../games/dailyChallenge'
 import { endlessProgress, modifierLabel, modifiersForLevel, type LevelModifiers } from '../games/chapters'
 import { useGameLifecycle } from '../hooks/useGameLifecycle'
-import { useGameCompletion } from '../hooks/useGameCompletion'
+import { useGameCompletion, type ChapterReplaySession } from '../hooks/useGameCompletion'
 import { useAudio } from '../hooks/useAudio'
 import { SudokuBoard } from '../components/SudokuBoard'
 import { SudokuKeypad } from '../components/SudokuKeypad'
@@ -28,6 +28,7 @@ import { SudokuControls } from '../components/SudokuControls'
 import { GameHeader } from '../components/GameHeader'
 import { HintSheet, type HintOption } from '../components/HintSheet'
 import { FailSheet } from '../components/FailSheet'
+import { formatElapsed } from '../components/Timer'
 import { BossGateSheet } from '../components/BossGateSheet'
 import { LevelContext } from '../components/LevelContext'
 import { BoltIcon, EyeIcon, FlagIcon, SparkleIcon } from '../components/icons'
@@ -115,6 +116,7 @@ const UNIT_COMPLETE_STEP_MS = 55
 
 interface ReplayLocationState {
   replayLevel?: SudokuLevelRecord
+  chapterReplay?: ChapterReplaySession
 }
 
 export default function SudokuGamePage({ freePlay = false }: { freePlay?: boolean }) {
@@ -153,6 +155,7 @@ export default function SudokuGamePage({ freePlay = false }: { freePlay?: boolea
   // would otherwise let a player farm coins by re-solving the same puzzle all day).
   const dailyAlreadyCompletedRef = useRef(false)
   const initialReplayLevelRef = useRef((location.state as ReplayLocationState | null)?.replayLevel)
+  const initialChapterReplayRef = useRef((location.state as ReplayLocationState | null)?.chapterReplay)
 
   const finishLoad = useCallback(
     async (inProgress: SudokuInProgressLevel | undefined) => {
@@ -194,6 +197,16 @@ export default function SudokuGamePage({ freePlay = false }: { freePlay?: boolea
       setFailed(null)
       setAwaitingBossConfirm(false)
       try {
+        const chapterReplay = initialChapterReplayRef.current
+        if (chapterReplay) {
+          const settings = await getSettings()
+          if (cancelled) return
+          setCoins(settings.coins)
+          sourceRef.current = { source: 'bank' }
+          dispatch({ type: 'LOAD', level: chapterReplay.levels[chapterReplay.index] as SudokuLevelRecord })
+          return
+        }
+
         const replayLevel = initialReplayLevelRef.current
         if (replayLevel) {
           getSettings().then((s) => !cancelled && setCoins(s.coins))
@@ -311,7 +324,7 @@ export default function SudokuGamePage({ freePlay = false }: { freePlay?: boolea
   // always restarts fresh from the same deterministic puzzle within a day. Free Play
   // skips it too — every visit is meant to generate a brand new puzzle, not resume.
   useEffect(() => {
-    if (loading || !validDifficulty || isDaily || freePlay || state.status !== 'playing') return
+    if (loading || !validDifficulty || isDaily || freePlay || initialChapterReplayRef.current || state.status !== 'playing') return
     saveSudokuInProgress({
       difficulty: validDifficulty as Difficulty,
       level: state.level,
@@ -329,6 +342,7 @@ export default function SudokuGamePage({ freePlay = false }: { freePlay?: boolea
     status: state.status,
     isDaily,
     isFreePlay: freePlay,
+    chapterReplay: initialChapterReplayRef.current ?? null,
     validDifficulty,
     elapsedMs: state.elapsedMs,
     hintsUsed: state.hintsUsed,
@@ -460,6 +474,17 @@ export default function SudokuGamePage({ freePlay = false }: { freePlay?: boolea
 
   const conflicts = useMemo(() => getConflicts(boardValues(state.board)), [state.board])
   const placedCounts = useMemo(() => digitCounts(state.board), [state.board])
+
+  // Context chips for FailSheet — only meaningful while `failed` is set (a boss-
+  // modifier watcher just fired), so no need to compute this on every render.
+  const failChips = useMemo(() => {
+    if (!failed) return undefined
+    const chips: string[] = []
+    if (modifiers?.timed) chips.push(`Timed · ${formatElapsed(TIMED_BUDGET_MS)}`)
+    const filled = state.board.reduce((sum, row) => sum + row.filter((c) => c.value !== 0).length, 0)
+    chips.push(`Reached ${filled} of ${SUDOKU_SIZE * SUDOKU_SIZE}`)
+    return chips
+  }, [failed, modifiers, state.board])
   const selectedValue = state.selected ? state.board[state.selected.row][state.selected.col].value || null : null
 
   if (!validDifficulty && !isDaily) {
@@ -564,6 +589,7 @@ export default function SudokuGamePage({ freePlay = false }: { freePlay?: boolea
           reason={failed.reason}
           chaptersHref={freePlay ? '/sudoku/chapters?tab=free' : '/sudoku/chapters'}
           onTryAgain={handleTryAgain}
+          chips={failChips}
         />
       )}
 

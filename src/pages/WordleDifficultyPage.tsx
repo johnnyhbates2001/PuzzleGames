@@ -95,6 +95,7 @@ export default function WordleDifficultyPage() {
         title="Wordle"
         steps={GAME_RULES.wordle.steps}
         tip={GAME_RULES.wordle.tip}
+        gameId="wordle"
       />
     </main>
   )

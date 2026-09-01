@@ -104,6 +104,7 @@ export default function DifficultyPage() {
         title="Queens"
         steps={GAME_RULES.queens.steps}
         tip={GAME_RULES.queens.tip}
+        gameId="queens"
       />
     </main>
   )
