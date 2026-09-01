@@ -17,9 +17,10 @@ const MODIFIER_INFO: Record<string, { icon: (props: { size?: number }) => React.
   'Perfect Run': { icon: PerfectRunIcon, explain: 'One wrong move ends the run.' },
 }
 
-/** Full-screen (not a bottom sheet) confirmation shown before an Endless boss level
- *  starts — announces its active modifiers up front instead of letting the player
- *  discover them mid-run (see the Game*Page.tsx init effects for the gating). */
+/** Full-screen (not a bottom sheet) confirmation shown before a boss level (story
+ *  chapter 20, or an Endless chapter's 20th level) starts — announces its active
+ *  modifiers up front instead of letting the player discover them mid-run (see the
+ *  Game*Page.tsx init effects for the gating). */
 export function BossGateSheet({ chapterNumber, modifiers, backHref, onBegin }: BossGateSheetProps) {
   const labels = modifierLabel(modifiers).split(' · ').filter(Boolean)
 

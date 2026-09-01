@@ -272,11 +272,10 @@ function activeModifierCount(rankIndex: number): 1 | 2 {
   return rankIndex >= 3 ? 2 : 1 // Diamond rank onward
 }
 
-/** Endless boss levels (the 20th of every endless chapter) run under 1-2 modifiers,
- *  cycling deterministically through whichever pool this rank has unlocked. */
-export function modifiersForLevel(endless: EndlessProgress | null): LevelModifiers | null {
-  if (!endless || !endless.isBoss) return null
-  const chapterIndex0 = endless.endlessChapter - 1
+/** Shared ramp used by both story and Endless boss levels: a 0-based chapter index
+ *  (Endless-relative for Endless, absolute story chapter - 1 for story) maps to a rank
+ *  bracket, which decides the modifier pool and how many stack at once. */
+function modifiersForChapterIndex(chapterIndex0: number): LevelModifiers {
   const rankIndex = Math.min(Math.floor(chapterIndex0 / CHAPTERS_PER_RANK), RANKS.length - 1)
   const pool = modifierPoolForRankIndex(rankIndex)
   const count = activeModifierCount(rankIndex)
@@ -290,6 +289,21 @@ export function modifiersForLevel(endless: EndlessProgress | null): LevelModifie
     timed: active.has('timed'),
     perfectRun: active.has('perfectRun'),
   }
+}
+
+/** Endless boss levels (the 20th of every endless chapter) run under 1-2 modifiers,
+ *  cycling deterministically through whichever pool this rank has unlocked. */
+export function modifiersForLevel(endless: EndlessProgress | null): LevelModifiers | null {
+  if (!endless || !endless.isBoss) return null
+  return modifiersForChapterIndex(endless.endlessChapter - 1)
+}
+
+/** Story-mode boss levels (level 20 of every story chapter, chapters 1-50) get the same
+ *  modifier treatment as Endless bosses, ramping off the absolute chapter number so
+ *  difficulty climbs across the whole story spine rather than resetting each tier. */
+export function modifiersForStoryLevel(chapterNumber: number, isBoss: boolean): LevelModifiers | null {
+  if (!isBoss) return null
+  return modifiersForChapterIndex(chapterNumber - 1)
 }
 
 export function modifierLabel(modifiers: LevelModifiers): string {

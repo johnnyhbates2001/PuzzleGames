@@ -11,6 +11,7 @@ import {
   endlessProgress,
   modifierLabel,
   modifiersForLevel,
+  modifiersForStoryLevel,
   storyLevelsForTier,
   tierOffsetChapters,
 } from './chapters'
@@ -201,6 +202,31 @@ describe('modifiersForLevel', () => {
     for (const ch of [16, 17, 25, 100]) {
       const m = modifiersAt(ch)
       expect(countActive(m)).toBe(2)
+    }
+  })
+})
+
+describe('modifiersForStoryLevel', () => {
+  it('is null for a non-boss story level', () => {
+    expect(modifiersForStoryLevel(1, false)).toBeNull()
+    expect(modifiersForStoryLevel(3, false)).toBeNull()
+  })
+
+  it('Bronze rank (chapters 1-5) alternates only Undo/Hints, one at a time', () => {
+    expect(modifiersForStoryLevel(1, true)).toEqual({ noUndo: true, noHints: false, timed: false, perfectRun: false })
+    expect(modifiersForStoryLevel(2, true)).toEqual({ noUndo: false, noHints: true, timed: false, perfectRun: false })
+    for (let ch = 1; ch <= 5; ch++) expect(countActive(modifiersForStoryLevel(ch, true))).toBe(1)
+  })
+
+  it('Silver rank (chapters 6-10) introduces Timed, still one at a time', () => {
+    for (let ch = 6; ch <= 10; ch++) expect(countActive(modifiersForStoryLevel(ch, true))).toBe(1)
+    expect(modifiersForStoryLevel(6, true)?.timed).toBe(true)
+  })
+
+  it('Diamond rank and above (chapter 16+) stacks exactly 2 modifiers, matching Endless at the same chapter index', () => {
+    for (const ch of [16, 17, 25, 50]) {
+      expect(countActive(modifiersForStoryLevel(ch, true))).toBe(2)
+      expect(modifiersForStoryLevel(ch, true)).toEqual(modifiersAt(ch))
     }
   })
 })
