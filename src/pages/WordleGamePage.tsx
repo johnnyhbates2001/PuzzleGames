@@ -17,7 +17,15 @@ import {
 } from '../storage/db'
 import { getFreePlayWordleLevel, getNextWordleLevel, loadAnswerPool, loadGuessDictionary } from '../games/wordleLevels'
 import { getDailyWordleLevel, todayDateKey } from '../games/dailyChallenge'
-import { endlessProgress, modifierLabel, modifiersForLevel, type LevelModifiers } from '../games/chapters'
+import {
+  chapterForIndex,
+  endlessProgress,
+  modifierLabel,
+  modifiersForLevel,
+  modifiersForStoryLevel,
+  storyLevelsForTier,
+  type LevelModifiers,
+} from '../games/chapters'
 import { useGameLifecycle } from '../hooks/useGameLifecycle'
 import { useGameCompletion, type ChapterReplaySession } from '../hooks/useGameCompletion'
 import { useAudio } from '../hooks/useAudio'
@@ -217,7 +225,12 @@ export default function WordleGamePage({ freePlay = false }: { freePlay?: boolea
         setLevelIndex(progress.currentLevelIndex)
         const rules = WORDLE_RULES[validDifficulty as Difficulty]
         let levelModifiers: LevelModifiers | null = null
-        if (validDifficulty === 'hard') {
+        if (progress.currentLevelIndex < storyLevelsForTier(validDifficulty as Difficulty)) {
+          const story = chapterForIndex(progress.currentLevelIndex, validDifficulty as Difficulty)
+          levelModifiers = modifiersForStoryLevel(story.chapterNumber, story.isBoss)
+          setModifiers(levelModifiers)
+          setBossChapter(story.isBoss ? story.chapterNumber : null)
+        } else if (validDifficulty === 'hard') {
           const endless = endlessProgress(progress.currentLevelIndex)
           levelModifiers = modifiersForLevel(endless)
           setModifiers(levelModifiers)
