@@ -5,6 +5,8 @@ import { useAppNavigate as useNavigate } from '../hooks/useAppNavigate'
 import type { Difficulty } from '../engine/types'
 import type { DifficultyProgress } from '../storage/db'
 import {
+  LEVELS_PER_CHAPTER,
+  TOTAL_STORY_CHAPTERS,
   buildChapterNodes,
   endlessProgress,
   modifierLabel,
@@ -111,10 +113,12 @@ export default function ChaptersPage({ gameId }: { gameId: string }) {
           <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-accent-tint">
             <div
               className="h-full rounded-full bg-accent transition-[width]"
-              style={{ width: `${(completedChapters / 30) * 100}%` }}
+              style={{ width: `${(completedChapters / TOTAL_STORY_CHAPTERS) * 100}%` }}
             />
           </div>
-          <span className="font-mono text-[11.5px] font-bold text-ink-muted">{completedChapters} / 30</span>
+          <span className="font-mono text-[11.5px] font-bold text-ink-muted">
+            {completedChapters} / {TOTAL_STORY_CHAPTERS}
+          </span>
         </div>
       </div>
 
@@ -265,7 +269,7 @@ function CompleteRow({ node, route, gameId }: { node: ChapterNodeState; route: s
 }
 
 function CurrentRow({ node, route }: { node: ChapterNodeState; route: string }) {
-  const isBoss = node.levelInChapter === 19
+  const isBoss = node.levelInChapter === LEVELS_PER_CHAPTER - 1
   return (
     <div className="relative flex items-center gap-3.5">
       <span className="flex size-11 shrink-0 items-center justify-center rounded-full bg-surface text-[15px] font-bold text-accent shadow-[0_0_0_4px_var(--color-bg),0_0_0_6px_var(--color-accent)]">
@@ -276,7 +280,7 @@ function CurrentRow({ node, route }: { node: ChapterNodeState; route: string }) 
           <div className="flex-1">
             <p className="font-display text-[16px] font-extrabold text-ink">{node.meta.name}</p>
             <p className="mt-1 text-[12px] font-semibold text-accent">
-              Level {node.levelInChapter + 1} of 20{isBoss ? ' · Boss level' : ''}
+              Level {node.levelInChapter + 1} of {LEVELS_PER_CHAPTER}{isBoss ? ' · Boss level' : ''}
             </p>
           </div>
           <Link
@@ -287,7 +291,10 @@ function CurrentRow({ node, route }: { node: ChapterNodeState; route: string }) 
           </Link>
         </div>
         <div className="mt-2.5 h-[5px] overflow-hidden rounded-full bg-accent-tint">
-          <div className="h-full rounded-full bg-accent" style={{ width: `${(node.levelInChapter / 20) * 100}%` }} />
+          <div
+            className="h-full rounded-full bg-accent"
+            style={{ width: `${(node.levelInChapter / LEVELS_PER_CHAPTER) * 100}%` }}
+          />
         </div>
       </div>
     </div>
@@ -334,8 +341,8 @@ function RewardPreviewRow({ node }: { node: ChapterNodeState }) {
 }
 
 function EndlessTab({ route, endless }: { route: string; endless: EndlessProgress }) {
-  const pct = Math.round((endless.levelInChapter / 20) * 100)
-  const bossPreview = modifiersForLevel({ ...endless, levelInChapter: 19, isBoss: true })
+  const pct = Math.round((endless.levelInChapter / LEVELS_PER_CHAPTER) * 100)
+  const bossPreview = modifiersForLevel({ ...endless, levelInChapter: LEVELS_PER_CHAPTER - 1, isBoss: true })
   const activeModifierLabels = bossPreview ? modifierLabel(bossPreview).split(' · ').filter(Boolean) : []
 
   return (
@@ -351,7 +358,9 @@ function EndlessTab({ route, endless }: { route: string; endless: EndlessProgres
           </div>
         </div>
         <div className="mt-4.5 flex items-center justify-between">
-          <span className="text-[12.5px] font-semibold text-white/85">Level {endless.levelInChapter + 1} of 20</span>
+          <span className="text-[12.5px] font-semibold text-white/85">
+            Level {endless.levelInChapter + 1} of {LEVELS_PER_CHAPTER}
+          </span>
           <span className="font-mono text-[12px] font-bold text-white/85">{pct}%</span>
         </div>
         <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/25">
@@ -370,7 +379,7 @@ function EndlessTab({ route, endless }: { route: string; endless: EndlessProgres
           <p className="px-1 text-[11px] font-bold tracking-[0.14em] text-ink-muted uppercase">Next boss level</p>
           <div className="rounded-[20px] bg-surface p-4 shadow-card">
             <p className="text-[14.5px] font-bold text-ink">
-              Level 20 of chapter {endless.endlessChapter}
+              Level {LEVELS_PER_CHAPTER} of chapter {endless.endlessChapter}
             </p>
             <div className="mt-2.5 flex flex-wrap gap-1.5">
               {activeModifierLabels.map((label) => {
@@ -397,7 +406,7 @@ function EndlessTab({ route, endless }: { route: string; endless: EndlessProgres
             <CheckIcon size={16} />
           </span>
           <div className="flex-1">
-            <p className="text-[14px] font-bold text-ink">All 30 chapters complete</p>
+            <p className="text-[14px] font-bold text-ink">All {TOTAL_STORY_CHAPTERS} chapters complete</p>
             <p className="mt-0.5 text-[11.5px] text-ink-muted">Every skin earned</p>
           </div>
         </div>

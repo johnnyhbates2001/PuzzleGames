@@ -11,7 +11,7 @@ import {
 } from '../storage/db'
 import type { Difficulty } from '../engine/types'
 import type { DailyGameId } from '../games/dailyChallenge'
-import { CHAPTER_META, LEVELS_PER_CHAPTER, STORY_LEVELS_PER_TIER, chapterForIndex } from '../games/chapters'
+import { CHAPTER_META, LEVELS_PER_CHAPTER, chapterForIndex, storyLevelsForTier } from '../games/chapters'
 
 export interface ChapterCompleteInfo {
   chapterNumber: number
@@ -28,7 +28,7 @@ async function checkChapterComplete(
   currentLevelIndex: number,
   difficulty: Difficulty,
 ): Promise<ChapterCompleteInfo | undefined> {
-  if (currentLevelIndex > STORY_LEVELS_PER_TIER || currentLevelIndex % LEVELS_PER_CHAPTER !== 0) return undefined
+  if (currentLevelIndex > storyLevelsForTier(difficulty) || currentLevelIndex % LEVELS_PER_CHAPTER !== 0) return undefined
   const { chapterNumber } = chapterForIndex(currentLevelIndex - 1, difficulty)
   const meta = CHAPTER_META[chapterNumber - 1]
   if (!meta) return undefined

@@ -3,7 +3,6 @@ import {
   CHAPTERS_PER_TIER,
   CHAPTER_META,
   LEVELS_PER_CHAPTER,
-  STORY_LEVELS_PER_TIER,
   TOTAL_STORY_CHAPTERS,
   buildChapterNodes,
   chapterForIndex,
@@ -12,6 +11,8 @@ import {
   endlessProgress,
   modifierLabel,
   modifiersForLevel,
+  storyLevelsForTier,
+  tierOffsetChapters,
 } from './chapters'
 
 describe('CHAPTER_META', () => {
@@ -32,13 +33,13 @@ describe('CHAPTER_META', () => {
 })
 
 describe('difficultyForChapter', () => {
-  it('maps chapters 1-10 to easy, 11-20 to medium, 21-30 to hard', () => {
+  it('maps chapters 1-10 to easy, 11-25 to medium, 26-50 to hard', () => {
     expect(difficultyForChapter(1)).toBe('easy')
     expect(difficultyForChapter(10)).toBe('easy')
     expect(difficultyForChapter(11)).toBe('medium')
-    expect(difficultyForChapter(20)).toBe('medium')
-    expect(difficultyForChapter(21)).toBe('hard')
-    expect(difficultyForChapter(30)).toBe('hard')
+    expect(difficultyForChapter(25)).toBe('medium')
+    expect(difficultyForChapter(26)).toBe('hard')
+    expect(difficultyForChapter(50)).toBe('hard')
   })
 })
 
@@ -59,13 +60,13 @@ describe('chapterForIndex', () => {
   })
 
   it('applies the tier offset for medium and hard', () => {
-    expect(chapterForIndex(0, 'medium').chapterNumber).toBe(CHAPTERS_PER_TIER + 1)
-    expect(chapterForIndex(0, 'hard').chapterNumber).toBe(CHAPTERS_PER_TIER * 2 + 1)
+    expect(chapterForIndex(0, 'medium').chapterNumber).toBe(tierOffsetChapters('medium') + 1)
+    expect(chapterForIndex(0, 'hard').chapterNumber).toBe(tierOffsetChapters('hard') + 1)
   })
 
   it('clamps indexes past the story range to the tier\'s final chapter (Endless territory)', () => {
-    const atBoundary = chapterForIndex(199, 'hard')
-    const wayPast = chapterForIndex(1000, 'hard')
+    const atBoundary = chapterForIndex(storyLevelsForTier('hard') - 1, 'hard')
+    const wayPast = chapterForIndex(10_000, 'hard')
     expect(wayPast).toEqual(atBoundary)
     expect(wayPast.chapterNumber).toBe(TOTAL_STORY_CHAPTERS)
   })
@@ -73,11 +74,12 @@ describe('chapterForIndex', () => {
 
 describe('chaptersCompletedInTier', () => {
   it('counts whole chapters only, capped at the tier size', () => {
-    expect(chaptersCompletedInTier(0)).toBe(0)
-    expect(chaptersCompletedInTier(19)).toBe(0)
-    expect(chaptersCompletedInTier(20)).toBe(1)
-    expect(chaptersCompletedInTier(200)).toBe(CHAPTERS_PER_TIER)
-    expect(chaptersCompletedInTier(999)).toBe(CHAPTERS_PER_TIER)
+    expect(chaptersCompletedInTier(0, 'easy')).toBe(0)
+    expect(chaptersCompletedInTier(19, 'easy')).toBe(0)
+    expect(chaptersCompletedInTier(20, 'easy')).toBe(1)
+    expect(chaptersCompletedInTier(storyLevelsForTier('easy'), 'easy')).toBe(CHAPTERS_PER_TIER.easy)
+    expect(chaptersCompletedInTier(9999, 'easy')).toBe(CHAPTERS_PER_TIER.easy)
+    expect(chaptersCompletedInTier(9999, 'hard')).toBe(CHAPTERS_PER_TIER.hard)
   })
 })
 
@@ -87,15 +89,15 @@ describe('buildChapterNodes', () => {
     expect(nodes).toHaveLength(TOTAL_STORY_CHAPTERS)
     expect(nodes[0].status).toBe('current') // chapter 1
     expect(nodes[10].status).toBe('locked') // chapter 11 (medium's first) — regression guard
-    expect(nodes[20].status).toBe('locked') // chapter 21 (hard's first) — regression guard
+    expect(nodes[25].status).toBe('locked') // chapter 26 (hard's first) — regression guard
     expect(nodes.filter((n) => n.status === 'locked')).toHaveLength(TOTAL_STORY_CHAPTERS - 1)
   })
 
   it('unlocks a later tier only once the earlier tier is fully complete', () => {
-    const nodes = buildChapterNodes({ easy: STORY_LEVELS_PER_TIER, medium: 0, hard: 0 })
+    const nodes = buildChapterNodes({ easy: storyLevelsForTier('easy'), medium: 0, hard: 0 })
     expect(nodes[9].status).toBe('complete') // chapter 10, easy's last
     expect(nodes[10].status).toBe('current') // chapter 11, medium's first, now unlocked
-    expect(nodes[20].status).toBe('locked') // chapter 21, hard's first, still locked
+    expect(nodes[25].status).toBe('locked') // chapter 26, hard's first, still locked
   })
 
   it('marks mid-chapter progress as current with the right levelInChapter', () => {
@@ -108,11 +110,11 @@ describe('buildChapterNodes', () => {
 describe('endlessProgress', () => {
   it('is null until the hard story spine is actually finished', () => {
     expect(endlessProgress(0)).toBeNull()
-    expect(endlessProgress(STORY_LEVELS_PER_TIER - 1)).toBeNull()
+    expect(endlessProgress(storyLevelsForTier('hard') - 1)).toBeNull()
   })
 
   it('starts endless chapter 1 the instant the spine finishes', () => {
-    expect(endlessProgress(STORY_LEVELS_PER_TIER)).toEqual({
+    expect(endlessProgress(storyLevelsForTier('hard'))).toEqual({
       endlessChapter: 1,
       levelInChapter: 0,
       rank: 'Bronze',
@@ -121,12 +123,12 @@ describe('endlessProgress', () => {
   })
 
   it('flags the 20th level of an endless chapter as the boss level', () => {
-    expect(endlessProgress(STORY_LEVELS_PER_TIER + LEVELS_PER_CHAPTER - 1)).toMatchObject({
+    expect(endlessProgress(storyLevelsForTier('hard') + LEVELS_PER_CHAPTER - 1)).toMatchObject({
       endlessChapter: 1,
       levelInChapter: LEVELS_PER_CHAPTER - 1,
       isBoss: true,
     })
-    expect(endlessProgress(STORY_LEVELS_PER_TIER + LEVELS_PER_CHAPTER)).toMatchObject({
+    expect(endlessProgress(storyLevelsForTier('hard') + LEVELS_PER_CHAPTER)).toMatchObject({
       endlessChapter: 2,
       levelInChapter: 0,
       isBoss: false,
@@ -134,26 +136,26 @@ describe('endlessProgress', () => {
   })
 
   it('advances endless chapters every 20 levels past the spine', () => {
-    expect(endlessProgress(STORY_LEVELS_PER_TIER + LEVELS_PER_CHAPTER)).toMatchObject({
+    expect(endlessProgress(storyLevelsForTier('hard') + LEVELS_PER_CHAPTER)).toMatchObject({
       endlessChapter: 2,
       levelInChapter: 0,
     })
-    expect(endlessProgress(STORY_LEVELS_PER_TIER + 45)).toMatchObject({
+    expect(endlessProgress(storyLevelsForTier('hard') + 45)).toMatchObject({
       endlessChapter: 3, // 45 = 2 full chapters (40) + 5 into the 3rd
       levelInChapter: 5,
     })
   })
 
   it('promotes rank every 5 endless chapters, capping at the top rank', () => {
-    expect(endlessProgress(STORY_LEVELS_PER_TIER)?.rank).toBe('Bronze') // endless chapter 1
-    expect(endlessProgress(STORY_LEVELS_PER_TIER + LEVELS_PER_CHAPTER * 5)?.rank).toBe('Silver') // endless chapter 6
-    expect(endlessProgress(STORY_LEVELS_PER_TIER + LEVELS_PER_CHAPTER * 9999)?.rank).toBe('Master V') // far future, capped
+    expect(endlessProgress(storyLevelsForTier('hard'))?.rank).toBe('Bronze') // endless chapter 1
+    expect(endlessProgress(storyLevelsForTier('hard') + LEVELS_PER_CHAPTER * 5)?.rank).toBe('Silver') // endless chapter 6
+    expect(endlessProgress(storyLevelsForTier('hard') + LEVELS_PER_CHAPTER * 9999)?.rank).toBe('Master V') // far future, capped
   })
 })
 
 /** Index that lands exactly on the boss (20th) level of the given 1-based endless chapter. */
 function bossIndexForEndlessChapter(endlessChapter: number): number {
-  return STORY_LEVELS_PER_TIER + (endlessChapter - 1) * LEVELS_PER_CHAPTER + (LEVELS_PER_CHAPTER - 1)
+  return storyLevelsForTier('hard') + (endlessChapter - 1) * LEVELS_PER_CHAPTER + (LEVELS_PER_CHAPTER - 1)
 }
 
 function modifiersAt(endlessChapter: number) {
@@ -167,7 +169,7 @@ function countActive(m: ReturnType<typeof modifiersAt>): number {
 
 describe('modifiersForLevel', () => {
   it('is null for a non-boss endless level', () => {
-    expect(modifiersForLevel(endlessProgress(STORY_LEVELS_PER_TIER))).toBeNull() // chapter 1, level 1
+    expect(modifiersForLevel(endlessProgress(storyLevelsForTier('hard')))).toBeNull() // chapter 1, level 1
   })
 
   it('is null before Endless even starts', () => {

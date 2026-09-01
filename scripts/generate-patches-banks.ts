@@ -21,23 +21,24 @@ import type { Difficulty, PatchesLevelRecord } from '../src/engine/patches/types
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const OUTPUT_DIR = join(__dirname, '..', 'src', 'data', 'banks')
 
-const TARGET_PER_DIFFICULTY = 200
-const WALL_CLOCK_BUDGET_MS = 3 * 60 * 1000
+const TARGET_PER_DIFFICULTY: Record<Difficulty, number> = { easy: 200, medium: 300, hard: 500 }
+const WALL_CLOCK_BUDGET_MS: Record<Difficulty, number> = { easy: 3 * 60 * 1000, medium: 6 * 60 * 1000, hard: 12 * 60 * 1000 }
 const PROGRESS_EVERY = 25
 const DIFFICULTIES: Difficulty[] = ['easy', 'medium', 'hard']
 
 function generateBank(difficulty: Difficulty, seed: number): PatchesLevelRecord[] {
+  const target = TARGET_PER_DIFFICULTY[difficulty]
   const rng = mulberry32(seed)
   const levels: PatchesLevelRecord[] = []
   const seenHashes = new Set<string>()
   const start = Date.now()
   let attempts = 0
 
-  while (levels.length < TARGET_PER_DIFFICULTY) {
-    if (Date.now() - start > WALL_CLOCK_BUDGET_MS) {
+  while (levels.length < target) {
+    if (Date.now() - start > WALL_CLOCK_BUDGET_MS[difficulty]) {
       console.warn(
         `[gen:patches-banks] ${difficulty}: wall-clock budget exceeded after ${attempts} attempts — ` +
-          `stopping with ${levels.length}/${TARGET_PER_DIFFICULTY} levels`,
+          `stopping with ${levels.length}/${target} levels`,
       )
       break
     }
@@ -53,13 +54,13 @@ function generateBank(difficulty: Difficulty, seed: number): PatchesLevelRecord[
     if (levels.length % PROGRESS_EVERY === 0) {
       const elapsedS = ((Date.now() - start) / 1000).toFixed(1)
       console.log(
-        `[gen:patches-banks] ${difficulty}: ${levels.length}/${TARGET_PER_DIFFICULTY} (${elapsedS}s elapsed, ${attempts} attempts)`,
+        `[gen:patches-banks] ${difficulty}: ${levels.length}/${target} (${elapsedS}s elapsed, ${attempts} attempts)`,
       )
     }
   }
 
   const elapsedS = ((Date.now() - start) / 1000).toFixed(1)
-  console.log(`[gen:patches-banks] ${difficulty}: done — ${levels.length}/${TARGET_PER_DIFFICULTY} levels in ${elapsedS}s (${attempts} attempts)`)
+  console.log(`[gen:patches-banks] ${difficulty}: done — ${levels.length}/${target} levels in ${elapsedS}s (${attempts} attempts)`)
   return levels
 }
 
@@ -69,7 +70,7 @@ let anyShort = false
 for (let i = 0; i < DIFFICULTIES.length; i++) {
   const difficulty = DIFFICULTIES[i]
   const levels = generateBank(difficulty, 40_000 + i)
-  if (levels.length < TARGET_PER_DIFFICULTY) anyShort = true
+  if (levels.length < TARGET_PER_DIFFICULTY[difficulty]) anyShort = true
 
   const outPath = join(OUTPUT_DIR, `patches-${difficulty}.json`)
   writeFileSync(outPath, JSON.stringify(levels))

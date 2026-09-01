@@ -1,7 +1,7 @@
 import type { Difficulty, ZipLevelRecord } from '../engine/zip/types'
 import { generateLevel } from '../engine/zip/generator'
 import { getZipProgress } from '../storage/db'
-import { CHAPTERS_PER_TIER, LEVELS_PER_CHAPTER } from './chapters'
+import { LEVELS_PER_CHAPTER, tierOffsetChapters } from './chapters'
 
 export interface NextZipLevelResult {
   level: ZipLevelRecord
@@ -67,12 +67,12 @@ export async function getFreePlayZipLevel(difficulty: Difficulty): Promise<FreeP
 }
 
 /** Every level in one story chapter, in order — always all 20, since every chapter
- *  (10 per difficulty tier) is fully bank-sourced (each bank has exactly 200 levels;
- *  see games/chapters.ts). Powers "replay this chapter" from ChaptersPage's
+ *  is fully bank-sourced (each bank has exactly LEVELS_PER_CHAPTER * that tier's
+ *  chapter count; see games/chapters.ts). Powers "replay this chapter" from ChaptersPage's
  *  CompleteRow — reuses the same bank chunk getNextZipLevel already loads. */
 export async function getChapterLevels(difficulty: Difficulty, chapterNumber: number): Promise<ZipLevelRecord[]> {
   const bank = await loadBank(difficulty)
-  const chapterInTier = (chapterNumber - 1) % CHAPTERS_PER_TIER
+  const chapterInTier = chapterNumber - 1 - tierOffsetChapters(difficulty)
   const start = chapterInTier * LEVELS_PER_CHAPTER
   return bank.slice(start, start + LEVELS_PER_CHAPTER)
 }

@@ -9,8 +9,13 @@ import {
 } from '../storage/db'
 
 export const LEVELS_PER_CHAPTER = 20
-export const CHAPTERS_PER_TIER = 10
-export const TOTAL_STORY_CHAPTERS = CHAPTERS_PER_TIER * 3
+export const CHAPTERS_PER_TIER: Record<Difficulty, number> = { easy: 10, medium: 15, hard: 25 }
+export const TOTAL_STORY_CHAPTERS = CHAPTERS_PER_TIER.easy + CHAPTERS_PER_TIER.medium + CHAPTERS_PER_TIER.hard
+
+/** Levels in one difficulty tier's full story spine (its chapter count × 20). */
+export function storyLevelsForTier(difficulty: Difficulty): number {
+  return LEVELS_PER_CHAPTER * CHAPTERS_PER_TIER[difficulty]
+}
 
 export interface ChapterMeta {
   name: string
@@ -19,7 +24,10 @@ export interface ChapterMeta {
 }
 
 // Shared across all 6 games to keep initial content-authoring low — each game can
-// diverge later. Index 0 = chapter 1.
+// diverge later. Index 0 = chapter 1. Chapters 1-10 are easy, 11-25 medium, 26-50 hard
+// (see CHAPTERS_PER_TIER) — a skin unlocks every 3rd chapter regardless of tier
+// boundary, so a handful of tier-boundary chapter numbers (21, 24, 27, 30) kept their
+// original skin pairing even though which tier they fall in shifted.
 export const CHAPTER_META: ChapterMeta[] = [
   { name: 'First Steps' },
   { name: 'Morning Light' },
@@ -41,25 +49,52 @@ export const CHAPTER_META: ChapterMeta[] = [
   { name: 'Alpine Lake', skinId: 'alpine' },
   { name: 'Ridge Line' },
   { name: 'Summit Approach' },
-  { name: 'Molten Core', skinId: 'molten' },
+  { name: 'Smoldering Pass', skinId: 'molten' },
+  { name: 'Ashfall Trail' },
+  { name: 'Rumbling Slope' },
+  { name: 'Stormlight Ridge', skinId: 'thunderhead' },
+  { name: 'Basecamp' },
   { name: 'Volcanic Field' },
-  { name: 'Ember Ridge' },
-  { name: 'Thunderhead', skinId: 'thunderhead' },
-  { name: 'Storm Front' },
-  { name: 'Iron Peaks' },
   { name: 'Aurora Sky', skinId: 'aurora' },
-  { name: "Glacier's Edge" },
-  { name: 'Frozen Reach' },
+  { name: 'Ember Ridge' },
+  { name: 'Storm Front' },
   { name: 'The Summit', skinId: 'summit' },
+  { name: 'Iron Peaks' },
+  { name: 'Windswept Crag' },
+  { name: 'Highwind Pass', skinId: 'tempest' },
+  { name: 'Ice Hollow' },
+  { name: 'Snowline Ridge' },
+  { name: 'Frozen Reach', skinId: 'glacial' },
+  { name: 'Ice Cavern' },
+  { name: 'Snowbound Trail' },
+  { name: 'Polar Ridge', skinId: 'polaris' },
+  { name: 'Northern Watch' },
+  { name: 'Starfall Camp' },
+  { name: 'Nightfall Summit', skinId: 'nightfall' },
+  { name: 'Comet Trail' },
+  { name: 'Silent Peak' },
+  { name: 'Ember Peak', skinId: 'ember-peak' },
+  { name: 'Skyward Climb' },
+  { name: 'Last Ascent' },
+  { name: 'Skyfire Summit', skinId: 'skyfire' },
+  { name: 'The Endless Horizon' },
+  { name: 'Beyond the Summit' },
 ]
 
-function tierOffsetChapters(difficulty: Difficulty): number {
-  return { easy: 0, medium: CHAPTERS_PER_TIER, hard: CHAPTERS_PER_TIER * 2 }[difficulty]
+const TIER_ORDER: Difficulty[] = ['easy', 'medium', 'hard']
+
+/** How many chapters precede this difficulty's tier (its first chapter is offset + 1). */
+export function tierOffsetChapters(difficulty: Difficulty): number {
+  return TIER_ORDER.slice(0, TIER_ORDER.indexOf(difficulty)).reduce((sum, d) => sum + CHAPTERS_PER_TIER[d], 0)
 }
 
 export function difficultyForChapter(chapterNumber: number): Difficulty {
-  const tier = Math.min(Math.floor((chapterNumber - 1) / CHAPTERS_PER_TIER), 2)
-  return (['easy', 'medium', 'hard'] as const)[tier]
+  let offset = 0
+  for (const d of TIER_ORDER) {
+    offset += CHAPTERS_PER_TIER[d]
+    if (chapterNumber <= offset) return d
+  }
+  return 'hard'
 }
 
 /** Derives chapter position from a difficulty's existing `currentLevelIndex` counter —
@@ -69,7 +104,7 @@ export function chapterForIndex(
   tierLocalIndex: number,
   difficulty: Difficulty,
 ): { chapterNumber: number; levelInChapter: number; isBoss: boolean } {
-  const clamped = Math.max(0, Math.min(tierLocalIndex, LEVELS_PER_CHAPTER * CHAPTERS_PER_TIER - 1))
+  const clamped = Math.max(0, Math.min(tierLocalIndex, storyLevelsForTier(difficulty) - 1))
   const chapterInTier = Math.floor(clamped / LEVELS_PER_CHAPTER)
   const levelInChapter = clamped - chapterInTier * LEVELS_PER_CHAPTER
   return {
@@ -79,9 +114,10 @@ export function chapterForIndex(
   }
 }
 
-/** How many chapters within one difficulty tier are fully completed (0-10). */
-export function chaptersCompletedInTier(currentLevelIndex: number): number {
-  return Math.min(Math.floor(currentLevelIndex / LEVELS_PER_CHAPTER), CHAPTERS_PER_TIER)
+/** How many chapters within one difficulty tier are fully completed, capped at that
+ *  tier's own chapter count. */
+export function chaptersCompletedInTier(currentLevelIndex: number, difficulty: Difficulty): number {
+  return Math.min(Math.floor(currentLevelIndex / LEVELS_PER_CHAPTER), CHAPTERS_PER_TIER[difficulty])
 }
 
 export type ChapterStatus = 'locked' | 'current' | 'complete'
@@ -95,24 +131,21 @@ export interface ChapterNodeState {
   levelInChapter: number
 }
 
-const TIER_ORDER: Difficulty[] = ['easy', 'medium', 'hard']
-export const STORY_LEVELS_PER_TIER = LEVELS_PER_CHAPTER * CHAPTERS_PER_TIER
-
-/** Builds all 30 chapter node states for one game from its 3 difficulty progress
- *  counters — the chapter map's entire data model, purely derived, no new storage.
- *  Each tier's own counter independently starts at 0, so a later tier (medium/hard)
- *  must additionally be gated behind every earlier tier being fully finished — without
- *  that check, chapter 11 (medium's first) and chapter 21 (hard's first) would both
- *  read as immediately playable on a fresh profile, alongside chapter 1. */
+/** Builds all `TOTAL_STORY_CHAPTERS` chapter node states for one game from its 3
+ *  difficulty progress counters — the chapter map's entire data model, purely derived,
+ *  no new storage. Each tier's own counter independently starts at 0, so a later tier
+ *  (medium/hard) must additionally be gated behind every earlier tier being fully
+ *  finished — without that check, medium's first chapter and hard's first chapter would
+ *  both read as immediately playable on a fresh profile, alongside chapter 1. */
 export function buildChapterNodes(currentLevelIndexByDifficulty: Record<Difficulty, number>): ChapterNodeState[] {
   const nodes: ChapterNodeState[] = []
   for (let chapterNumber = 1; chapterNumber <= TOTAL_STORY_CHAPTERS; chapterNumber++) {
     const difficulty = difficultyForChapter(chapterNumber)
     const tierPosition = TIER_ORDER.indexOf(difficulty)
     const earlierTiersComplete = TIER_ORDER.slice(0, tierPosition).every(
-      (d) => currentLevelIndexByDifficulty[d] >= STORY_LEVELS_PER_TIER,
+      (d) => currentLevelIndexByDifficulty[d] >= storyLevelsForTier(d),
     )
-    const chapterInTier = (chapterNumber - 1) % CHAPTERS_PER_TIER
+    const chapterInTier = chapterNumber - 1 - tierOffsetChapters(difficulty)
     const start = chapterInTier * LEVELS_PER_CHAPTER
     const end = start + LEVELS_PER_CHAPTER
     const tierIndex = currentLevelIndexByDifficulty[difficulty]
@@ -149,12 +182,12 @@ export async function getHighestChapterCompleted(): Promise<number> {
     // untouched medium/hard row would still add its tier offset (10/20) to the max,
     // reporting chapters as "completed" purely because that tier is numerically later,
     // even on a completely fresh profile.
-    const completedInTier = chaptersCompletedInTier(p.currentLevelIndex)
+    const completedInTier = chaptersCompletedInTier(p.currentLevelIndex, p.difficulty)
     return completedInTier === 0 ? max : Math.max(max, tierOffsetChapters(p.difficulty) + completedInTier)
   }, 0)
 }
 
-// Endless mode: once hard's own 200-level story spine (chapters 21-30) is finished,
+// Endless mode: once hard's own story spine is finished,
 // hard's currentLevelIndex keeps counting up forever via the same bank-exhaustion
 // fallback that already existed (see getNextLevel in games/queensLevels.ts and its
 // siblings) — so, like every story-chapter position above, Endless progress is a pure
@@ -176,10 +209,11 @@ export interface EndlessProgress {
   isBoss: boolean
 }
 
-/** Null until hard's story spine (STORY_LEVELS_PER_TIER levels) is actually finished. */
+/** Null until hard's story spine is actually finished. */
 export function endlessProgress(hardCurrentLevelIndex: number): EndlessProgress | null {
-  if (hardCurrentLevelIndex < STORY_LEVELS_PER_TIER) return null
-  const endlessLevelIndex = hardCurrentLevelIndex - STORY_LEVELS_PER_TIER
+  const hardStoryLevels = storyLevelsForTier('hard')
+  if (hardCurrentLevelIndex < hardStoryLevels) return null
+  const endlessLevelIndex = hardCurrentLevelIndex - hardStoryLevels
   const endlessChapterIndex = Math.floor(endlessLevelIndex / LEVELS_PER_CHAPTER)
   const levelInChapter = endlessLevelIndex - endlessChapterIndex * LEVELS_PER_CHAPTER
   const rank = RANKS[Math.min(Math.floor(endlessChapterIndex / CHAPTERS_PER_RANK), RANKS.length - 1)]
