@@ -1,6 +1,12 @@
 import { useEffect, useState, type ReactNode } from 'react'
+import { AppLink as Link } from './AppLink'
 import { useTheme, type ThemePreference } from '../hooks/useTheme'
 import { useAudio } from '../hooks/useAudio'
+import { useAuth } from '../hooks/useAuth'
+import { useBackupSync } from '../hooks/useBackupSync'
+import { Avatar } from './Avatar'
+import { AVATAR_PRESETS } from '../avatars'
+import { setPresetAvatar } from '../api/avatar'
 import { useDismissable } from '../hooks/useDismissable'
 import { useSheetDrag } from '../hooks/useSheetDrag'
 import { ToggleRow } from './ToggleRow'
@@ -41,6 +47,20 @@ export function SettingsButton() {
   const [open, setOpen] = useState(false)
   const [theme, setTheme] = useTheme()
   const { soundEnabled, hapticsEnabled, setSoundEnabled, setHapticsEnabled } = useAudio()
+  const { user, loading: authLoading, logout, refresh: refreshUser } = useAuth()
+  const { status: backupStatus, lastSyncedAt, backupNow, restoreNow } = useBackupSync()
+  const [avatarBusy, setAvatarBusy] = useState(false)
+
+  async function handlePickPreset(presetId: string) {
+    setAvatarBusy(true)
+    try {
+      await setPresetAvatar(presetId)
+      await refreshUser()
+    } finally {
+      setAvatarBusy(false)
+    }
+  }
+
   const [autoPlaceX, setAutoPlaceX] = useState(true)
   const [zenMode, setZenMode] = useState(false)
   const [confirmingReset, setConfirmingReset] = useState(false)
@@ -99,6 +119,72 @@ export function SettingsButton() {
               >
                 <CloseIcon />
               </button>
+            </div>
+
+            <p className="mb-2 text-sm font-medium text-ink-muted">Account</p>
+            <div className="mb-4 flex flex-col gap-2.5 rounded-2xl bg-bg px-4 py-3">
+              {authLoading ? (
+                <p className="text-sm text-ink-muted">Loading…</p>
+              ) : user ? (
+                <>
+                  <div className="flex items-center gap-3">
+                    <Avatar username={user.username} avatarType={user.avatarType} avatarValue={user.avatarValue} size={32} />
+                    <span className="flex-1 text-sm font-semibold text-ink">{user.username}</span>
+                    <button type="button" onClick={() => void logout()} className="text-sm font-semibold text-danger">
+                      Sign out
+                    </button>
+                  </div>
+                  <div className="flex items-center gap-2 overflow-x-auto border-t border-border-dashed pt-2.5 [scrollbar-width:none]">
+                    {AVATAR_PRESETS.map((preset) => (
+                      <button
+                        key={preset.id}
+                        type="button"
+                        disabled={avatarBusy}
+                        aria-label={`Use ${preset.id} avatar`}
+                        onClick={() => void handlePickPreset(preset.id)}
+                        className="flex size-8 shrink-0 items-center justify-center rounded-full text-[16px] disabled:opacity-50"
+                        style={{ backgroundColor: preset.bg }}
+                      >
+                        {preset.emoji}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="flex items-center gap-3 border-t border-border-dashed pt-2.5">
+                    <p className="flex-1 text-[12px] text-ink-muted">
+                      {backupStatus === 'syncing'
+                        ? 'Syncing…'
+                        : backupStatus === 'error'
+                          ? 'Sync failed — try again'
+                          : lastSyncedAt
+                            ? `Backed up ${new Date(lastSyncedAt).toLocaleString()}`
+                            : 'Not backed up yet'}
+                    </p>
+                    <button
+                      type="button"
+                      disabled={backupStatus === 'syncing'}
+                      onClick={() => void backupNow()}
+                      className="text-[12.5px] font-semibold text-accent disabled:opacity-50"
+                    >
+                      Back up now
+                    </button>
+                    <button
+                      type="button"
+                      disabled={backupStatus === 'syncing'}
+                      onClick={() => void restoreNow()}
+                      className="text-[12.5px] font-semibold text-accent disabled:opacity-50"
+                    >
+                      Restore
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <div className="flex items-center gap-3">
+                  <span className="flex-1 text-sm text-ink-muted">Not signed in</span>
+                  <Link to="/login" onClick={handleClose} className="text-sm font-semibold text-accent">
+                    Sign in
+                  </Link>
+                </div>
+              )}
             </div>
 
             <p className="mb-2 text-sm font-medium text-ink-muted">Appearance</p>

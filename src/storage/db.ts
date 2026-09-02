@@ -46,6 +46,11 @@ export interface Settings {
    *  defaultId, which every category has whether or not it appears here. */
   ownedCosmetics: Partial<Record<CosmeticCategory, string[]>>
   equippedCosmetics: Partial<Record<CosmeticCategory, string>>
+  /** The account id this device's local progress has already been reconciled with
+   *  (see src/sync/backup.ts) — null until the player signs in and either pushes or
+   *  pulls a first backup. Lets a returning sign-in on the same device skip the
+   *  local-vs-cloud conflict prompt it needed the first time. */
+  linkedAccountId: string | null
 }
 
 export interface DifficultyProgress {
@@ -142,6 +147,9 @@ export interface DailyChallengeRecord {
   completedAt: number
   elapsedMs: number
   assisted: boolean
+  /** Wordle only — the daily leaderboard scores Wordle by guess count instead of
+   *  time (see worker/routes/scores.ts). Undefined for every other game. */
+  guessCount?: number
 }
 
 // `Difficulty` above is imported from the Queens engine, but the literal set
@@ -183,6 +191,7 @@ const DEFAULT_SETTINGS: Settings = {
   tutorialSeen: [],
   ownedCosmetics: {},
   equippedCosmetics: {},
+  linkedAccountId: null,
 }
 
 function defaultProgress(difficulty: Difficulty): DifficultyProgress {
@@ -271,6 +280,12 @@ export async function setZenMode(zenMode: boolean): Promise<void> {
   const db = await getDB()
   const current = await getSettings()
   await db.put('settings', { ...current, zenMode }, 'global')
+}
+
+export async function setLinkedAccountId(linkedAccountId: string | null): Promise<void> {
+  const db = await getDB()
+  const current = await getSettings()
+  await db.put('settings', { ...current, linkedAccountId }, 'global')
 }
 
 /** Unions gameId into tutorialSeen — idempotent. See Settings.tutorialSeen. */
@@ -718,6 +733,26 @@ export async function getDailyChallenge(dateKeyStr: string, gameId: DailyGameId)
   return db.get('dailyChallenge', dailyKey(dateKeyStr, gameId))
 }
 
+export interface DailyChallengeHistoryEntry {
+  dateKey: string
+  gameId: DailyGameId
+  record: DailyChallengeRecord
+}
+
+/** Every Daily Challenge completion ever recorded on this device, across every game
+ *  — used only for the one-time leaderboard backfill when a device first links to a
+ *  new account (see src/sync/backfill.ts); nothing else needs the whole history at
+ *  once, so this doesn't get a more targeted query. */
+export async function getAllDailyChallengeHistory(): Promise<DailyChallengeHistoryEntry[]> {
+  const db = await getDB()
+  const keys = await db.getAllKeys('dailyChallenge')
+  const values = await db.getAll('dailyChallenge')
+  return keys.map((key, i) => {
+    const [dateKeyStr, gameId] = key.split(':') as [string, DailyGameId]
+    return { dateKey: dateKeyStr, gameId, record: values[i] }
+  })
+}
+
 export interface DailyCompletionResult {
   coinsAwarded: number
   streak: number
@@ -731,12 +766,13 @@ export async function recordDailyChallengeCompletion(
   gameId: DailyGameId,
   elapsedMs: number,
   assisted: boolean,
+  guessCount?: number,
 ): Promise<DailyCompletionResult> {
   const db = await getDB()
   const key = dateKey(new Date())
   const tx = db.transaction(['dailyChallenge', 'settings', 'dailyActivity'], 'readwrite')
 
-  const record: DailyChallengeRecord = { gameId, completedAt: Date.now(), elapsedMs, assisted }
+  const record: DailyChallengeRecord = { gameId, completedAt: Date.now(), elapsedMs, assisted, guessCount }
   await tx.objectStore('dailyChallenge').put(record, dailyKey(key, gameId))
 
   const settingsStore = tx.objectStore('settings')
@@ -840,4 +876,42 @@ const ALL_STORE_NAMES = [
 export async function resetAllProgress(): Promise<void> {
   const db = await getDB()
   await Promise.all(ALL_STORE_NAMES.map((name) => db.clear(name)))
+}
+
+type StoreName = (typeof ALL_STORE_NAMES)[number]
+
+/** Full-fidelity dump of every store (see ALL_STORE_NAMES) as an opaque snapshot —
+ *  the backend never inspects `stores`, just round-trips it as one JSON blob (see
+ *  worker/routes/backup.ts). Generic over store shape by design, since the point is
+ *  to survive schema growth without needing updates here every time a new store is
+ *  added — hence the `unknown`/cast boundary below. */
+export interface BackupSnapshot {
+  version: number
+  stores: Partial<Record<StoreName, { key: IDBValidKey; value: unknown }[]>>
+}
+
+export async function exportBackupSnapshot(): Promise<BackupSnapshot> {
+  const db = await getDB()
+  const stores: BackupSnapshot['stores'] = {}
+  for (const name of ALL_STORE_NAMES) {
+    const keys = await db.getAllKeys(name)
+    const values = await db.getAll(name)
+    stores[name] = keys.map((key, i) => ({ key, value: values[i] }))
+  }
+  return { version: DB_VERSION, stores }
+}
+
+/** Overwrites every store present in `snapshot` with its saved contents (stores the
+ *  snapshot doesn't mention are left untouched). Store names the current schema no
+ *  longer has (an old backup restored after a later schema change) are skipped. */
+export async function importBackupSnapshot(snapshot: BackupSnapshot): Promise<void> {
+  const db = await getDB()
+  for (const name of ALL_STORE_NAMES) {
+    const entries = snapshot.stores[name]
+    if (!entries) continue
+    const tx = db.transaction(name, 'readwrite')
+    await tx.store.clear()
+    for (const { key, value } of entries) await tx.store.put(value as never, key as never)
+    await tx.done
+  }
 }

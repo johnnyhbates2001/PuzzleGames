@@ -1,10 +1,11 @@
 import { AppLink as Link } from './AppLink'
-import { AwardsTabIcon, PlayTabIcon, ShopTabIcon, StatsTabIcon } from './icons'
+import { AwardsTabIcon, FriendsTabIcon, PlayTabIcon, ShopTabIcon, StatsTabIcon } from './icons'
 
 const TABS = [
   { key: 'play', label: 'Play', Icon: PlayTabIcon, to: '/' },
   { key: 'shop', label: 'Shop', Icon: ShopTabIcon, to: '/shop' },
   { key: 'stats', label: 'Stats', Icon: StatsTabIcon, to: '/stats' },
+  { key: 'friends', label: 'Friends', Icon: FriendsTabIcon, to: '/friends' },
   { key: 'awards', label: 'Awards', Icon: AwardsTabIcon, to: '/achievements' },
 ] as const
 
@@ -12,8 +13,9 @@ interface TabBarProps {
   active: (typeof TABS)[number]['key']
 }
 
-/** iOS-pill bottom tab bar shown on the four top-level screens (Home/Shop/Stats/Awards) —
- *  not during the Difficulty/Game/Complete push-navigation flow, matching the design. */
+/** iOS-pill bottom tab bar shown on the five top-level screens
+ *  (Home/Shop/Stats/Friends/Awards) — not during the Difficulty/Game/Complete
+ *  push-navigation flow, matching the design. */
 export function TabBar({ active }: TabBarProps) {
   const activeIndex = TABS.findIndex((tab) => tab.key === active)
 
@@ -25,8 +27,12 @@ export function TabBar({ active }: TabBarProps) {
           transform transition only ever plays for a tap within the bar itself. */}
       <span
         aria-hidden="true"
-        className="absolute top-1.5 bottom-1.5 left-1.5 w-[calc((100%-0.75rem)/4)] rounded-full bg-accent-tint"
-        style={{ transform: `translateX(${activeIndex * 100}%)`, transition: 'transform 420ms cubic-bezier(0.22, 1, 0.36, 1)' }}
+        className="absolute top-1.5 bottom-1.5 left-1.5 rounded-full bg-accent-tint"
+        style={{
+          width: `calc((100% - 0.75rem) / ${TABS.length})`,
+          transform: `translateX(${activeIndex * 100}%)`,
+          transition: 'transform 420ms cubic-bezier(0.22, 1, 0.36, 1)',
+        }}
       />
       {TABS.map((tab, i) => (
         <Link

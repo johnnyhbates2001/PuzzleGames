@@ -1,8 +1,22 @@
 # Deploying Queens
 
-This is a plain static site — `npm run build` produces a `dist/` folder with no
-server-side requirements. Either host below works from a git-connected dashboard
-deploy; no project-specific configuration is needed beyond what's below.
+This is a Cloudflare Worker: `npm run build` produces the static `dist/` frontend, and
+`worker/index.ts` serves the `/api/*` accounts/friends/leaderboard/backup routes
+alongside it, backed by D1 (accounts, friendships, scores). It can no longer be
+deployed as a plain static site (Cloudflare Pages, Vercel, etc.) — without the Worker
+and D1 behind it, sign-in, friends, leaderboards, and backup/restore would silently
+not work.
+
+## One-time Cloudflare setup
+
+Only needed once per Cloudflare account (skip if `wrangler.jsonc`'s `database_id` is
+already a real id, not the `REPLACE_WITH_REAL_D1_DATABASE_ID` placeholder):
+
+```bash
+npx wrangler login
+npx wrangler d1 create puzzlegames-db      # copy the printed database_id into wrangler.jsonc
+npx wrangler d1 migrations apply puzzlegames-db --remote   # applies worker/migrations/*.sql
+```
 
 ## Before deploying
 
@@ -12,41 +26,23 @@ npm run gen:banks   # only needed if src/data/banks/*.json isn't already committ
 npm run gen:icons   # only needed if public/icons/*.png isn't already committed
 npm test
 npm run build
-npm run preview     # smoke-test the production build locally
+npm run preview     # smoke-test the static frontend locally (no /api/* — use wrangler dev for that)
+npx wrangler dev     # smoke-test the full app, frontend + /api/* + local D1, before deploying
 ```
 
 The level banks and generated icons are meant to be committed to the repo — `gen:banks`
 and `gen:icons` are setup/regeneration steps, not part of the build itself.
 
-## Cloudflare Pages
-
-1. Push this repo to GitHub/GitLab and connect it in the Cloudflare Pages dashboard
-   (Workers & Pages → Create → Pages → Connect to Git).
-2. Build settings:
-   - **Framework preset:** Vite
-   - **Build command:** `npm run build`
-   - **Build output directory:** `dist`
-3. Deploy. Every push to the connected branch redeploys automatically.
-
-Or from the CLI (no dependency added — run on demand via `npx`):
+## Deploy
 
 ```bash
-npx wrangler pages deploy dist
+npm run build
+npx wrangler deploy
 ```
 
-## Vercel
-
-1. Import the repo at vercel.com/new. Vercel auto-detects the Vite preset.
-2. Build settings (should be auto-filled):
-   - **Build command:** `npm run build`
-   - **Output directory:** `dist`
-3. Deploy. Every push redeploys automatically.
-
-Or from the CLI:
-
-```bash
-npx vercel deploy --prod
-```
+Every new migration added under `worker/migrations/` after the first deploy needs its
+own `npx wrangler d1 migrations apply puzzlegames-db --remote` before (or as part of)
+that deploy — `wrangler deploy` does not run migrations for you.
 
 ## Verifying the deploy
 

@@ -31,5 +31,10 @@ npm run dev
   in-progress level resume) via `idb`.
 - `src/games/registry.ts` — the game list the homepage renders from; Queens is the
   first entry.
+- `worker/` — the Cloudflare Worker backing accounts, friends, leaderboards, and
+  cloud backup (`src/api/`, `src/hooks/useAuth.tsx`, `src/hooks/useBackupSync.tsx`,
+  `src/sync/` on the client side). D1-backed — see `DEPLOY.md` for one-time setup.
+  Playing solo without an account still works entirely offline/local-first, same as
+  before this existed.
 
 See `DEPLOY.md` for deployment instructions.

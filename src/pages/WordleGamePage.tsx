@@ -307,6 +307,7 @@ export default function WordleGamePage({ freePlay = false }: { freePlay?: boolea
     validDifficulty,
     elapsedMs: state.elapsedMs,
     hintsUsed: state.hintsUsed,
+    dailyGuessCount: state.guesses.length,
     level: state.level,
     extraKey: 'guesses',
     extraValue: state.guesses,

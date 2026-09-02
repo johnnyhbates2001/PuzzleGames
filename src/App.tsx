@@ -4,6 +4,7 @@ import HomePage from './pages/HomePage'
 import ShopPage from './pages/ShopPage'
 import StatsPage from './pages/StatsPage'
 import AwardsPage from './pages/AwardsPage'
+import FriendsPage from './pages/FriendsPage'
 import DifficultyPage from './pages/DifficultyPage'
 import ChaptersPage from './pages/ChaptersPage'
 import GamePage from './pages/GamePage'
@@ -23,6 +24,9 @@ import NonogramCompletePage from './pages/NonogramCompletePage'
 import WordleDifficultyPage from './pages/WordleDifficultyPage'
 import WordleGamePage from './pages/WordleGamePage'
 import WordleCompletePage from './pages/WordleCompletePage'
+import LoginPage from './pages/LoginPage'
+import SignupPage from './pages/SignupPage'
+import RecoverPage from './pages/RecoverPage'
 import ErrorPage from './pages/ErrorPage'
 import { ScrollReset } from './components/ScrollReset'
 import { UpdateToast } from './components/UpdateToast'
@@ -30,7 +34,10 @@ import { SplashScreen } from './components/SplashScreen'
 import { SkinProvider } from './hooks/useSkin'
 import { AudioProvider } from './hooks/useAudio'
 import { CosmeticsProvider } from './hooks/useCosmetics'
+import { AuthProvider } from './hooks/useAuth'
+import { BackupProvider } from './hooks/useBackupSync'
 import { AccentThemeEffect } from './components/AccentThemeEffect'
+import { BackupConflictSheet } from './components/BackupConflictSheet'
 
 const SPLASH_SEEN_KEY = 'splashShown'
 
@@ -54,6 +61,10 @@ const router = createBrowserRouter([
       { path: 'shop', element: <ShopPage /> },
       { path: 'stats', element: <StatsPage /> },
       { path: 'achievements', element: <AwardsPage /> },
+      { path: 'friends', element: <FriendsPage /> },
+      { path: 'login', element: <LoginPage /> },
+      { path: 'signup', element: <SignupPage /> },
+      { path: 'recover', element: <RecoverPage /> },
       { path: 'queens', element: <DifficultyPage /> },
       { path: 'queens/chapters', element: <ChaptersPage gameId="queens" /> },
       { path: 'queens/free/:difficulty', element: <GamePage freePlay /> },
@@ -115,15 +126,20 @@ function App() {
   }, [])
 
   return (
-    <SkinProvider>
-      <CosmeticsProvider>
-        <AudioProvider>
-          <AccentThemeEffect />
-          {showSplash && <SplashScreen onDone={dismissSplash} />}
-          <RouterProvider router={router} />
-        </AudioProvider>
-      </CosmeticsProvider>
-    </SkinProvider>
+    <AuthProvider>
+      <BackupProvider>
+        <SkinProvider>
+          <CosmeticsProvider>
+            <AudioProvider>
+              <AccentThemeEffect />
+              {showSplash && <SplashScreen onDone={dismissSplash} />}
+              <RouterProvider router={router} />
+              <BackupConflictSheet />
+            </AudioProvider>
+          </CosmeticsProvider>
+        </SkinProvider>
+      </BackupProvider>
+    </AuthProvider>
   )
 }
 

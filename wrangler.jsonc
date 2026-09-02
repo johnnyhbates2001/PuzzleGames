@@ -1,8 +1,20 @@
 {
   "name": "puzzlegames",
   "compatibility_date": "2026-08-22",
+  "main": "worker/index.ts",
   "assets": {
     "directory": "./dist",
-    "not_found_handling": "single-page-application"
-  }
+    "not_found_handling": "single-page-application",
+    // Routes matching these patterns hit the Worker (worker/index.ts) instead of
+    // falling through to the SPA — everything else is still served as static assets.
+    "run_worker_first": ["/api/*"]
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "puzzlegames-db",
+      "database_id": "7ad746f3-c26c-4b82-aca6-5205f3db6e1b",
+      "migrations_dir": "worker/migrations"
+    }
+  ]
 }

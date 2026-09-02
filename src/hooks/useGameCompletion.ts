@@ -1,6 +1,7 @@
 import { useEffect, type MutableRefObject } from 'react'
 import { useAppNavigate as useNavigate } from './useAppNavigate'
 import { useAudio } from './useAudio'
+import { useAuth } from './useAuth'
 import { useReducedMotion } from './useReducedMotion'
 import {
   getDailyStreak,
@@ -9,8 +10,9 @@ import {
   type CompletionResult,
   type FreePlayCompletionResult,
 } from '../storage/db'
+import { postDailyScore, postGameScore } from '../api/scores'
 import type { Difficulty } from '../engine/types'
-import type { DailyGameId } from '../games/dailyChallenge'
+import { todayDateKey, type DailyGameId } from '../games/dailyChallenge'
 import { CHAPTER_META, LEVELS_PER_CHAPTER, chapterForIndex, storyLevelsForTier } from '../games/chapters'
 
 export interface ChapterCompleteInfo {
@@ -66,6 +68,10 @@ interface UseGameCompletionOptions<K extends string, V> {
   validDifficulty: Difficulty | null
   elapsedMs: number
   hintsUsed: number
+  /** Wordle only — see storage/db.ts's DailyChallengeRecord.guessCount and
+   *  worker/routes/scores.ts, which scores the Wordle daily leaderboard by guesses
+   *  instead of elapsed time. */
+  dailyGuessCount?: number
   level: unknown
   /** The one extra piece of board state each game's complete screen needs to render
    *  its preview — 'board' for Queens/Sudoku, 'path' for Zip, 'placed' for Patches,
@@ -103,6 +109,7 @@ export function useGameCompletion<K extends string, V>({
   validDifficulty,
   elapsedMs,
   hintsUsed,
+  dailyGuessCount,
   level,
   extraKey,
   extraValue,
@@ -112,6 +119,7 @@ export function useGameCompletion<K extends string, V>({
 }: UseGameCompletionOptions<K, V>) {
   const navigate = useNavigate()
   const { playSound, buzz } = useAudio()
+  const { user } = useAuth()
   const reducedMotion = useReducedMotion()
 
   useEffect(() => {
@@ -129,11 +137,25 @@ export function useGameCompletion<K extends string, V>({
     }
 
     if (isDaily) {
-      const finish = dailyAlreadyCompletedRef.current
+      const alreadyCompletedToday = dailyAlreadyCompletedRef.current
+      const finish = alreadyCompletedToday
         ? getDailyStreak(gameId).then((streak) => ({ coinsAwarded: 0, streak }))
-        : recordDailyChallengeCompletion(gameId, elapsedMs, hintsUsed > 0)
+        : recordDailyChallengeCompletion(gameId, elapsedMs, hintsUsed > 0, dailyGuessCount)
       finish.then((result) => {
         if (cancelled) return
+        // Only the real first-completion-of-the-day is worth syncing — a replay of an
+        // already-completed daily shouldn't overwrite that day's leaderboard row with a
+        // second, possibly worse, attempt (see recordDailyChallengeCompletion's own
+        // no-double-award guard for the same reasoning).
+        if (user && !alreadyCompletedToday) {
+          void postDailyScore({
+            gameId,
+            dateKey: todayDateKey(),
+            elapsedMs: gameId === 'wordle' ? undefined : elapsedMs,
+            guesses: gameId === 'wordle' ? dailyGuessCount : undefined,
+            assisted: hintsUsed > 0,
+          }).catch(() => {})
+        }
         scheduleNavigate(`${basePath}/daily/complete`, {
           timeMs: elapsedMs,
           level,
@@ -174,6 +196,15 @@ export function useGameCompletion<K extends string, V>({
         if (cancelled) return
         const chapterComplete = await checkChapterComplete(result.progress.currentLevelIndex, validDifficulty as Difficulty)
         if (cancelled) return
+        if (user) {
+          void postGameScore({
+            gameId,
+            difficulty: validDifficulty as Difficulty,
+            completedCount: result.progress.completedCount,
+            bestTimeMs: result.progress.bestTimeMs,
+            totalTimeMs: result.progress.totalTimeMs,
+          }).catch(() => {})
+        }
         scheduleNavigate(`${basePath}/${validDifficulty}/complete`, {
           timeMs: elapsedMs,
           levelNumber: result.progress.completedCount,
