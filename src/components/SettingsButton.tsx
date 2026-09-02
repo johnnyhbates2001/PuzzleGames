@@ -48,8 +48,15 @@ export function SettingsButton() {
   const [theme, setTheme] = useTheme()
   const { soundEnabled, hapticsEnabled, setSoundEnabled, setHapticsEnabled } = useAudio()
   const { user, loading: authLoading, logout, refresh: refreshUser } = useAuth()
-  const { status: backupStatus, lastSyncedAt, backupNow, restoreNow } = useBackupSync()
+  const { status: backupStatus, lastSyncedAt, backupNow, restoreNow, resyncHistory } = useBackupSync()
   const [avatarBusy, setAvatarBusy] = useState(false)
+  const [resyncState, setResyncState] = useState<'idle' | 'busy' | 'done' | 'failed'>('idle')
+
+  async function handleResyncHistory() {
+    setResyncState('busy')
+    const ok = await resyncHistory()
+    setResyncState(ok ? 'done' : 'failed')
+  }
 
   async function handlePickPreset(presetId: string) {
     setAvatarBusy(true)
@@ -174,6 +181,25 @@ export function SettingsButton() {
                       className="text-[12.5px] font-semibold text-accent disabled:opacity-50"
                     >
                       Restore
+                    </button>
+                  </div>
+                  <div className="flex items-center gap-3 border-t border-border-dashed pt-2.5">
+                    <p className="flex-1 text-[12px] text-ink-muted">
+                      {resyncState === 'busy'
+                        ? 'Resyncing…'
+                        : resyncState === 'done'
+                          ? "Friends leaderboards updated with this device's history"
+                          : resyncState === 'failed'
+                            ? 'Resync failed — try again'
+                            : "Not showing past solves on the friends leaderboards? Resync this device's history"}
+                    </p>
+                    <button
+                      type="button"
+                      disabled={resyncState === 'busy'}
+                      onClick={() => void handleResyncHistory()}
+                      className="shrink-0 text-[12.5px] font-semibold text-accent disabled:opacity-50"
+                    >
+                      Resync
                     </button>
                   </div>
                 </>

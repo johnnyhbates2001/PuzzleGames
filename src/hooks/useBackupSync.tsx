@@ -21,6 +21,12 @@ interface BackupContextValue {
   backupNow: () => Promise<void>
   restoreNow: () => Promise<void>
   resolveConflict: (choice: 'local' | 'cloud') => Promise<void>
+  /** Manually re-runs the leaderboard backfill (see src/sync/backfill.ts) — the
+   *  automatic run (below) only fires once, right when a device first links to an
+   *  account, and fails silently if it hits a snag. This is the escape hatch: safe
+   *  to call anytime, as many times as needed, since the backend only ever raises
+   *  game_stats and never overwrites an existing daily_scores row. */
+  resyncHistory: () => Promise<boolean>
 }
 
 const BackupContext = createContext<BackupContextValue | null>(null)
@@ -53,8 +59,9 @@ export function BackupProvider({ children }: { children: ReactNode }) {
         // Best-effort and non-blocking — a brand-new account has nothing in
         // game_stats/daily_scores yet, so this is the one moment worth seeding them
         // from local history (see src/sync/backfill.ts). A failure here shouldn't
-        // block the backup itself, which already succeeded above.
-        void backfillLeaderboardStats().catch(() => {})
+        // block the backup itself, which already succeeded above — logged rather than
+        // silently dropped, and re-runnable anytime via resyncHistory (Settings).
+        void backfillLeaderboardStats().catch((error: unknown) => console.error('Leaderboard backfill failed', error))
         if (!cancelled) {
           setLastSyncedAt(Date.now())
           setStatus('idle')
@@ -108,12 +115,23 @@ export function BackupProvider({ children }: { children: ReactNode }) {
     }
   }, [user])
 
+  const resyncHistory = useCallback(async () => {
+    if (!user) return false
+    try {
+      await backfillLeaderboardStats()
+      return true
+    } catch (error) {
+      console.error('Leaderboard backfill failed', error)
+      return false
+    }
+  }, [user])
+
   const resolveConflict = useCallback(
     async (choice: 'local' | 'cloud') => {
       if (!conflict || !user) return
       if (choice === 'local') {
         await pushBackup(user.id)
-        void backfillLeaderboardStats().catch(() => {})
+        void backfillLeaderboardStats().catch((error: unknown) => console.error('Leaderboard backfill failed', error))
         setConflict(null)
         setLastSyncedAt(Date.now())
       } else {
@@ -147,7 +165,7 @@ export function BackupProvider({ children }: { children: ReactNode }) {
   }, [user, conflict])
 
   return (
-    <BackupContext.Provider value={{ status, lastSyncedAt, conflict, backupNow, restoreNow, resolveConflict }}>
+    <BackupContext.Provider value={{ status, lastSyncedAt, conflict, backupNow, restoreNow, resolveConflict, resyncHistory }}>
       {children}
     </BackupContext.Provider>
   )

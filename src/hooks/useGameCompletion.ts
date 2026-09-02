@@ -154,7 +154,7 @@ export function useGameCompletion<K extends string, V>({
             elapsedMs: gameId === 'wordle' ? undefined : elapsedMs,
             guesses: gameId === 'wordle' ? dailyGuessCount : undefined,
             assisted: hintsUsed > 0,
-          }).catch(() => {})
+          }).catch((error: unknown) => console.error('Daily score sync failed', error))
         }
         scheduleNavigate(`${basePath}/daily/complete`, {
           timeMs: elapsedMs,
@@ -203,7 +203,7 @@ export function useGameCompletion<K extends string, V>({
             completedCount: result.progress.completedCount,
             bestTimeMs: result.progress.bestTimeMs,
             totalTimeMs: result.progress.totalTimeMs,
-          }).catch(() => {})
+          }).catch((error: unknown) => console.error('Game score sync failed', error))
         }
         scheduleNavigate(`${basePath}/${validDifficulty}/complete`, {
           timeMs: elapsedMs,
