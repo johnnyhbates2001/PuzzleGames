@@ -155,12 +155,24 @@ export function BackupProvider({ children }: { children: ReactNode }) {
     function handleVisibility() {
       if (document.hidden) maybeBackup()
     }
+    function handleOnline() {
+      maybeBackup()
+      // The full backup above only restores personal/local state (settings,
+      // progress, cosmetics, …) — daily_scores/game_stats (the friends-leaderboard
+      // tables) are separate and don't get touched by it. Any puzzle completed while
+      // offline had its live score-sync call fail silently at the time (see
+      // useGameCompletion.ts), so coming back online is exactly when it's worth
+      // re-running the same resync the Settings "Resync" button does — safe to call
+      // anytime, since the backend only ever raises game_stats and never overwrites
+      // an existing daily_scores row.
+      void backfillLeaderboardStats().catch((error: unknown) => console.error('Leaderboard backfill failed', error))
+    }
 
     document.addEventListener('visibilitychange', handleVisibility)
-    window.addEventListener('online', maybeBackup)
+    window.addEventListener('online', handleOnline)
     return () => {
       document.removeEventListener('visibilitychange', handleVisibility)
-      window.removeEventListener('online', maybeBackup)
+      window.removeEventListener('online', handleOnline)
     }
   }, [user, conflict])
 
