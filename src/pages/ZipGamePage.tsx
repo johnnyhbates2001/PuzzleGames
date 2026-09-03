@@ -5,6 +5,7 @@ import { coordKey, type Coord, type Difficulty, type ZipLevelRecord } from '../e
 import { applyCellEntry } from '../engine/zip/validator'
 import { createInitialState, getWrongCells, zipReducer } from '../state/zipReducer'
 import {
+  consumeConsumables,
   getDailyChallenge,
   getSettings,
   getZipInProgress,
@@ -13,6 +14,7 @@ import {
   recordZipCompletion,
   saveZipInProgress,
   spendCoins,
+  type ConsumableKind,
   type ZipInProgressLevel,
 } from '../storage/db'
 import { getFreePlayZipLevel, getNextZipLevel } from '../games/zipLevels'
@@ -35,7 +37,7 @@ import { GameHeader } from '../components/GameHeader'
 import { HintSheet, type HintOption } from '../components/HintSheet'
 import { FailSheet } from '../components/FailSheet'
 import { formatElapsed } from '../components/Timer'
-import { BossGateSheet } from '../components/BossGateSheet'
+import { BossGateSheet, buildBossAssists, TIME_FREEZE_BONUS_MS, type BossAssist } from '../components/BossGateSheet'
 import { LevelContext } from '../components/LevelContext'
 import { BoltIcon, EyeIcon, FlagIcon } from '../components/icons'
 
@@ -114,6 +116,10 @@ export default function ZipGamePage({ freePlay = false }: { freePlay?: boolean }
   const [failed, setFailed] = useState<{ reason: 'timeout' | 'mistake' } | null>(null)
   const [awaitingBossConfirm, setAwaitingBossConfirm] = useState(false)
   const [bossChapter, setBossChapter] = useState<number | null>(null)
+  const [assistOptions, setAssistOptions] = useState<BossAssist[]>([])
+  const [selectedAssists, setSelectedAssists] = useState<Set<ConsumableKind>>(new Set())
+  const [activeAssists, setActiveAssists] = useState({ undo: false, time: false, mistake: false })
+  const mistakeForgivenRef = useRef(false)
   const pendingLoadRef = useRef<{ inProgress: ZipInProgressLevel | undefined } | null>(null)
   const sourceRef = useRef<{ source: 'bank' | 'generated'; bankIndex?: number }>({ source: 'generated' })
   // Set during load if today's Daily Challenge was already completed — the win effect
@@ -143,13 +149,20 @@ export default function ZipGamePage({ freePlay = false }: { freePlay?: boolean }
     setAwaitingBossConfirm(false)
     setLoading(true)
     try {
+      const applied = await consumeConsumables([...selectedAssists])
+      setActiveAssists({
+        undo: applied.includes('undoToken'),
+        time: applied.includes('timeFreeze'),
+        mistake: applied.includes('mistakeSave'),
+      })
+      mistakeForgivenRef.current = false
       await finishLoad(pending.inProgress)
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
       setLoading(false)
     }
-  }, [finishLoad])
+  }, [finishLoad, selectedAssists])
 
   useEffect(() => {
     if (!validDifficulty && !isDaily) return
@@ -162,6 +175,10 @@ export default function ZipGamePage({ freePlay = false }: { freePlay?: boolean }
       setLevelIndex(null)
       setFailed(null)
       setAwaitingBossConfirm(false)
+      setAssistOptions([])
+      setSelectedAssists(new Set())
+      setActiveAssists({ undo: false, time: false, mistake: false })
+      mistakeForgivenRef.current = false
       try {
         const chapterReplay = initialChapterReplayRef.current
         if (chapterReplay) {
@@ -226,6 +243,7 @@ export default function ZipGamePage({ freePlay = false }: { freePlay?: boolean }
 
         if (levelModifiers) {
           pendingLoadRef.current = { inProgress }
+          setAssistOptions(buildBossAssists(levelModifiers, settings))
           setAwaitingBossConfirm(true)
           return
         }
@@ -309,11 +327,15 @@ export default function ZipGamePage({ freePlay = false }: { freePlay?: boolean }
   useEffect(() => {
     if (!modifiers?.perfectRun || failed || state.status !== 'playing') return
     if (getWrongCells(state).size > 0) {
+      if (activeAssists.mistake && !mistakeForgivenRef.current) {
+        mistakeForgivenRef.current = true
+        return
+      }
       dispatch({ type: 'PAUSE', now: Date.now() })
       setFailed({ reason: 'mistake' })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state.path, modifiers, failed, state.status])
+  }, [state.path, modifiers, failed, state.status, activeAssists.mistake])
 
   const handleTryAgain = useCallback(async () => {
     if (!validDifficulty) return
@@ -339,10 +361,10 @@ export default function ZipGamePage({ freePlay = false }: { freePlay?: boolean }
   const failChips = useMemo(() => {
     if (!failed) return undefined
     const chips: string[] = []
-    if (modifiers?.timed) chips.push(`Timed · ${formatElapsed(TIMED_BUDGET_MS)}`)
+    if (modifiers?.timed) chips.push(`Timed · ${formatElapsed(TIMED_BUDGET_MS + (activeAssists.time ? TIME_FREEZE_BONUS_MS : 0))}`)
     chips.push(`Reached ${state.path.length} of ${state.level.size * state.level.size}`)
     return chips
-  }, [failed, modifiers, state.path, state.level.size])
+  }, [failed, modifiers, state.path, state.level.size, activeAssists.time])
 
   const nextCheckpoint = useMemo(() => {
     const idx = state.level.checkpoints.findIndex(
@@ -427,7 +449,7 @@ export default function ZipGamePage({ freePlay = false }: { freePlay?: boolean }
         runStartedAt={state.runStartedAt}
         coins={coins}
         timerKey={state.level.id}
-        budgetMs={modifiers?.timed ? TIMED_BUDGET_MS : undefined}
+        budgetMs={modifiers?.timed ? TIMED_BUDGET_MS + (activeAssists.time ? TIME_FREEZE_BONUS_MS : 0) : undefined}
         onTimerExpire={() => {
           dispatch({ type: 'PAUSE', now: Date.now() })
           setFailed({ reason: 'timeout' })
@@ -472,7 +494,7 @@ export default function ZipGamePage({ freePlay = false }: { freePlay?: boolean }
         )}
 
         <ZipControls
-          canUndo={!modifiers?.noUndo && state.history.length > 0}
+          canUndo={(!modifiers?.noUndo || activeAssists.undo) && state.history.length > 0}
           canClear={state.path.length > 0}
           onUndo={() => {
             actingRef.current = 'undo'
@@ -508,7 +530,22 @@ export default function ZipGamePage({ freePlay = false }: { freePlay?: boolean }
       )}
 
       {awaitingBossConfirm && modifiers && bossChapter !== null && (
-        <BossGateSheet chapterNumber={bossChapter} modifiers={modifiers} backHref="/zip/chapters" onBegin={handleBeginBoss} />
+        <BossGateSheet
+          chapterNumber={bossChapter}
+          modifiers={modifiers}
+          backHref="/zip/chapters"
+          onBegin={handleBeginBoss}
+          assists={assistOptions}
+          selectedAssists={selectedAssists}
+          onToggleAssist={(kind) =>
+            setSelectedAssists((prev) => {
+              const next = new Set(prev)
+              if (next.has(kind)) next.delete(kind)
+              else next.add(kind)
+              return next
+            })
+          }
+        />
       )}
     </main>
   )

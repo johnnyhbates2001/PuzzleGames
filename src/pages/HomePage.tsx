@@ -5,7 +5,7 @@ import { SettingsButton } from '../components/SettingsButton'
 import { CoinBalance } from '../components/CoinBalance'
 import { TabBar } from '../components/TabBar'
 import { BookIcon, CheckIcon, ChevronRightIcon, FlameIcon } from '../components/icons'
-import { getDailyChallenge, getDailyStreak, getHeatmap, getSettings, getStreak, setLastSeenStreak } from '../storage/db'
+import { getDailyChallenge, getDailyStreak, getHeatmap, getSettings, maybeApplyStreakFreeze, setLastSeenStreak } from '../storage/db'
 import type { Difficulty } from '../engine/types'
 import { todayDateKey, type DailyGameId } from '../games/dailyChallenge'
 import { buildChapterNodes, endlessProgress } from '../games/chapters'
@@ -50,6 +50,10 @@ export default function HomePage() {
   // True only for the first Home visit after the streak actually advances — gates the
   // pip-fill/flame-bounce below so it plays once per new streak day, not every visit.
   const [streakAdvanced, setStreakAdvanced] = useState(false)
+  // True for the visit where a banked Streak Freeze silently bridged yesterday's missed
+  // day — see maybeApplyStreakFreeze, called before streak/heatmap are read below so
+  // both already reflect the bridged day.
+  const [streakFreezeUsed, setStreakFreezeUsed] = useState(false)
 
   const dateKey = todayDateKey()
   const firstRun = GAMES.every((g) => !progressByGame[g.id]?.solved)
@@ -57,15 +61,21 @@ export default function HomePage() {
   useEffect(() => {
     let cancelled = false
     getSettings().then((s) => !cancelled && setCoins(s.coins))
-    Promise.all([getStreak(), getSettings()]).then(([s, settings]) => {
+    // Sequenced (not run in parallel with the streak/heatmap reads below) — a banked
+    // Streak Freeze backfills dailyActivity for a missed day, and both getStreak and
+    // getHeatmap need to see that write before they run, or they'd read the pre-bridge
+    // state and report the streak as broken for one more visit.
+    maybeApplyStreakFreeze().then(({ applied, streak: s }) => {
       if (cancelled) return
+      setStreakFreezeUsed(applied)
       setStreak(s)
-      if (s > settings.lastSeenStreak) {
+      getSettings().then((settings) => {
+        if (cancelled || s <= settings.lastSeenStreak) return
         setStreakAdvanced(true)
         void setLastSeenStreak(s)
-      }
+      })
+      getHeatmap(1).then((counts) => !cancelled && setStreakWeek(counts.map((c) => c > 0)))
     })
-    getHeatmap(1).then((counts) => !cancelled && setStreakWeek(counts.map((c) => c > 0)))
     Promise.all(GAMES.map((g) => getDailyChallenge(dateKey, g.id as DailyGameId))).then((records) => {
       if (cancelled) return
       const map: Record<string, boolean> = {}
@@ -127,7 +137,9 @@ export default function HomePage() {
             <p className="text-sm font-bold text-ink">
               {streak} day streak
             </p>
-            <p className="mt-0.5 text-xs text-ink-muted">Solve one today to keep it</p>
+            <p className="mt-0.5 text-xs text-ink-muted">
+              {streakFreezeUsed ? '🧊 A Streak Freeze covered yesterday' : 'Solve one today to keep it'}
+            </p>
           </div>
           <div className="flex gap-1">
             {streakWeek.map((on, i) => (

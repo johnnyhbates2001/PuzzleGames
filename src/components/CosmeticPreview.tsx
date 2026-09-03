@@ -61,7 +61,9 @@ function SudokuDigitSwatch({ id }: { id: string }) {
           ? { fontFamily: 'cursive', fontStyle: 'italic' as const, fontWeight: 600 }
           : id === 'neon'
             ? { textShadow: '0 0 8px currentColor, 0 0 2px currentColor', fontWeight: 800 }
-            : { fontWeight: 800 }
+            : id === 'serif'
+              ? { fontFamily: 'Georgia, "Times New Roman", serif', fontWeight: 600 }
+              : { fontWeight: 800 }
   return (
     <span className="text-3xl leading-none text-accent" style={style}>
       8
@@ -75,9 +77,11 @@ function PatchesBadgeSwatch({ id }: { id: string }) {
       ? { borderRadius: '50%' }
       : id === 'hexagon'
         ? { clipPath: 'polygon(25% 5%,75% 5%,100% 50%,75% 95%,25% 95%,0% 50%)' }
-        : id === 'diamond'
-          ? { clipPath: 'polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%)' }
-          : id === 'scallop'
+        : id === 'star'
+          ? { clipPath: 'polygon(50% 0%,61% 35%,98% 35%,68% 57%,79% 91%,50% 70%,21% 91%,32% 57%,2% 35%,39% 35%)' }
+          : id === 'diamond'
+            ? { clipPath: 'polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%)' }
+            : id === 'scallop'
             ? {
                 clipPath:
                   'polygon(50% 0%,61% 15%,78% 8%,80% 27%,97% 33%,88% 50%,97% 67%,80% 73%,78% 92%,61% 85%,50% 100%,39% 85%,22% 92%,20% 73%,3% 67%,12% 50%,3% 33%,20% 27%,22% 8%,39% 15%)',
@@ -95,12 +99,36 @@ function NonogramTextureSwatch({ id }: { id: string }) {
         }
       : id === 'dot-grid'
         ? { backgroundImage: 'radial-gradient(rgb(0 0 0 / 0.22) 20%, transparent 21%)', backgroundSize: '8px 8px' }
-        : id === 'gradient'
+        : id === 'stipple'
+          ? { backgroundImage: 'radial-gradient(rgb(0 0 0 / 0.3) 12%, transparent 13%)', backgroundSize: '4px 4px' }
+          : id === 'gradient'
           ? { backgroundImage: 'linear-gradient(135deg, var(--color-accent), oklch(66% 0.17 300))' }
           : id === 'glow'
             ? { boxShadow: '0 0 12px 3px var(--color-accent)' }
             : {}
   return <div className="absolute inset-0 rounded-[9px] bg-accent" style={style} />
+}
+
+function WordleTileSwatch({ id }: { id: string }) {
+  const style: React.CSSProperties =
+    id === 'bold-sans'
+      ? { fontFamily: 'Arial Black, sans-serif', fontWeight: 900 }
+      : id === 'retro-type'
+        ? { fontFamily: "'Courier New', monospace", fontWeight: 700 }
+        : id === 'gradient-flip'
+          ? { background: 'linear-gradient(135deg, var(--color-accent), oklch(66% 0.17 300))', color: 'white' }
+          : id === 'neon-glow'
+            ? { textShadow: '0 0 8px currentColor, 0 0 2px currentColor', fontWeight: 800 }
+            : { fontWeight: 800 }
+  const isGradient = id === 'gradient-flip'
+  return (
+    <div
+      className="flex size-8 items-center justify-center rounded-[6px] border-2 border-accent text-lg leading-none text-accent"
+      style={isGradient ? style : undefined}
+    >
+      <span style={isGradient ? { color: 'white' } : style}>W</span>
+    </div>
+  )
 }
 
 function ConfettiSwatch({ id }: { id: string }) {
@@ -197,6 +225,12 @@ export function CosmeticPreview({ category, id }: { category: CosmeticCategory; 
       return (
         <div className="relative aspect-square overflow-hidden rounded-[9px]">
           <NonogramTextureSwatch id={id} />
+        </div>
+      )
+    case 'wordleTileStyle':
+      return (
+        <div className="flex aspect-square items-center justify-center rounded-[9px] bg-accent-tint">
+          <WordleTileSwatch id={id} />
         </div>
       )
     case 'confetti':

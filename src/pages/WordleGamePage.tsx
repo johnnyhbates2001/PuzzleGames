@@ -5,6 +5,7 @@ import { WORD_LENGTH, WORDLE_RULES, type Difficulty, type WordleLevelRecord } fr
 import { hardModeViolation, keyStatuses } from '../engine/wordle/validator'
 import { createInitialState, revealableHintIndices, wordleReducer } from '../state/wordleReducer'
 import {
+  consumeConsumables,
   getDailyChallenge,
   getSettings,
   getWordleInProgress,
@@ -13,6 +14,7 @@ import {
   recordWordleCompletion,
   saveWordleInProgress,
   spendCoins,
+  type ConsumableKind,
   type WordleInProgressLevel,
 } from '../storage/db'
 import { getFreePlayWordleLevel, getNextWordleLevel, loadAnswerPool, loadGuessDictionary } from '../games/wordleLevels'
@@ -35,7 +37,7 @@ import { WordleControls } from '../components/WordleControls'
 import { GameHeader } from '../components/GameHeader'
 import { HintSheet, type HintOption } from '../components/HintSheet'
 import { WordleLoseSheet } from '../components/WordleLoseSheet'
-import { BossGateSheet } from '../components/BossGateSheet'
+import { BossGateSheet, buildBossAssists, TIME_FREEZE_BONUS_MS, type BossAssist } from '../components/BossGateSheet'
 import { LevelContext } from '../components/LevelContext'
 import { BoltIcon, EyeIcon } from '../components/icons'
 
@@ -89,7 +91,19 @@ export default function WordleGamePage({ freePlay = false }: { freePlay?: boolea
   const [timedOut, setTimedOut] = useState(false)
   const [awaitingBossConfirm, setAwaitingBossConfirm] = useState(false)
   const [bossChapter, setBossChapter] = useState<number | null>(null)
-  const pendingLoadRef = useRef<{ inProgress: WordleInProgressLevel | undefined; attempts: number; hardMode: boolean } | null>(null)
+  const [assistOptions, setAssistOptions] = useState<BossAssist[]>([])
+  const [selectedAssists, setSelectedAssists] = useState<Set<ConsumableKind>>(new Set())
+  // Wordle has no live Undo (see Controls' backspaceDisabled below) and Perfect Run is
+  // resolved at LOAD time (as a reduced attempts count) rather than watched mid-run, so
+  // 'mistake' here only ever means "add one attempt back" — there's no forgiveness ref
+  // to track since it's baked into the attempts count for the whole level up front.
+  const [activeAssists, setActiveAssists] = useState({ undo: false, time: false, mistake: false })
+  const pendingLoadRef = useRef<{
+    inProgress: WordleInProgressLevel | undefined
+    baseAttempts: number
+    hardMode: boolean
+    perfectRun: boolean
+  } | null>(null)
   const sourceRef = useRef<{ source: 'bank' | 'generated'; bankIndex?: number }>({ source: 'generated' })
   const guessErrorTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   // Set during load if today's Daily Challenge was already completed — the win effect
@@ -139,13 +153,17 @@ export default function WordleGamePage({ freePlay = false }: { freePlay?: boolea
     setAwaitingBossConfirm(false)
     setLoading(true)
     try {
-      await finishLoad(pending.inProgress, pending.attempts, pending.hardMode)
+      const applied = await consumeConsumables([...selectedAssists])
+      const mistakeUsed = applied.includes('mistakeSave')
+      setActiveAssists({ undo: applied.includes('undoToken'), time: applied.includes('timeFreeze'), mistake: mistakeUsed })
+      const attempts = pending.perfectRun && mistakeUsed ? pending.baseAttempts + 1 : pending.baseAttempts
+      await finishLoad(pending.inProgress, attempts, pending.hardMode)
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
       setLoading(false)
     }
-  }, [finishLoad])
+  }, [finishLoad, selectedAssists])
 
   // Load the in-progress save for this difficulty if one exists, else the next level.
   // The 'daily' route (/wordle/daily) shares this same param slot: it skips bank/resume
@@ -162,6 +180,9 @@ export default function WordleGamePage({ freePlay = false }: { freePlay?: boolea
       setLevelIndex(null)
       setTimedOut(false)
       setAwaitingBossConfirm(false)
+      setAssistOptions([])
+      setSelectedAssists(new Set())
+      setActiveAssists({ undo: false, time: false, mistake: false })
       try {
         const chapterReplay = initialChapterReplayRef.current
         if (chapterReplay) {
@@ -241,15 +262,16 @@ export default function WordleGamePage({ freePlay = false }: { freePlay?: boolea
         // intent to cap the run at a single guess: anything but the answer itself
         // exhausts the attempt limit and ends the run via the reducer's own status
         // check, same as running out of guesses normally.
-        const attempts = levelModifiers?.perfectRun ? 1 : rules.attempts
+        const baseAttempts = levelModifiers?.perfectRun ? 1 : rules.attempts
 
         if (levelModifiers) {
-          pendingLoadRef.current = { inProgress, attempts, hardMode: rules.hardMode }
+          pendingLoadRef.current = { inProgress, baseAttempts, hardMode: rules.hardMode, perfectRun: !!levelModifiers.perfectRun }
+          setAssistOptions(buildBossAssists(levelModifiers, settings))
           setAwaitingBossConfirm(true)
           return
         }
 
-        await finishLoad(inProgress, attempts, rules.hardMode)
+        await finishLoad(inProgress, baseAttempts, rules.hardMode)
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : String(e))
       } finally {
@@ -344,11 +366,13 @@ export default function WordleGamePage({ freePlay = false }: { freePlay?: boolea
       }
       const next = await getNextWordleLevel(validDifficulty)
       sourceRef.current = { source: next.source, bankIndex: next.bankIndex }
-      dispatch({ type: 'LOAD', level: next.level, attempts: modifiers?.perfectRun ? 1 : rules.attempts, hardMode: rules.hardMode })
+      const baseAttempts = modifiers?.perfectRun ? 1 : rules.attempts
+      const attempts = modifiers?.perfectRun && activeAssists.mistake ? baseAttempts + 1 : baseAttempts
+      dispatch({ type: 'LOAD', level: next.level, attempts, hardMode: rules.hardMode })
     } finally {
       setLoading(false)
     }
-  }, [isDaily, validDifficulty, freePlay, modifiers])
+  }, [isDaily, validDifficulty, freePlay, modifiers, activeAssists.mistake])
 
   const flashGuessError = useCallback((message: string) => {
     playSound('error')
@@ -459,7 +483,7 @@ export default function WordleGamePage({ freePlay = false }: { freePlay?: boolea
         runStartedAt={state.runStartedAt}
         coins={coins}
         timerKey={state.level.id}
-        budgetMs={modifiers?.timed ? TIMED_BUDGET_MS : undefined}
+        budgetMs={modifiers?.timed ? TIMED_BUDGET_MS + (activeAssists.time ? TIME_FREEZE_BONUS_MS : 0) : undefined}
         onTimerExpire={() => {
           dispatch({ type: 'PAUSE', now: Date.now() })
           setTimedOut(true)
@@ -505,7 +529,7 @@ export default function WordleGamePage({ freePlay = false }: { freePlay?: boolea
               onEnter={handleSubmit}
               onBackspace={handleBackspace}
               disabled={state.status !== 'playing' || !!failedReason}
-              backspaceDisabled={modifiers?.noUndo}
+              backspaceDisabled={modifiers?.noUndo && !activeAssists.undo}
             />
           </>
         )}
@@ -546,6 +570,16 @@ export default function WordleGamePage({ freePlay = false }: { freePlay?: boolea
           modifiers={modifiers}
           backHref="/wordle/chapters"
           onBegin={handleBeginBoss}
+          assists={assistOptions}
+          selectedAssists={selectedAssists}
+          onToggleAssist={(kind) =>
+            setSelectedAssists((prev) => {
+              const next = new Set(prev)
+              if (next.has(kind)) next.delete(kind)
+              else next.add(kind)
+              return next
+            })
+          }
         />
       )}
     </main>

@@ -7,6 +7,7 @@ import { getConflicts } from '../engine/validator'
 import type { CellState } from '../state/types'
 import { createInitialState, gameReducer, getWrongQueens } from '../state/gameReducer'
 import {
+  consumeConsumables,
   getDailyChallenge,
   getInProgress,
   getProgress,
@@ -16,6 +17,7 @@ import {
   saveInProgress,
   setAutoPlaceX,
   spendCoins,
+  type ConsumableKind,
   type InProgressLevel,
   type Settings as AppSettings,
 } from '../storage/db'
@@ -39,7 +41,7 @@ import { GameHeader } from '../components/GameHeader'
 import { HintSheet, type HintOption } from '../components/HintSheet'
 import { FailSheet } from '../components/FailSheet'
 import { formatElapsed } from '../components/Timer'
-import { BossGateSheet } from '../components/BossGateSheet'
+import { BossGateSheet, buildBossAssists, TIME_FREEZE_BONUS_MS, type BossAssist } from '../components/BossGateSheet'
 import { LevelContext } from '../components/LevelContext'
 import { BoltIcon, EyeIcon, FlagIcon, SparkleIcon } from '../components/icons'
 
@@ -127,6 +129,16 @@ export default function GamePage({ freePlay = false }: { freePlay?: boolean }) {
   // acknowledged — see the init effect below and handleBeginBoss.
   const [awaitingBossConfirm, setAwaitingBossConfirm] = useState(false)
   const [bossChapter, setBossChapter] = useState<number | null>(null)
+  // Boosts offered at this boss level's gate (see BossGateSheet.tsx's buildBossAssists),
+  // which ones the player toggled on, and which actually got consumed on Begin (kept
+  // separate since a race on the coin/inventory read could, in principle, decline one).
+  const [assistOptions, setAssistOptions] = useState<BossAssist[]>([])
+  const [selectedAssists, setSelectedAssists] = useState<Set<ConsumableKind>>(new Set())
+  const [activeAssists, setActiveAssists] = useState({ undo: false, time: false, mistake: false })
+  // Whether this level's one Mistake Save forgiveness has already been spent — persists
+  // across a Try Again on the same boss level (only reset by a fresh level load) so one
+  // purchase can't be replayed into unlimited forgiveness via repeated fails/retries.
+  const mistakeForgivenRef = useRef(false)
   const pendingLoadRef = useRef<{ inProgress: InProgressLevel | undefined; settings: AppSettings } | null>(null)
   const sourceRef = useRef<{ source: 'bank' | 'generated'; bankIndex?: number }>({ source: 'generated' })
   // Set during load if today's Daily Challenge was already completed — the win effect
@@ -168,13 +180,20 @@ export default function GamePage({ freePlay = false }: { freePlay?: boolean }) {
     setAwaitingBossConfirm(false)
     setLoading(true)
     try {
+      const applied = await consumeConsumables([...selectedAssists])
+      setActiveAssists({
+        undo: applied.includes('undoToken'),
+        time: applied.includes('timeFreeze'),
+        mistake: applied.includes('mistakeSave'),
+      })
+      mistakeForgivenRef.current = false
       await finishLoad(pending.inProgress, pending.settings)
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
       setLoading(false)
     }
-  }, [finishLoad])
+  }, [finishLoad, selectedAssists])
 
   // Load the in-progress save for this difficulty if one exists, else the next level.
   // The 'daily' route (/queens/daily) shares this same param slot: it skips bank/resume
@@ -191,6 +210,10 @@ export default function GamePage({ freePlay = false }: { freePlay?: boolean }) {
       setLevelIndex(null)
       setFailed(null)
       setAwaitingBossConfirm(false)
+      setAssistOptions([])
+      setSelectedAssists(new Set())
+      setActiveAssists({ undo: false, time: false, mistake: false })
+      mistakeForgivenRef.current = false
       try {
         const chapterReplay = initialChapterReplayRef.current
         if (chapterReplay) {
@@ -270,6 +293,7 @@ export default function GamePage({ freePlay = false }: { freePlay?: boolean }) {
         // handleBeginBoss and BossGateSheet below).
         if (levelModifiers) {
           pendingLoadRef.current = { inProgress, settings }
+          setAssistOptions(buildBossAssists(levelModifiers, settings))
           setAwaitingBossConfirm(true)
           return
         }
@@ -356,11 +380,15 @@ export default function GamePage({ freePlay = false }: { freePlay?: boolean }) {
   useEffect(() => {
     if (!modifiers?.perfectRun || failed || state.status !== 'playing') return
     if (getWrongQueens(state).size > 0) {
+      if (activeAssists.mistake && !mistakeForgivenRef.current) {
+        mistakeForgivenRef.current = true
+        return
+      }
       dispatch({ type: 'PAUSE', now: Date.now() })
       setFailed({ reason: 'mistake' })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state.board, modifiers, failed, state.status])
+  }, [state.board, modifiers, failed, state.status, activeAssists.mistake])
 
   const handleTryAgain = useCallback(async () => {
     if (!validDifficulty) return
@@ -442,11 +470,11 @@ export default function GamePage({ freePlay = false }: { freePlay?: boolean }) {
   const failChips = useMemo(() => {
     if (!failed) return undefined
     const chips: string[] = []
-    if (modifiers?.timed) chips.push(`Timed · ${formatElapsed(TIMED_BUDGET_MS)}`)
+    if (modifiers?.timed) chips.push(`Timed · ${formatElapsed(TIMED_BUDGET_MS + (activeAssists.time ? TIME_FREEZE_BONUS_MS : 0))}`)
     const placed = state.board.reduce((sum, row) => sum + row.filter((c) => c.queen).length, 0)
     chips.push(`Reached ${placed} of ${state.level.size}`)
     return chips
-  }, [failed, modifiers, state.board, state.level.size])
+  }, [failed, modifiers, state.board, state.level.size, activeAssists.time])
 
   if (!validDifficulty && !isDaily) {
     return <ErrorScreen message="Unknown difficulty." onBack={() => navigate('/queens')} />
@@ -465,7 +493,7 @@ export default function GamePage({ freePlay = false }: { freePlay?: boolean }) {
         runStartedAt={state.runStartedAt}
         coins={coins}
         timerKey={state.level.id}
-        budgetMs={modifiers?.timed ? TIMED_BUDGET_MS : undefined}
+        budgetMs={modifiers?.timed ? TIMED_BUDGET_MS + (activeAssists.time ? TIME_FREEZE_BONUS_MS : 0) : undefined}
         onTimerExpire={() => {
           dispatch({ type: 'PAUSE', now: Date.now() })
           setFailed({ reason: 'timeout' })
@@ -515,7 +543,7 @@ export default function GamePage({ freePlay = false }: { freePlay?: boolean }) {
 
         <Controls
           autoPlaceX={state.autoPlaceX}
-          canUndo={!modifiers?.noUndo && state.history.length > 0}
+          canUndo={(!modifiers?.noUndo || activeAssists.undo) && state.history.length > 0}
           onClear={() => dispatch({ type: 'CLEAR', now: Date.now() })}
           onUndo={() => {
             actingRef.current = 'undo'
@@ -558,6 +586,16 @@ export default function GamePage({ freePlay = false }: { freePlay?: boolean }) {
           modifiers={modifiers}
           backHref="/queens/chapters"
           onBegin={handleBeginBoss}
+          assists={assistOptions}
+          selectedAssists={selectedAssists}
+          onToggleAssist={(kind) =>
+            setSelectedAssists((prev) => {
+              const next = new Set(prev)
+              if (next.has(kind)) next.delete(kind)
+              else next.add(kind)
+              return next
+            })
+          }
         />
       )}
     </main>

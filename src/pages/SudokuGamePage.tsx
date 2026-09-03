@@ -6,6 +6,7 @@ import { getConflicts } from '../engine/sudoku/validator'
 import { createInitialState, getWrongCells, sudokuReducer } from '../state/sudokuReducer'
 import { boardValues, digitCounts, type SudokuCellState } from '../state/sudokuTypes'
 import {
+  consumeConsumables,
   getDailyChallenge,
   getSettings,
   getSudokuInProgress,
@@ -14,6 +15,7 @@ import {
   recordSudokuCompletion,
   saveSudokuInProgress,
   spendCoins,
+  type ConsumableKind,
   type SudokuInProgressLevel,
 } from '../storage/db'
 import { getFreePlaySudokuLevel, getNextSudokuLevel } from '../games/sudokuLevels'
@@ -37,7 +39,7 @@ import { GameHeader } from '../components/GameHeader'
 import { HintSheet, type HintOption } from '../components/HintSheet'
 import { FailSheet } from '../components/FailSheet'
 import { formatElapsed } from '../components/Timer'
-import { BossGateSheet } from '../components/BossGateSheet'
+import { BossGateSheet, buildBossAssists, TIME_FREEZE_BONUS_MS, type BossAssist } from '../components/BossGateSheet'
 import { LevelContext } from '../components/LevelContext'
 import { BoltIcon, EyeIcon, FlagIcon, SparkleIcon } from '../components/icons'
 
@@ -156,6 +158,10 @@ export default function SudokuGamePage({ freePlay = false }: { freePlay?: boolea
   const [failed, setFailed] = useState<{ reason: 'timeout' | 'mistake' } | null>(null)
   const [awaitingBossConfirm, setAwaitingBossConfirm] = useState(false)
   const [bossChapter, setBossChapter] = useState<number | null>(null)
+  const [assistOptions, setAssistOptions] = useState<BossAssist[]>([])
+  const [selectedAssists, setSelectedAssists] = useState<Set<ConsumableKind>>(new Set())
+  const [activeAssists, setActiveAssists] = useState({ undo: false, time: false, mistake: false })
+  const mistakeForgivenRef = useRef(false)
   const pendingLoadRef = useRef<{ inProgress: SudokuInProgressLevel | undefined } | null>(null)
   const sourceRef = useRef<{ source: 'bank' | 'generated'; bankIndex?: number }>({ source: 'generated' })
   // Set during load if today's Daily Challenge was already completed — the win effect
@@ -185,13 +191,20 @@ export default function SudokuGamePage({ freePlay = false }: { freePlay?: boolea
     setAwaitingBossConfirm(false)
     setLoading(true)
     try {
+      const applied = await consumeConsumables([...selectedAssists])
+      setActiveAssists({
+        undo: applied.includes('undoToken'),
+        time: applied.includes('timeFreeze'),
+        mistake: applied.includes('mistakeSave'),
+      })
+      mistakeForgivenRef.current = false
       await finishLoad(pending.inProgress)
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
       setLoading(false)
     }
-  }, [finishLoad])
+  }, [finishLoad, selectedAssists])
 
   useEffect(() => {
     if (!validDifficulty && !isDaily) return
@@ -204,6 +217,10 @@ export default function SudokuGamePage({ freePlay = false }: { freePlay?: boolea
       setLevelIndex(null)
       setFailed(null)
       setAwaitingBossConfirm(false)
+      setAssistOptions([])
+      setSelectedAssists(new Set())
+      setActiveAssists({ undo: false, time: false, mistake: false })
+      mistakeForgivenRef.current = false
       try {
         const chapterReplay = initialChapterReplayRef.current
         if (chapterReplay) {
@@ -269,6 +286,7 @@ export default function SudokuGamePage({ freePlay = false }: { freePlay?: boolea
 
         if (levelModifiers) {
           pendingLoadRef.current = { inProgress }
+          setAssistOptions(buildBossAssists(levelModifiers, settings))
           setAwaitingBossConfirm(true)
           return
         }
@@ -373,11 +391,15 @@ export default function SudokuGamePage({ freePlay = false }: { freePlay?: boolea
   useEffect(() => {
     if (!modifiers?.perfectRun || failed || state.status !== 'playing') return
     if (getWrongCells(state).size > 0) {
+      if (activeAssists.mistake && !mistakeForgivenRef.current) {
+        mistakeForgivenRef.current = true
+        return
+      }
       dispatch({ type: 'PAUSE', now: Date.now() })
       setFailed({ reason: 'mistake' })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state.board, modifiers, failed, state.status])
+  }, [state.board, modifiers, failed, state.status, activeAssists.mistake])
 
   const handleTryAgain = useCallback(async () => {
     if (!validDifficulty) return
@@ -493,11 +515,11 @@ export default function SudokuGamePage({ freePlay = false }: { freePlay?: boolea
   const failChips = useMemo(() => {
     if (!failed) return undefined
     const chips: string[] = []
-    if (modifiers?.timed) chips.push(`Timed · ${formatElapsed(TIMED_BUDGET_MS)}`)
+    if (modifiers?.timed) chips.push(`Timed · ${formatElapsed(TIMED_BUDGET_MS + (activeAssists.time ? TIME_FREEZE_BONUS_MS : 0))}`)
     const filled = state.board.reduce((sum, row) => sum + row.filter((c) => c.value !== 0).length, 0)
     chips.push(`Reached ${filled} of ${SUDOKU_SIZE * SUDOKU_SIZE}`)
     return chips
-  }, [failed, modifiers, state.board])
+  }, [failed, modifiers, state.board, activeAssists.time])
   const selectedValue = state.selected ? state.board[state.selected.row][state.selected.col].value || null : null
 
   if (!validDifficulty && !isDaily) {
@@ -517,7 +539,7 @@ export default function SudokuGamePage({ freePlay = false }: { freePlay?: boolea
         runStartedAt={state.runStartedAt}
         coins={coins}
         timerKey={state.level.id}
-        budgetMs={modifiers?.timed ? TIMED_BUDGET_MS : undefined}
+        budgetMs={modifiers?.timed ? TIMED_BUDGET_MS + (activeAssists.time ? TIME_FREEZE_BONUS_MS : 0) : undefined}
         onTimerExpire={() => {
           dispatch({ type: 'PAUSE', now: Date.now() })
           setFailed({ reason: 'timeout' })
@@ -571,7 +593,7 @@ export default function SudokuGamePage({ freePlay = false }: { freePlay?: boolea
         )}
 
         <SudokuControls
-          canUndo={!modifiers?.noUndo && state.history.length > 0}
+          canUndo={(!modifiers?.noUndo || activeAssists.undo) && state.history.length > 0}
           noteMode={state.noteMode}
           onUndo={() => {
             actingRef.current = 'undo'
@@ -612,6 +634,16 @@ export default function SudokuGamePage({ freePlay = false }: { freePlay?: boolea
           modifiers={modifiers}
           backHref="/sudoku/chapters"
           onBegin={handleBeginBoss}
+          assists={assistOptions}
+          selectedAssists={selectedAssists}
+          onToggleAssist={(kind) =>
+            setSelectedAssists((prev) => {
+              const next = new Set(prev)
+              if (next.has(kind)) next.delete(kind)
+              else next.add(kind)
+              return next
+            })
+          }
         />
       )}
     </main>
