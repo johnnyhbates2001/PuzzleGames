@@ -45,13 +45,6 @@ const SWEEP_STEP_MS = 42
  *  and from -2 (used below to force a border at the grid's outer edge). */
 const PREVIEW_REGION = -3
 
-function cellFromPoint(clientX: number, clientY: number): { row: number; col: number } | null {
-  const el = document.elementFromPoint(clientX, clientY)
-  const button = el?.closest('button[data-row]') as HTMLElement | null
-  if (!button) return null
-  return { row: Number(button.dataset.row), col: Number(button.dataset.col) }
-}
-
 export function PatchesBoard({
   level,
   placed,
@@ -70,9 +63,27 @@ export function PatchesBoard({
   className,
 }: PatchesBoardProps) {
   const regionColors = useRegionColors()
+  const gridRef = useRef<HTMLDivElement>(null)
   const draggingRef = useRef(false)
   const pointerIdRef = useRef<number | null>(null)
   const lastMoveKeyRef = useRef<string | null>(null)
+
+  // Geometry-based, not document.elementFromPoint: once a drag starts, pointer capture
+  // (see handlePointerDown below) keeps routing pointermove/pointerup to the grid even
+  // after the finger strays outside it, but elementFromPoint would then hit whatever's
+  // under the finger off-board (or nothing, past the viewport edge) and return null —
+  // which used to read as "release outside the grid" and cancel the whole placement.
+  // Clamping to the board's own bounding box means a release anywhere near the edge
+  // resolves to the nearest real cell instead of silently discarding the drag.
+  function cellFromPoint(clientX: number, clientY: number): { row: number; col: number } | null {
+    const el = gridRef.current
+    if (!el) return null
+    const rect = el.getBoundingClientRect()
+    if (rect.width === 0 || rect.height === 0) return null
+    const col = Math.min(level.size - 1, Math.max(0, Math.floor(((clientX - rect.left) / rect.width) * level.size)))
+    const row = Math.min(level.size - 1, Math.max(0, Math.floor(((clientY - rect.top) / rect.height) * level.size)))
+    return { row, col }
+  }
 
   function handlePointerDown(e: React.PointerEvent<HTMLDivElement>) {
     if (e.pointerType === 'mouse' && e.button !== 0) return
@@ -195,6 +206,7 @@ export function PatchesBoard({
 
   return (
     <div
+      ref={gridRef}
       className={`mx-auto grid w-full touch-none overflow-hidden rounded-[20px] border-2 border-grid-line-strong ${className ?? ''}`}
       style={{ gridTemplateColumns: `repeat(${level.size}, minmax(0, 1fr))` }}
       onPointerDown={handlePointerDown}
