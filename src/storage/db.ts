@@ -51,6 +51,19 @@ export interface Settings {
    *  pulls a first backup. Lets a returning sign-in on the same device skip the
    *  local-vs-cloud conflict prompt it needed the first time. */
   linkedAccountId: string | null
+  /** Stackable Boosts bought in the Shop (see buyConsumable/consumeConsumable below) —
+   *  each protects against one specific setback rather than being a collectible:
+   *  a missed daily streak, or one of the three Endless boss-level modifiers (No Undo /
+   *  Timed / Perfect Run). Unlike ownedSkins/ownedCosmetics these are consumed on use,
+   *  so a purchase increments the count instead of unioning into an owned-ids list. */
+  streakFreezes: number
+  undoTokens: number
+  timeFreezes: number
+  mistakeSaves: number
+  /** Coin-purchased avatar preset ids, additive to avatars.ts's free presets — picked
+   *  from the Settings sheet, not the Shop, since avatar choice is also mirrored
+   *  server-side per-account (see worker/lib/avatars.ts). */
+  ownedAvatars: string[]
 }
 
 export interface DifficultyProgress {
@@ -192,6 +205,11 @@ const DEFAULT_SETTINGS: Settings = {
   ownedCosmetics: {},
   equippedCosmetics: {},
   linkedAccountId: null,
+  streakFreezes: 0,
+  undoTokens: 0,
+  timeFreezes: 0,
+  mistakeSaves: 0,
+  ownedAvatars: [],
 }
 
 function defaultProgress(difficulty: Difficulty): DifficultyProgress {
@@ -385,6 +403,69 @@ export async function equipCosmetic(category: CosmeticCategory, id: string): Pro
   await db.put('settings', { ...current, equippedCosmetics: { ...current.equippedCosmetics, [category]: id } }, 'global')
 }
 
+export type ConsumableKind = 'streakFreeze' | 'undoToken' | 'timeFreeze' | 'mistakeSave'
+
+/** Buys one unit of a stackable Boost (see Settings' streakFreezes/undoTokens/etc.) —
+ *  unlike buySkin/buyCosmetic these are never "owned" outright, so every purchase adds
+ *  to the stack rather than being a no-op once bought once. */
+export async function buyConsumable(kind: ConsumableKind, price: number): Promise<boolean> {
+  const db = await getDB()
+  const current = await getSettings()
+  if (current.coins < price) return false
+  const next: Settings = { ...current, coins: current.coins - price }
+  if (kind === 'streakFreeze') next.streakFreezes++
+  else if (kind === 'undoToken') next.undoTokens++
+  else if (kind === 'timeFreeze') next.timeFreezes++
+  else next.mistakeSaves++
+  await db.put('settings', next, 'global')
+  return true
+}
+
+/** Spends the given Boosts at once (the assists a player picked at a boss gate) as a
+ *  single read-modify-write, so two kinds consumed together can't race each other's
+ *  read. Returns only the kinds actually available and consumed — callers only ever
+ *  offer a toggle when the count is already > 0, so a mismatch shouldn't happen, but
+ *  this stays defensive rather than assuming it. */
+export async function consumeConsumables(kinds: ConsumableKind[]): Promise<ConsumableKind[]> {
+  if (kinds.length === 0) return []
+  const db = await getDB()
+  const current = await getSettings()
+  const want = new Set(kinds)
+  const applied: ConsumableKind[] = []
+  let { streakFreezes, undoTokens, timeFreezes, mistakeSaves } = current
+  if (want.has('streakFreeze') && streakFreezes > 0) {
+    streakFreezes--
+    applied.push('streakFreeze')
+  }
+  if (want.has('undoToken') && undoTokens > 0) {
+    undoTokens--
+    applied.push('undoToken')
+  }
+  if (want.has('timeFreeze') && timeFreezes > 0) {
+    timeFreezes--
+    applied.push('timeFreeze')
+  }
+  if (want.has('mistakeSave') && mistakeSaves > 0) {
+    mistakeSaves--
+    applied.push('mistakeSave')
+  }
+  if (applied.length === 0) return []
+  await db.put('settings', { ...current, streakFreezes, undoTokens, timeFreezes, mistakeSaves }, 'global')
+  return applied
+}
+
+/** Buys a coin-priced avatar preset — kept separate from ownedSkins/ownedCosmetics
+ *  since avatar presets are picked from the Settings sheet (not the Shop) and mirrored
+ *  server-side per-account (see worker/lib/avatars.ts). */
+export async function buyAvatarPreset(id: string, price: number): Promise<boolean> {
+  const db = await getDB()
+  const current = await getSettings()
+  if (current.ownedAvatars.includes(id)) return true
+  if (current.coins < price) return false
+  await db.put('settings', { ...current, coins: current.coins - price, ownedAvatars: [...current.ownedAvatars, id] }, 'global')
+  return true
+}
+
 /** Local (not UTC) date key, so a streak day lines up with the player's own calendar day. */
 function dateKey(date: Date): string {
   const y = date.getFullYear()
@@ -432,6 +513,46 @@ export async function getBestStreak(): Promise<number> {
     prevDate = date
   }
   return best
+}
+
+export interface StreakFreezeResult {
+  applied: boolean
+  streak: number
+}
+
+/** Bridges exactly one missed day using a banked Streak Freeze, if the gap is
+ *  bridgeable — call once (e.g. on Home mount) before reading the streak for display.
+ *  Only covers a single missed day (yesterday): two or more days missed in a row means
+ *  the streak has already genuinely broken, and a freeze can't silently paper over
+ *  that much. Backfilling dailyActivity for the missed day is enough on its own —
+ *  getStreak/getBestStreak/getHeatmap are all pure scans over that store, so nothing
+ *  else needs updating to make the bridged day read as played. */
+export async function maybeApplyStreakFreeze(now: number = Date.now()): Promise<StreakFreezeResult> {
+  const db = await getDB()
+  const settings = await getSettings()
+  if (settings.streakFreezes <= 0) return { applied: false, streak: await getStreak(now) }
+
+  const today = new Date(now)
+  const yesterday = new Date(now)
+  yesterday.setDate(yesterday.getDate() - 1)
+  const dayBefore = new Date(now)
+  dayBefore.setDate(dayBefore.getDate() - 2)
+
+  const [todayCount, yesterdayCount, dayBeforeCount] = await Promise.all([
+    db.get('dailyActivity', dateKey(today)),
+    db.get('dailyActivity', dateKey(yesterday)),
+    db.get('dailyActivity', dateKey(dayBefore)),
+  ])
+  // Only bridges a single-day gap that immediately follows an active streak, and only
+  // before today's own play (once today has activity, the streak is already intact).
+  if ((todayCount ?? 0) > 0 || (yesterdayCount ?? 0) > 0 || (dayBeforeCount ?? 0) === 0) {
+    return { applied: false, streak: await getStreak(now) }
+  }
+
+  await db.put('dailyActivity', 1, dateKey(yesterday))
+  const current = await getSettings()
+  await db.put('settings', { ...current, streakFreezes: current.streakFreezes - 1 }, 'global')
+  return { applied: true, streak: await getStreak(now) }
 }
 
 /** Daily completion counts for the last `weeks` weeks, oldest first (`weeks * 7` entries,

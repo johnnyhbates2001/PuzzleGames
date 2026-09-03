@@ -5,13 +5,15 @@ import { useAudio } from '../hooks/useAudio'
 import { useAuth } from '../hooks/useAuth'
 import { useBackupSync } from '../hooks/useBackupSync'
 import { Avatar } from './Avatar'
-import { AVATAR_PRESETS } from '../avatars'
+import { AVATAR_PRESETS, type AvatarPreset } from '../avatars'
 import { setPresetAvatar } from '../api/avatar'
 import { useDismissable } from '../hooks/useDismissable'
 import { useSheetDrag } from '../hooks/useSheetDrag'
 import { ToggleRow } from './ToggleRow'
 import { CloseIcon, GearIcon, SpeakerIcon, TimedIcon, VibrationIcon, XMarkIcon } from './icons'
-import { getSettings, resetAllProgress, setAutoPlaceX as setAutoPlaceXDb, setZenMode as setZenModeDb } from '../storage/db'
+import { buyAvatarPreset, getSettings, resetAllProgress, setAutoPlaceX as setAutoPlaceXDb, setZenMode as setZenModeDb } from '../storage/db'
+import { ACHIEVEMENTS, type AchievementContext } from '../achievements/definitions'
+import { buildAchievementContext } from '../achievements/context'
 
 const EXIT_DURATION_MS = 240
 
@@ -51,6 +53,9 @@ export function SettingsButton() {
   const { status: backupStatus, lastSyncedAt, backupNow, restoreNow, resyncHistory } = useBackupSync()
   const [avatarBusy, setAvatarBusy] = useState(false)
   const [resyncState, setResyncState] = useState<'idle' | 'busy' | 'done' | 'failed'>('idle')
+  const [coins, setCoins] = useState(0)
+  const [ownedAvatars, setOwnedAvatars] = useState<string[]>([])
+  const [achievementCtx, setAchievementCtx] = useState<AchievementContext | null>(null)
 
   async function handleResyncHistory() {
     setResyncState('busy')
@@ -58,10 +63,17 @@ export function SettingsButton() {
     setResyncState(ok ? 'done' : 'failed')
   }
 
-  async function handlePickPreset(presetId: string) {
+  async function handlePickPreset(preset: AvatarPreset, needsPurchase: boolean, isLocked: boolean) {
+    if (isLocked) return
     setAvatarBusy(true)
     try {
-      await setPresetAvatar(presetId)
+      if (needsPurchase) {
+        const ok = await buyAvatarPreset(preset.id, preset.price ?? 0)
+        if (!ok) return
+        setOwnedAvatars((prev) => [...prev, preset.id])
+        setCoins((c) => c - (preset.price ?? 0))
+      }
+      await setPresetAvatar(preset.id)
       await refreshUser()
     } finally {
       setAvatarBusy(false)
@@ -82,7 +94,10 @@ export function SettingsButton() {
       if (cancelled) return
       setAutoPlaceX(s.autoPlaceX)
       setZenMode(s.zenMode)
+      setCoins(s.coins)
+      setOwnedAvatars(s.ownedAvatars)
     })
+    buildAchievementContext().then((ctx) => !cancelled && setAchievementCtx(ctx))
     return () => {
       cancelled = true
     }
@@ -142,19 +157,37 @@ export function SettingsButton() {
                     </button>
                   </div>
                   <div className="flex items-center gap-2 overflow-x-auto border-t border-border-dashed pt-2.5 [scrollbar-width:none]">
-                    {AVATAR_PRESETS.map((preset) => (
-                      <button
-                        key={preset.id}
-                        type="button"
-                        disabled={avatarBusy}
-                        aria-label={`Use ${preset.id} avatar`}
-                        onClick={() => void handlePickPreset(preset.id)}
-                        className="flex size-8 shrink-0 items-center justify-center rounded-full text-[16px] disabled:opacity-50"
-                        style={{ backgroundColor: preset.bg }}
-                      >
-                        {preset.emoji}
-                      </button>
-                    ))}
+                    {AVATAR_PRESETS.map((preset) => {
+                      const isOwned = preset.price === undefined && !preset.locked ? true : ownedAvatars.includes(preset.id)
+                      const lockAchievement = preset.locked ? ACHIEVEMENTS.find((a) => a.id === preset.locked!.achievementId) : undefined
+                      const isLocked = !!preset.locked && !isOwned && !(achievementCtx && lockAchievement?.check(achievementCtx))
+                      const needsPurchase = !isOwned && !isLocked && preset.price !== undefined
+                      const unaffordable = needsPurchase && coins < (preset.price ?? 0)
+                      return (
+                        <button
+                          key={preset.id}
+                          type="button"
+                          disabled={avatarBusy || isLocked || unaffordable}
+                          aria-label={
+                            isLocked
+                              ? `${preset.id} avatar locked`
+                              : needsPurchase
+                                ? `Buy ${preset.id} avatar for ${preset.price} coins`
+                                : `Use ${preset.id} avatar`
+                          }
+                          onClick={() => void handlePickPreset(preset, needsPurchase, isLocked)}
+                          className={`relative flex size-8 shrink-0 items-center justify-center rounded-full text-[16px] disabled:opacity-50 ${isLocked ? 'opacity-40 grayscale' : ''}`}
+                          style={{ backgroundColor: preset.bg }}
+                        >
+                          {preset.emoji}
+                          {needsPurchase && (
+                            <span className="absolute -right-1 -bottom-1 rounded-full bg-[oklch(80%_0.14_85)] px-1 text-[8px] leading-tight font-bold text-[oklch(25%_0.06_75)]">
+                              {preset.price}
+                            </span>
+                          )}
+                        </button>
+                      )
+                    })}
                   </div>
                   <div className="flex items-center gap-3 border-t border-border-dashed pt-2.5">
                     <p className="flex-1 text-[12px] text-ink-muted">

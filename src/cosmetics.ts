@@ -31,6 +31,7 @@ export type CosmeticCategory =
   | 'sudokuDigitStyle'
   | 'patchesBadgeShape'
   | 'nonogramTexture'
+  | 'wordleTileStyle'
   | 'confetti'
   | 'celebration'
   | 'soundPack'
@@ -56,9 +57,9 @@ export const COSMETIC_CATEGORIES: CosmeticCategoryDef[] = [
     defaultId: 'crown',
     items: [
       { id: 'crown', name: 'Crown', tag: 'Default', price: null },
-      { id: 'star', name: 'Star', tag: 'Bright & simple', price: 220 },
-      { id: 'gem', name: 'Gem', tag: 'Faceted & sharp', price: 300 },
-      { id: 'dot', name: 'Dot', tag: 'Minimal', price: 160 },
+      { id: 'star', name: 'Star', tag: 'Bright & simple', price: 290 },
+      { id: 'gem', name: 'Gem', tag: 'Faceted & sharp', price: 390 },
+      { id: 'dot', name: 'Dot', tag: 'Minimal', price: 210 },
       { id: 'chess-king', name: 'Chess King', tag: 'Locked · Queens Expert', price: null, locked: { achievementId: 'queens-expert' } },
       { id: 'flame', name: 'Flame', tag: 'Locked · Unstoppable', price: null, locked: { achievementId: 'unstoppable' } },
     ],
@@ -70,9 +71,9 @@ export const COSMETIC_CATEGORIES: CosmeticCategoryDef[] = [
     defaultId: 'classic',
     items: [
       { id: 'classic', name: 'Classic', tag: 'Default', price: null },
-      { id: 'dashed', name: 'Dashed', tag: 'Broken line', price: 180 },
-      { id: 'dotted', name: 'Dotted', tag: 'Fine dots', price: 180 },
-      { id: 'glow', name: 'Glow', tag: 'Soft luminous line', price: 320 },
+      { id: 'dashed', name: 'Dashed', tag: 'Broken line', price: 230 },
+      { id: 'dotted', name: 'Dotted', tag: 'Fine dots', price: 230 },
+      { id: 'glow', name: 'Glow', tag: 'Soft luminous line', price: 410 },
       { id: 'braided', name: 'Braided', tag: 'Locked · Chapter 15', price: null, locked: { chapterNeeded: 15 } },
       { id: 'pulse', name: 'Pulse', tag: 'Locked · Zip Expert', price: null, locked: { achievementId: 'zip-expert' } },
     ],
@@ -84,8 +85,9 @@ export const COSMETIC_CATEGORIES: CosmeticCategoryDef[] = [
     defaultId: 'classic',
     items: [
       { id: 'classic', name: 'Classic', tag: 'Default', price: null },
-      { id: 'rounded', name: 'Rounded', tag: 'Soft & friendly', price: 200 },
-      { id: 'mono', name: 'Mono', tag: 'Typewriter', price: 220 },
+      { id: 'rounded', name: 'Rounded', tag: 'Soft & friendly', price: 260 },
+      { id: 'mono', name: 'Mono', tag: 'Typewriter', price: 290 },
+      { id: 'serif', name: 'Serif', tag: 'Classic print', price: 240 },
       { id: 'handwritten', name: 'Handwritten', tag: 'Locked · Chapter 9', price: null, locked: { chapterNeeded: 9 } },
       { id: 'neon', name: 'Neon', tag: 'Locked · Sudoku Expert', price: null, locked: { achievementId: 'sudoku-expert' } },
     ],
@@ -97,8 +99,9 @@ export const COSMETIC_CATEGORIES: CosmeticCategoryDef[] = [
     defaultId: 'classic',
     items: [
       { id: 'classic', name: 'Classic', tag: 'Default', price: null },
-      { id: 'circle', name: 'Circle', tag: 'Round', price: 180 },
-      { id: 'hexagon', name: 'Hexagon', tag: 'Angular', price: 240 },
+      { id: 'circle', name: 'Circle', tag: 'Round', price: 230 },
+      { id: 'hexagon', name: 'Hexagon', tag: 'Angular', price: 310 },
+      { id: 'star', name: 'Star', tag: 'Five-point', price: 280 },
       { id: 'diamond', name: 'Diamond', tag: 'Locked · Chapter 18', price: null, locked: { chapterNeeded: 18 } },
       { id: 'scallop', name: 'Scallop', tag: 'Locked · Patches Expert', price: null, locked: { achievementId: 'patches-expert' } },
     ],
@@ -110,10 +113,24 @@ export const COSMETIC_CATEGORIES: CosmeticCategoryDef[] = [
     defaultId: 'classic',
     items: [
       { id: 'classic', name: 'Classic', tag: 'Default', price: null },
-      { id: 'crosshatch', name: 'Crosshatch', tag: 'Woven texture', price: 200 },
-      { id: 'dot-grid', name: 'Dot Grid', tag: 'Halftone', price: 200 },
+      { id: 'crosshatch', name: 'Crosshatch', tag: 'Woven texture', price: 260 },
+      { id: 'dot-grid', name: 'Dot Grid', tag: 'Halftone', price: 260 },
+      { id: 'stipple', name: 'Stipple', tag: 'Speckled fill', price: 240 },
       { id: 'gradient', name: 'Gradient', tag: 'Locked · Chapter 21', price: null, locked: { chapterNeeded: 21 } },
       { id: 'glow', name: 'Glow', tag: 'Locked · Nonogram Expert', price: null, locked: { achievementId: 'nonogram-expert' } },
+    ],
+  },
+  {
+    key: 'wordleTileStyle',
+    label: 'Wordle · tile styles',
+    blurb: 'How a submitted guess tile looks and flips.',
+    defaultId: 'classic',
+    items: [
+      { id: 'classic', name: 'Classic', tag: 'Default', price: null },
+      { id: 'bold-sans', name: 'Bold Sans', tag: 'Heavy geometric letters', price: 260 },
+      { id: 'retro-type', name: 'Retro Type', tag: 'Monospace terminal', price: 230 },
+      { id: 'gradient-flip', name: 'Gradient Flip', tag: 'Locked · Chapter 12', price: null, locked: { chapterNeeded: 12 } },
+      { id: 'neon-glow', name: 'Neon Glow', tag: 'Locked · Wordle Expert', price: null, locked: { achievementId: 'wordle-expert' } },
     ],
   },
   {
@@ -122,8 +139,8 @@ export const COSMETIC_CATEGORIES: CosmeticCategoryDef[] = [
     blurb: "Shared across every game's completion screen.",
     defaultId: 'classic',
     items: [
-      { id: 'ribbons', name: 'Ribbons', tag: 'Elongated pieces', price: 220 },
-      { id: 'fireworks', name: 'Fireworks', tag: 'Radiating burst', price: 260 },
+      { id: 'ribbons', name: 'Ribbons', tag: 'Elongated pieces', price: 290 },
+      { id: 'fireworks', name: 'Fireworks', tag: 'Radiating burst', price: 340 },
       { id: 'century-burst', name: 'Century Burst', tag: 'Locked · Century', price: null, locked: { achievementId: 'century' } },
       { id: 'puzzle-master-shower', name: 'Puzzle Master Shower', tag: 'Locked · Puzzle Master', price: null, locked: { achievementId: 'puzzle-master' } },
       { id: 'collectors-rain', name: "Collector's Rain", tag: 'Locked · Collector', price: null, locked: { achievementId: 'collector' } },
@@ -135,8 +152,8 @@ export const COSMETIC_CATEGORIES: CosmeticCategoryDef[] = [
     blurb: 'The completion-screen moment when a level is finished.',
     defaultId: 'classic',
     items: [
-      { id: 'bounce-pop', name: 'Bounce Pop', tag: 'Playful scale-in', price: 200 },
-      { id: 'shockwave', name: 'Shockwave', tag: 'Expanding ring', price: 260 },
+      { id: 'bounce-pop', name: 'Bounce Pop', tag: 'Playful scale-in', price: 260 },
+      { id: 'shockwave', name: 'Shockwave', tag: 'Expanding ring', price: 340 },
       { id: 'streak-flame', name: 'Streak Flame', tag: 'Locked · Week Warrior', price: null, locked: { achievementId: 'week-warrior' } },
       { id: 'rocket-launch', name: 'Rocket Launch', tag: 'Locked · Unstoppable', price: null, locked: { achievementId: 'unstoppable' } },
     ],
@@ -147,8 +164,8 @@ export const COSMETIC_CATEGORIES: CosmeticCategoryDef[] = [
     blurb: 'Replaces the tap/place/solve SFX set.',
     defaultId: 'classic',
     items: [
-      { id: 'retro-8bit', name: 'Retro 8-bit', tag: 'Chiptune blips', price: 200 },
-      { id: 'chimes', name: 'Chimes', tag: 'Soft bell tones', price: 220 },
+      { id: 'retro-8bit', name: 'Retro 8-bit', tag: 'Chiptune blips', price: 260 },
+      { id: 'chimes', name: 'Chimes', tag: 'Soft bell tones', price: 290 },
       { id: 'unstoppable-beat', name: 'Unstoppable Beat', tag: 'Locked · Unstoppable', price: null, locked: { achievementId: 'unstoppable' } },
       { id: 'flawless-hush', name: 'Flawless Hush', tag: 'Locked · Flawless', price: null, locked: { achievementId: 'flawless' } },
     ],
@@ -159,12 +176,15 @@ export const COSMETIC_CATEGORIES: CosmeticCategoryDef[] = [
     blurb: 'App-wide button & highlight color, separate from board skins.',
     defaultId: 'violet',
     items: [
-      { id: 'coral', name: 'Coral', tag: 'Warm coral accent', price: 220 },
-      { id: 'emerald', name: 'Emerald', tag: 'Cool green accent', price: 220 },
-      { id: 'sky', name: 'Sky', tag: 'Bright blue accent', price: 240 },
-      { id: 'rose', name: 'Rose', tag: 'Deep pink accent', price: 240 },
-      { id: 'diamond-chrome', name: 'Diamond Chrome', tag: 'Locked · Diamond rank', price: null, locked: { endlessRank: 'Diamond' } },
-      { id: 'master-gold', name: 'Master Gold', tag: 'Locked · Master rank', price: null, locked: { endlessRank: 'Master' } },
+      { id: 'coral', name: 'Coral', tag: 'Warm coral accent', price: 290 },
+      { id: 'emerald', name: 'Emerald', tag: 'Cool green accent', price: 290 },
+      { id: 'sky', name: 'Sky', tag: 'Bright blue accent', price: 310 },
+      { id: 'rose', name: 'Rose', tag: 'Deep pink accent', price: 310 },
+      // Rank-gated *and* coin-priced (see skins.ts's eclipse/coastal/wildfire for the
+      // same treatment) — the tag describes the theme itself since it becomes the
+      // tile's regular subtitle once unlocked, not a permanent "Locked" label.
+      { id: 'diamond-chrome', name: 'Diamond Chrome', tag: 'Icy chrome accent', price: 450, locked: { endlessRank: 'Diamond' } },
+      { id: 'master-gold', name: 'Master Gold', tag: 'Rich gold accent', price: 600, locked: { endlessRank: 'Master' } },
     ],
   },
   {
@@ -173,8 +193,8 @@ export const COSMETIC_CATEGORIES: CosmeticCategoryDef[] = [
     blurb: 'Alternate home-screen icons.',
     defaultId: 'classic',
     items: [
-      { id: 'retro-arcade', name: 'Retro Arcade', tag: 'Striped neon', price: 250 },
-      { id: 'minimal-mono', name: 'Minimal Mono', tag: 'Black & white', price: 220 },
+      { id: 'retro-arcade', name: 'Retro Arcade', tag: 'Striped neon', price: 330 },
+      { id: 'minimal-mono', name: 'Minimal Mono', tag: 'Black & white', price: 290 },
       { id: 'all-rounder', name: 'All-Rounder', tag: 'Locked · All-Rounder', price: null, locked: { achievementId: 'all-rounder' } },
       { id: 'puzzle-master', name: 'Puzzle Master', tag: 'Locked · Puzzle Master', price: null, locked: { achievementId: 'puzzle-master' } },
     ],

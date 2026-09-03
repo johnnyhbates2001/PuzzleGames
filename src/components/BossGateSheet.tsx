@@ -1,13 +1,56 @@
 import type { LevelModifiers } from '../games/chapters'
 import { modifierLabel } from '../games/chapters'
+import type { ConsumableKind, Settings } from '../storage/db'
 import { AppLink as Link } from './AppLink'
 import { NoHintsIcon, NoUndoIcon, PerfectRunIcon, TimedIcon } from './icons'
+
+/** One Boost the player can opt into for this specific boss level — see the
+ *  Game*Page.tsx init effects, which only ever offer a kind whose modifier is active
+ *  on this level and whose owned count is > 0. */
+export interface BossAssist {
+  kind: ConsumableKind
+  label: string
+  description: string
+  owned: number
+}
+
+// Flat bonus a Time Freeze Boost adds to a Timed boss level's clock, regardless of the
+// level's own base budget — shared by every Game*Page.tsx.
+export const TIME_FREEZE_BONUS_MS = 30_000
+
+/** Builds the Boosts offered at a boss gate — one shared implementation for every
+ *  Game*Page.tsx instead of six near-identical copies. Only ever offers a kind whose
+ *  modifier is actually active on this level and whose owned count is > 0. */
+export function buildBossAssists(modifiers: LevelModifiers | null, settings: Settings): BossAssist[] {
+  if (!modifiers) return []
+  const assists: BossAssist[] = []
+  if (modifiers.noUndo && settings.undoTokens > 0) {
+    assists.push({ kind: 'undoToken', label: 'Undo Token', description: 'Allows one Undo on this level.', owned: settings.undoTokens })
+  }
+  if (modifiers.timed && settings.timeFreezes > 0) {
+    assists.push({
+      kind: 'timeFreeze',
+      label: 'Time Freeze',
+      description: `Adds ${TIME_FREEZE_BONUS_MS / 1000}s to the clock.`,
+      owned: settings.timeFreezes,
+    })
+  }
+  if (modifiers.perfectRun && settings.mistakeSaves > 0) {
+    assists.push({ kind: 'mistakeSave', label: 'Mistake Save', description: 'Forgives one mistake on this level.', owned: settings.mistakeSaves })
+  }
+  return assists
+}
 
 interface BossGateSheetProps {
   chapterNumber: number
   modifiers: LevelModifiers
   backHref: string
   onBegin: () => void
+  /** Boosts available to spend on this level — omitted/empty renders no Boosts section
+   *  at all, so games/levels with nothing owned look exactly like before this feature. */
+  assists?: BossAssist[]
+  selectedAssists?: Set<ConsumableKind>
+  onToggleAssist?: (kind: ConsumableKind) => void
 }
 
 const MODIFIER_INFO: Record<string, { icon: (props: { size?: number }) => React.JSX.Element; explain: string }> = {
@@ -21,7 +64,15 @@ const MODIFIER_INFO: Record<string, { icon: (props: { size?: number }) => React.
  *  chapter 20, or an Endless chapter's 20th level) starts — announces its active
  *  modifiers up front instead of letting the player discover them mid-run (see the
  *  Game*Page.tsx init effects for the gating). */
-export function BossGateSheet({ chapterNumber, modifiers, backHref, onBegin }: BossGateSheetProps) {
+export function BossGateSheet({
+  chapterNumber,
+  modifiers,
+  backHref,
+  onBegin,
+  assists = [],
+  selectedAssists,
+  onToggleAssist,
+}: BossGateSheetProps) {
   const labels = modifierLabel(modifiers).split(' · ').filter(Boolean)
 
   return (
@@ -52,6 +103,31 @@ export function BossGateSheet({ chapterNumber, modifiers, backHref, onBegin }: B
           )
         })}
       </div>
+
+      {assists.length > 0 && (
+        <div className="flex w-full max-w-sm flex-col gap-2">
+          <p className="text-left text-[11.5px] font-bold tracking-wide text-ink-muted uppercase">Boosts available</p>
+          {assists.map((assist) => {
+            const active = selectedAssists?.has(assist.kind) ?? false
+            return (
+              <button
+                key={assist.kind}
+                type="button"
+                onClick={() => onToggleAssist?.(assist.kind)}
+                className={`flex items-center justify-between gap-3 rounded-2xl p-3 text-left transition ${
+                  active ? 'bg-accent-tint ring-2 ring-accent' : 'bg-surface'
+                }`}
+              >
+                <span className="min-w-0">
+                  <span className="block text-[13px] font-bold text-ink">{assist.label}</span>
+                  <span className="block text-[11px] leading-snug text-ink-muted">{assist.description}</span>
+                </span>
+                <span className="shrink-0 text-[11px] font-bold text-ink-muted">{assist.owned} owned</span>
+              </button>
+            )
+          })}
+        </div>
+      )}
 
       <div className="mt-2 flex w-full max-w-sm flex-col gap-3">
         <button type="button" onClick={onBegin} className="w-full rounded-full bg-accent py-3.5 font-bold text-white">
