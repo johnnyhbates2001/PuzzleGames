@@ -532,7 +532,7 @@ export default function SudokuGamePage({ freePlay = false }: { freePlay?: boolea
   return (
     <main
       data-game="sudoku"
-      className="mx-auto flex min-h-svh max-w-lg flex-col items-center gap-6 bg-bg px-4 py-[max(1.5rem,env(safe-area-inset-top))] text-ink"
+      className="mx-auto flex min-h-svh max-w-lg flex-col items-center justify-center gap-6 bg-bg px-4 py-[max(1.5rem,env(safe-area-inset-top))] text-ink"
     >
       <GameHeader
         elapsedMs={state.elapsedMs}

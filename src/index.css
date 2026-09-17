@@ -33,6 +33,11 @@
   --color-border-dashed: var(--border-dashed);
   --color-grid-gap: var(--grid-gap);
   --color-grid-line-strong: var(--grid-line-strong);
+  /* Queens' own grid line — deliberately a fixed near-white rather than the shared
+     --grid-gap token above: Queens' region colors are fixed hex (skins.ts), not
+     theme-driven, so a bright constant reads clearly against every skin without
+     needing a per-theme variant the way --grid-gap does for other games. */
+  --color-queens-grid: oklch(98% 0 0);
   --color-heat-1: var(--heat-1);
   --color-heat-2: var(--heat-2);
   --color-heat-3: var(--heat-3);
