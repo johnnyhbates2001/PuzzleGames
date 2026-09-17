@@ -21,8 +21,10 @@ export const SKINS: Skin[] = [
     name: 'Candy',
     tag: 'Default',
     price: null,
-    // The original REGION_COLORS palette, verbatim — Candy is the pre-skins look.
-    colors: ['#FCA5A5', '#FDBA74', '#FDE68A', '#86EFAC', '#5EEAD4', '#7DD3FC', '#A5B4FC', '#D8B4FE', '#F9A8D4', '#D4D4D8'],
+    // One shade darker/more saturated than the original 300-shade REGION_COLORS
+    // palette (kept in sync in Cell.tsx) — the 300s read too close together at a
+    // glance, especially region colors of similar hue family (e.g. yellow vs. green).
+    colors: ['#F87171', '#FB923C', '#FACC15', '#4ADE80', '#2DD4BF', '#38BDF8', '#818CF8', '#C084FC', '#F472B6', '#9CA3AF'],
   },
   {
     id: 'midnight',

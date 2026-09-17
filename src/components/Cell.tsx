@@ -8,18 +8,20 @@ import { useEquippedCosmetic } from '../hooks/useCosmetics'
 
 const CONFLICT_TINT_HOLD_MS = 900
 
-/** Palette indexed by region id — up to 10 distinct regions (the hard 10x10 max). */
+/** Palette indexed by region id — up to 10 distinct regions (the hard 10x10 max).
+ *  Mirrors skins.ts's 'candy' (default) skin — used only by RulesMiniBoard's static
+ *  "how to play" illustration, which always shows the default look. */
 export const REGION_COLORS = [
-  '#FCA5A5', // red
-  '#FDBA74', // orange
-  '#FDE68A', // yellow
-  '#86EFAC', // green
-  '#5EEAD4', // teal
-  '#7DD3FC', // sky
-  '#A5B4FC', // indigo
-  '#D8B4FE', // purple
-  '#F9A8D4', // pink
-  '#D4D4D8', // gray
+  '#F87171', // red
+  '#FB923C', // orange
+  '#FACC15', // yellow
+  '#4ADE80', // green
+  '#2DD4BF', // teal
+  '#38BDF8', // sky
+  '#818CF8', // indigo
+  '#C084FC', // purple
+  '#F472B6', // pink
+  '#9CA3AF', // gray
 ]
 
 interface CellProps {

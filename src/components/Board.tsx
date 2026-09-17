@@ -146,7 +146,7 @@ export function Board({
 
   return (
     <div
-      className={`mx-auto grid w-full touch-none gap-0.5 overflow-hidden rounded-[20px] bg-grid-gap p-0.5 ${className ?? ''}`}
+      className={`mx-auto grid w-full touch-none gap-1 overflow-hidden rounded-[20px] bg-queens-grid p-1 ${className ?? ''}`}
       style={{ gridTemplateColumns: `repeat(${level.size}, minmax(0, 1fr))` }}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
