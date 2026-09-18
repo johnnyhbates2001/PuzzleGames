@@ -163,6 +163,11 @@ export interface DailyChallengeRecord {
   /** Wordle only — the daily leaderboard scores Wordle by guess count instead of
    *  time (see worker/routes/scores.ts). Undefined for every other game. */
   guessCount?: number
+  /** False when this game's Daily Challenge ran out its attempts unsolved (Wordle
+   *  only, so far — see recordDailyChallengeFailure) rather than being solved.
+   *  Undefined on every record written before this field existed, which were all
+   *  wins — treat missing the same as true. */
+  won?: boolean
 }
 
 // `Difficulty` above is imported from the Queens engine, but the literal set
@@ -893,7 +898,7 @@ export async function recordDailyChallengeCompletion(
   const key = dateKey(new Date())
   const tx = db.transaction(['dailyChallenge', 'settings', 'dailyActivity'], 'readwrite')
 
-  const record: DailyChallengeRecord = { gameId, completedAt: Date.now(), elapsedMs, assisted, guessCount }
+  const record: DailyChallengeRecord = { gameId, completedAt: Date.now(), elapsedMs, assisted, guessCount, won: true }
   await tx.objectStore('dailyChallenge').put(record, dailyKey(key, gameId))
 
   const settingsStore = tx.objectStore('settings')
@@ -916,17 +921,38 @@ export async function recordDailyChallengeCompletion(
   return { coinsAwarded: DAILY_COIN_AWARD, streak }
 }
 
+/** Records today's Daily Challenge for gameId ending unsolved (attempts ran out) —
+ *  Wordle only, so far, since it's the only Daily Challenge with an intrinsic "out of
+ *  guesses" ending (the grid games only fail via boss-level modifiers, which the Daily
+ *  Challenge never applies — see getDailyWordleLevel's comment). Unlike a completion,
+ *  this awards no coins and doesn't log dailyActivity: nothing was actually solved.
+ *  Still writes the dailyChallenge row so the day counts as resolved — getDailyStreak
+ *  reads `won: false` off it to end the streak, and callers use the same "already
+ *  resolved today" check (an existing row, win or loss) to stop a retry from quietly
+ *  re-earning today's reward after an initial loss. */
+export async function recordDailyChallengeFailure(gameId: DailyGameId, elapsedMs: number, guessCount?: number): Promise<void> {
+  const db = await getDB()
+  const key = dateKey(new Date())
+  const record: DailyChallengeRecord = { gameId, completedAt: Date.now(), elapsedMs, assisted: false, guessCount, won: false }
+  await db.put('dailyChallenge', record, dailyKey(key, gameId))
+}
+
 /** Consecutive-day Daily Challenge streak for one game, same "ending today or yesterday"
- *  rule as getStreak so it doesn't read as broken before the player has solved today's. */
+ *  rule as getStreak so it doesn't read as broken before the player has solved today's —
+ *  unless today's has already been resolved as a loss, which ends the streak right away
+ *  (no grace period once the result for today is actually known). */
 export async function getDailyStreak(gameId: DailyGameId, now: number = Date.now()): Promise<number> {
   const db = await getDB()
   const cursor = new Date(now)
   const today = await db.get('dailyChallenge', dailyKey(dateKey(cursor), gameId))
+  if (today?.won === false) return 0
   if (!today) cursor.setDate(cursor.getDate() - 1)
   let streak = 0
-  while (await db.get('dailyChallenge', dailyKey(dateKey(cursor), gameId))) {
+  let record = await db.get('dailyChallenge', dailyKey(dateKey(cursor), gameId))
+  while (record && record.won !== false) {
     streak++
     cursor.setDate(cursor.getDate() - 1)
+    record = await db.get('dailyChallenge', dailyKey(dateKey(cursor), gameId))
   }
   return streak
 }

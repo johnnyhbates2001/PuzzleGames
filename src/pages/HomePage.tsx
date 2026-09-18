@@ -4,7 +4,7 @@ import { GAMES } from '../games/registry'
 import { SettingsButton } from '../components/SettingsButton'
 import { CoinBalance } from '../components/CoinBalance'
 import { TabBar } from '../components/TabBar'
-import { BookIcon, CheckIcon, ChevronRightIcon, FlameIcon } from '../components/icons'
+import { BookIcon, CheckIcon, ChevronRightIcon, FlameIcon, XMarkIcon } from '../components/icons'
 import { getDailyChallenge, getDailyStreak, getHeatmap, getSettings, maybeApplyStreakFreeze, setLastSeenStreak } from '../storage/db'
 import type { Difficulty } from '../engine/types'
 import { todayDateKey, type DailyGameId } from '../games/dailyChallenge'
@@ -45,7 +45,7 @@ export default function HomePage() {
   const [streak, setStreak] = useState(0)
   const [streakWeek, setStreakWeek] = useState<boolean[]>([])
   const [progressByGame, setProgressByGame] = useState<Record<string, GameProgressSummary>>({})
-  const [dailyDoneByGame, setDailyDoneByGame] = useState<Record<string, boolean>>({})
+  const [dailyResultByGame, setDailyResultByGame] = useState<Record<string, 'won' | 'lost'>>({})
   const [dailyStreakByGame, setDailyStreakByGame] = useState<Record<string, number>>({})
   // True only for the first Home visit after the streak actually advances — gates the
   // pip-fill/flame-bounce below so it plays once per new streak day, not every visit.
@@ -78,11 +78,12 @@ export default function HomePage() {
     })
     Promise.all(GAMES.map((g) => getDailyChallenge(dateKey, g.id as DailyGameId))).then((records) => {
       if (cancelled) return
-      const map: Record<string, boolean> = {}
+      const map: Record<string, 'won' | 'lost'> = {}
       GAMES.forEach((g, i) => {
-        map[g.id] = !!records[i]
+        const record = records[i]
+        if (record) map[g.id] = record.won === false ? 'lost' : 'won'
       })
-      setDailyDoneByGame(map)
+      setDailyResultByGame(map)
     })
     Promise.all(GAMES.map((g) => getDailyStreak(g.id as DailyGameId))).then((streaks) => {
       if (cancelled) return
@@ -179,20 +180,25 @@ export default function HomePage() {
             <div className="flex items-center justify-between">
               <h2 className="text-[14.5px] font-bold text-ink">Daily Challenges</h2>
               <p className="text-xs font-semibold text-ink-muted">
-                {Object.values(dailyDoneByGame).filter(Boolean).length} of {GAMES.length} done
+                {Object.values(dailyResultByGame).filter((r) => r === 'won').length} of {GAMES.length} done
               </p>
             </div>
             <div className="mt-3 grid grid-cols-5 gap-2">
               {GAMES.map((game) => {
-                const done = dailyDoneByGame[game.id]
+                const result = dailyResultByGame[game.id]
                 const gameStreak = dailyStreakByGame[game.id] ?? 0
                 return (
                   <Link key={game.id} to={`${game.route}/daily`} className="flex flex-col items-center gap-1">
                     <span className="relative flex size-11 shrink-0 items-center justify-center rounded-2xl bg-accent-tint p-2 shadow-card">
                       {PREVIEW_BY_ID[game.id]}
-                      {done && (
+                      {result === 'won' && (
                         <span className="absolute -top-1 -right-1 flex size-[19px] items-center justify-center rounded-full border-2 border-surface bg-accent text-white">
                           <CheckIcon size={9} />
+                        </span>
+                      )}
+                      {result === 'lost' && (
+                        <span className="absolute -top-1 -right-1 flex size-[19px] items-center justify-center rounded-full border-2 border-surface bg-danger text-white">
+                          <XMarkIcon size={9} />
                         </span>
                       )}
                     </span>
