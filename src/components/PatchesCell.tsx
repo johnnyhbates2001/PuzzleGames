@@ -36,10 +36,17 @@ interface PatchesCellProps {
   onHintPulseEnd?: () => void
 }
 
+// Each shape fixes its own short side at the same 62%-of-cell baseline and lets the
+// aspect-ratio class grow the long side from there (capped at 80% so it never crowds
+// the cell's border) — square fixes both sides equally, wide fixes height and grows
+// width, tall fixes width and grows height. Fixing height for all three would make
+// 'tall' shrink its width below the other two's instead of growing past them, reading
+// as a stray sliver rather than a shape in the same family (see the shape legend below
+// the board, which has the same fix for the same reason).
 const SHAPE_BADGE_CLASS: Record<PatchShape, string> = {
-  square: 'aspect-square',
-  tall: 'aspect-[2/3]',
-  wide: 'aspect-[3/2]',
+  square: 'h-[62%] aspect-square',
+  tall: 'w-[62%] max-h-[80%] aspect-[2/3]',
+  wide: 'h-[62%] max-w-[80%] aspect-[3/2]',
 }
 
 const SCALLOP_CLIP_PATH =
@@ -127,7 +134,16 @@ function PatchesCellImpl({
       {tinted && <span className="pointer-events-none absolute inset-0 rounded-[2px] ring-[2.5px] ring-inset ring-danger" />}
       {clueArea !== null && clueShape !== null && (
         <span
-          className={`relative z-10 flex h-[62%] max-w-[80%] items-center justify-center rounded-md px-1.5 text-[min(3.4vw,15px)] leading-none font-bold ${SHAPE_BADGE_CLASS[clueShape]} ${
+          // min-w-0/min-h-0 override the flex item's default min-width/height:auto (= its
+          // content's own min-content size) — without them, a two-digit number's own
+          // intrinsic width can win out over a narrow 'tall' badge's aspect-ratio class
+          // below, silently widening it until it's nearly indistinguishable from
+          // 'square'. The smaller font for 2+ digit clues keeps that content narrow
+          // enough to actually fit within the fixed side instead of just being clipped
+          // once these stop the box from stretching to make room for it.
+          className={`relative z-10 flex min-w-0 min-h-0 items-center justify-center rounded-md px-1.5 leading-none font-bold ${
+            String(clueArea).length >= 2 ? 'text-[min(2.6vw,11px)]' : 'text-[min(3.4vw,15px)]'
+          } ${SHAPE_BADGE_CLASS[clueShape]} ${
             fillColor && !tinted
               ? 'bg-white/90 text-[oklch(30%_0.03_60)] shadow-[0_1px_3px_rgb(0_0_0/0.1)]'
               : 'bg-surface text-accent shadow-[inset_0_0_0_2px_var(--color-accent)]'

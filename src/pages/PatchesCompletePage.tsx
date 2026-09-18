@@ -108,6 +108,7 @@ export default function PatchesCompletePage({ freePlay = false }: { freePlay?: b
             dragAnchor={null}
             dragEnd={null}
             onStartDrag={() => {}}
+            onStartResize={() => {}}
             onDragMove={() => {}}
             onCommitDrag={() => {}}
             onCancelDrag={() => {}}
