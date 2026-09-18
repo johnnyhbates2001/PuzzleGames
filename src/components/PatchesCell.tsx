@@ -127,7 +127,16 @@ function PatchesCellImpl({
       {tinted && <span className="pointer-events-none absolute inset-0 rounded-[2px] ring-[2.5px] ring-inset ring-danger" />}
       {clueArea !== null && clueShape !== null && (
         <span
-          className={`relative z-10 flex h-[62%] max-w-[80%] items-center justify-center rounded-md px-1.5 text-[min(3.4vw,15px)] leading-none font-bold ${SHAPE_BADGE_CLASS[clueShape]} ${
+          // min-w-0 overrides the flex item's default min-width:auto (= its content's
+          // min-content width) — without it, a two-digit number's own intrinsic width
+          // wins out over the aspect-ratio class below for a narrow 'tall' badge,
+          // silently widening it until it's nearly indistinguishable from 'square'. The
+          // smaller font for 2+ digit clues keeps that content narrow enough to actually
+          // fit the tall shape's width instead of just being clipped once min-w-0 stops
+          // the box from stretching to make room for it.
+          className={`relative z-10 flex h-[62%] max-w-[80%] min-w-0 items-center justify-center rounded-md px-1.5 leading-none font-bold ${
+            String(clueArea).length >= 2 ? 'text-[min(2.6vw,11px)]' : 'text-[min(3.4vw,15px)]'
+          } ${SHAPE_BADGE_CLASS[clueShape]} ${
             fillColor && !tinted
               ? 'bg-white/90 text-[oklch(30%_0.03_60)] shadow-[0_1px_3px_rgb(0_0_0/0.1)]'
               : 'bg-surface text-accent shadow-[inset_0_0_0_2px_var(--color-accent)]'
