@@ -25,9 +25,40 @@ import { countSolutions } from './solver.ts'
  */
 
 const TARGET_RECT_COUNT: Record<Difficulty, number> = { easy: 9, medium: 11, hard: 9 }
-const PARTITION_RETRIES = 80
+/** Cheap structural checks (isBalanced) reject most bad partitions before the expensive
+ *  solver runs, so this can afford to be much higher than a naive retry count. */
+const PARTITION_RETRIES = 400
 /** No generated rectangle may have area smaller than this (no 1x1 patches). */
 const MIN_AREA = 2
+
+/** A single rectangle may not claim more than this fraction of the whole grid — without
+ *  it, guillotine partitioning tends to carve a few thin slivers off one corner and
+ *  leave the rest as one dominant leftover rectangle, which trivializes the puzzle (the
+ *  giant patch is nearly forced, and the slivers are too small to reason about). Easy's
+ *  5x5 grid is too small for any rectangle to get "massive" in the first place (9 rects
+ *  over 25 cells caps out well below medium/hard's ratio), so it gets a looser cap purely
+ *  to avoid rejecting nearly everything.
+ */
+const MAX_AREA_FRACTION: Record<Difficulty, number> = { easy: 0.4, medium: 0.3, hard: 0.28 }
+/** Rectangles at or below this area are "tiny" — a couple add welcome texture, but a
+ *  partition dominated by them (the flip side of one giant leftover) is just as flat.
+ *  Easy's rect-count-to-area ratio makes most pieces tiny by construction (9 rects
+ *  average 2.8 cells each), so only the fully-uniform all-tiny case is rejected there. */
+const TINY_AREA = 3
+const MAX_TINY_RECTS: Record<Difficulty, number> = { easy: 8, medium: 5, hard: 2 }
+
+/** Rejects the "one massive leftover plus a pile of slivers" shape that plain guillotine
+ *  partitioning tends to produce, so generateLevel retries instead of accepting it. */
+function isBalanced(rects: Rect[], size: number, difficulty: Difficulty): boolean {
+  const maxAllowed = Math.floor(size * size * MAX_AREA_FRACTION[difficulty])
+  let tinyCount = 0
+  for (const rect of rects) {
+    const area = rect.width * rect.height
+    if (area > maxAllowed) return false
+    if (area <= TINY_AREA) tinyCount++
+  }
+  return tinyCount <= MAX_TINY_RECTS[difficulty]
+}
 
 /** Smallest a piece may be along the axis being split, given the fixed size of the
  *  OTHER axis — 1 is fine as long as the other axis is at least 2 (area = 1 *
@@ -54,10 +85,29 @@ export function generatePartition(size: number, targetCount: number, rng: Rng): 
       .filter(({ vRange, hRange }) => vRange !== null || hRange !== null)
     if (candidates.length === 0) break
 
-    const { r: target, i: idx, vRange, hRange } = candidates[Math.floor(rng() * candidates.length)]
+    // Weight by area, not uniformly: picking every splittable rect with equal odds lets
+    // one large rectangle sit unsplit for many iterations while everything else gets
+    // fragmented around it. Weighting by area means a big rectangle keeps getting
+    // subdivided in proportion to its size, so pieces stay comparable to each other.
+    const totalArea = candidates.reduce((sum, { r }) => sum + r.width * r.height, 0)
+    let pick = rng() * totalArea
+    let chosen = candidates[candidates.length - 1]
+    for (const candidate of candidates) {
+      pick -= candidate.r.width * candidate.r.height
+      if (pick <= 0) {
+        chosen = candidate
+        break
+      }
+    }
+    const { r: target, i: idx, vRange, hRange } = chosen
     const vertical = vRange !== null && (hRange === null || rng() < 0.5)
     const [lo, hi] = (vertical ? vRange : hRange)!
-    const splitAt = lo + Math.floor(rng() * (hi - lo + 1))
+    // Average two uniform draws (a triangular distribution) instead of one, biasing the
+    // cut toward the middle of the piece rather than uniformly across its whole span —
+    // a single uniform draw makes a hairline off-the-edge sliver just as likely as an
+    // even split, which is the other half of where the massive-leftover shape comes from.
+    const t = (rng() + rng()) / 2
+    const splitAt = lo + Math.round(t * (hi - lo))
 
     let a: Rect
     let b: Rect
@@ -97,6 +147,7 @@ export function generateLevel(difficulty: Difficulty, rng: Rng): PatchesLevelRec
 
   for (let attempt = 0; attempt < PARTITION_RETRIES; attempt++) {
     const rects = generatePartition(size, targetCount, rng)
+    if (!isBalanced(rects, size, difficulty)) continue
     const order = shuffle(
       rects.map((_, i) => i),
       rng,
