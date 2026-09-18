@@ -366,6 +366,15 @@ export default function PatchesGamePage({ freePlay = false }: { freePlay?: boole
     [playSound, buzz],
   )
 
+  const handleStartResize = useCallback(
+    (clueIndex: number, row: number, col: number) => {
+      playSound('tap')
+      buzz(10)
+      dispatch({ type: 'START_RESIZE', clueIndex, row, col })
+    },
+    [playSound, buzz],
+  )
+
   const handleDragMove = useCallback((row: number, col: number) => {
     dispatch({ type: 'DRAG_MOVE', row, col })
   }, [])
@@ -468,6 +477,7 @@ export default function PatchesGamePage({ freePlay = false }: { freePlay?: boole
               dragAnchor={state.dragAnchor}
               dragEnd={state.dragEnd}
               onStartDrag={handleStartDrag}
+              onStartResize={handleStartResize}
               onDragMove={handleDragMove}
               onCommitDrag={handleCommitDrag}
               onCancelDrag={handleCancelDrag}

@@ -73,6 +73,68 @@ describe('CANCEL_DRAG', () => {
     expect(state.dragEnd).toBeNull()
     expect(state.placed).toEqual([])
   })
+
+  it('restores the original rectangle unchanged if a resize is aborted', () => {
+    let state = drag(fresh(), [0, 0], [0, 1])
+    const original = state.placed
+    state = patchesReducer(state, { type: 'START_RESIZE', clueIndex: 0, row: 0, col: 1 })
+    state = patchesReducer(state, { type: 'CANCEL_DRAG' })
+    expect(state.placed).toEqual(original)
+    expect(state.resizing).toBeNull()
+    expect(state.dragAnchor).toBeNull()
+  })
+})
+
+describe('START_RESIZE', () => {
+  it('picks the touched rectangle back up, re-anchored at its own clue', () => {
+    let state = drag(fresh(), [0, 0], [0, 1]) // clue 0's rect spans row 0 entirely
+    state = patchesReducer(state, { type: 'START_RESIZE', clueIndex: 0, row: 0, col: 1 })
+    expect(state.placed).toEqual([])
+    expect(state.dragAnchor).toEqual({ row: 0, col: 0 }) // clue 0's own cell, not the touched one
+    expect(state.dragEnd).toEqual({ row: 0, col: 1 })
+    expect(state.resizing).toEqual({ rect: { row: 0, col: 0, width: 2, height: 1 }, clueIndex: 0, anchor: { row: 0, col: 0 } })
+  })
+
+  it('is a no-op if that clue has no placed rectangle', () => {
+    const state = fresh()
+    const after = patchesReducer(state, { type: 'START_RESIZE', clueIndex: 0, row: 0, col: 0 })
+    expect(after).toBe(state)
+  })
+
+  it('clamps dragEnd immediately if the first move already overshoots into another clue or rectangle', () => {
+    // clue 0 at (0,0), clue 1 at (1,1) — dragging clue 0's placed rect down-and-right
+    // to (1,1) in one jump (e.g. the pointer skipped the intervening cells) would
+    // swallow clue 1's own cell if left unclamped.
+    const level: PatchesLevelRecord = {
+      id: 'resize-clamp-test',
+      difficulty: 'easy',
+      size: 3,
+      clues: [
+        { cell: { row: 0, col: 0 }, area: 3, shape: 'wide' },
+        { cell: { row: 1, col: 1 }, area: 4, shape: 'square' },
+      ],
+      solution: [
+        { row: 0, col: 0, width: 3, height: 1 },
+        { row: 1, col: 1, width: 2, height: 2 },
+      ],
+    }
+    let state = createInitialState(level)
+    state = patchesReducer(state, { type: 'START_DRAG', row: 0, col: 0 })
+    state = patchesReducer(state, { type: 'COMMIT_DRAG', row: 0, col: 1, now: 0 }) // clue 0's rect: (0,0)-(0,1)
+    state = patchesReducer(state, { type: 'START_RESIZE', clueIndex: 0, row: 1, col: 1 }) // jumps straight onto clue 1's cell
+    // Must not be the raw, invalid target — clamped to the nearest rectangle that
+    // doesn't swallow clue 1's cell (same rule nearestFreeCorner enforces everywhere else).
+    expect(state.dragEnd).toEqual({ row: 0, col: 1 })
+  })
+
+  it('a subsequent COMMIT_DRAG replaces the rectangle with the resized one', () => {
+    let state = drag(fresh(), [0, 0], [0, 1])
+    state = patchesReducer(state, { type: 'START_RESIZE', clueIndex: 0, row: 0, col: 1 })
+    // Shrink it down to just the clue cell.
+    state = patchesReducer(state, { type: 'COMMIT_DRAG', row: 0, col: 0, now: 0 })
+    expect(state.placed).toEqual([{ rect: { row: 0, col: 0, width: 1, height: 1 }, clueIndex: 0, anchor: { row: 0, col: 0 } }])
+    expect(state.resizing).toBeNull()
+  })
 })
 
 describe('COMMIT_DRAG', () => {

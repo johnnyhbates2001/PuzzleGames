@@ -18,6 +18,11 @@ interface PatchesBoardProps {
   dragAnchor: Coord | null
   dragEnd: Coord | null
   onStartDrag: (row: number, col: number) => void
+  /** Fired the first time a touch that started on an already-placed rectangle actually
+   *  moves to a different cell — picks that rectangle back up for resizing rather than
+   *  removing it outright. A touch that never moves stays a plain tap-to-remove (see
+   *  onRemoveRect below). */
+  onStartResize: (clueIndex: number, row: number, col: number) => void
   /** Fired for every new cell a drag stroke enters, so the preview rectangle can grow
    *  live instead of only appearing once the drag commits. */
   onDragMove: (row: number, col: number) => void
@@ -51,6 +56,7 @@ export function PatchesBoard({
   dragAnchor,
   dragEnd,
   onStartDrag,
+  onStartResize,
   onDragMove,
   onCommitDrag,
   onCancelDrag,
@@ -67,6 +73,12 @@ export function PatchesBoard({
   const draggingRef = useRef(false)
   const pointerIdRef = useRef<number | null>(null)
   const lastMoveKeyRef = useRef<string | null>(null)
+  /** Set on pointerdown when the touch lands on an already-placed rectangle, and cleared
+   *  the moment either the drag actually starts moving (see handlePointerMove — that's
+   *  when onStartResize fires) or the pointer comes back up in the meantime. Deferring
+   *  the decision this way means a touch that never moves still reads as a plain tap
+   *  (removes the rect, as before); one that does resizes it instead of just vanishing. */
+  const pickedUpClueRef = useRef<number | null>(null)
 
   // Geometry-based, not document.elementFromPoint: once a drag starts, pointer capture
   // (see handlePointerDown below) keeps routing pointermove/pointerup to the grid even
@@ -92,7 +104,13 @@ export function PatchesBoard({
 
     const placedIdx = placedRectAt(placed, coord)
     if (placedIdx !== -1) {
-      onRemoveRect(coord.row, coord.col)
+      // Don't decide yet whether this is a tap (remove) or a drag (resize) — just start
+      // tracking the pointer and defer to handlePointerMove/handlePointerUp below.
+      pickedUpClueRef.current = placed[placedIdx].clueIndex
+      draggingRef.current = true
+      pointerIdRef.current = e.pointerId
+      lastMoveKeyRef.current = `${coord.row},${coord.col}`
+      e.currentTarget.setPointerCapture(e.pointerId)
       return
     }
 
@@ -113,6 +131,14 @@ export function PatchesBoard({
     const key = `${coord.row},${coord.col}`
     if (key === lastMoveKeyRef.current) return
     lastMoveKeyRef.current = key
+
+    if (pickedUpClueRef.current !== null) {
+      // First real movement since touching an already-placed rectangle — now it's
+      // unambiguously a resize, not a tap.
+      onStartResize(pickedUpClueRef.current, coord.row, coord.col)
+      pickedUpClueRef.current = null
+      return
+    }
     onDragMove(coord.row, coord.col)
   }
 
@@ -122,6 +148,14 @@ export function PatchesBoard({
     pointerIdRef.current = null
     lastMoveKeyRef.current = null
     const coord = cellFromPoint(e.clientX, e.clientY)
+
+    if (pickedUpClueRef.current !== null) {
+      // Released without ever moving to a different cell — a plain tap, so remove it,
+      // same as before this cell was even touched.
+      pickedUpClueRef.current = null
+      if (coord) onRemoveRect(coord.row, coord.col)
+      return
+    }
     if (coord) onCommitDrag(coord.row, coord.col)
     else onCancelDrag()
   }
@@ -131,6 +165,12 @@ export function PatchesBoard({
     draggingRef.current = false
     pointerIdRef.current = null
     lastMoveKeyRef.current = null
+    if (pickedUpClueRef.current !== null) {
+      // Never actually started resizing (no movement yet), so there's nothing placed to
+      // undo — the rect is still exactly where it was.
+      pickedUpClueRef.current = null
+      return
+    }
     onCancelDrag()
   }
 
