@@ -495,6 +495,18 @@ export default function WordleGamePage({ freePlay = false }: { freePlay?: boolea
         }
       />
 
+      {guessError && (
+        // Fixed, out of flow so it overlays instead of pushing the board/keyboard down —
+        // an in-flow version briefly shifted everything else, which was disorienting to
+        // type through while it was up.
+        <div
+          role="alert"
+          className="anim-toast-in pointer-events-none fixed inset-x-0 top-[max(5.5rem,calc(env(safe-area-inset-top)+5rem))] z-50 mx-auto flex justify-center px-4"
+        >
+          <p className="rounded-2xl bg-danger px-4 py-2 text-center text-[13px] font-semibold text-white shadow-card">{guessError}</p>
+        </div>
+      )}
+
       {validDifficulty && levelIndex !== null && (
         <div className="w-full max-w-[420px]">
           <LevelContext difficulty={validDifficulty} currentLevelIndex={levelIndex} />
@@ -510,12 +522,6 @@ export default function WordleGamePage({ freePlay = false }: { freePlay?: boolea
 
         {state.hardMode && !modifiers && (
           <p className="w-full rounded-2xl bg-accent-tint px-4 py-2 text-center text-[12px] font-semibold text-accent">Hard mode</p>
-        )}
-
-        {guessError && (
-          <p role="alert" className="w-full rounded-2xl bg-danger/10 px-4 py-2 text-center text-[13px] font-semibold text-danger">
-            {guessError}
-          </p>
         )}
 
         {loading ? (
