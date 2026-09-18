@@ -9,6 +9,11 @@ interface WordleLoseSheetProps {
   /** Defaults to "Back to chapters" — the Daily Challenge (chaptersHref: '/') passes
    *  "Back to Home" instead, same override CompleteSheet's own chaptersLabel makes. */
   chaptersLabel?: string
+  /** The Daily Challenge has no chapter progress to reassure the player about, and
+   *  this run is already recorded as today's loss the moment this sheet appears (see
+   *  WordleGamePage's daily-failure effect) — swaps the body copy and "Try again"
+   *  label so replaying doesn't read as still going for today's result. */
+  isDaily?: boolean
   onTryAgain: () => void
 }
 
@@ -23,7 +28,7 @@ const COPY: Record<WordleLoseSheetProps['reason'], { headline: string; body: str
  *  boss level, the clock did (see games/chapters.ts). Its full-viewport overlay is what
  *  actually blocks further keyboard/board interaction — no per-handler guards needed in
  *  the page itself. */
-export function WordleLoseSheet({ reason, answer, chaptersHref, chaptersLabel = 'Back to chapters', onTryAgain }: WordleLoseSheetProps) {
+export function WordleLoseSheet({ reason, answer, chaptersHref, chaptersLabel = 'Back to chapters', isDaily = false, onTryAgain }: WordleLoseSheetProps) {
   const { headline, body } = COPY[reason]
 
   return (
@@ -40,10 +45,12 @@ export function WordleLoseSheet({ reason, answer, chaptersHref, chaptersLabel = 
           <span className="text-xs font-semibold text-ink-muted">The word was</span>
           <span className="font-mono text-[15px] font-extrabold tracking-wide text-accent uppercase">{answer}</span>
         </div>
-        <p className="text-sm text-ink-muted">Your chapter progress is safe.</p>
+        <p className="text-sm text-ink-muted">
+          {isDaily ? "Today's streak is broken — come back tomorrow for a new word." : 'Your chapter progress is safe.'}
+        </p>
         <div className="flex w-full flex-col gap-2">
           <button type="button" onClick={onTryAgain} className="w-full rounded-full bg-accent py-3 font-semibold text-white">
-            Try again
+            {isDaily ? 'Practice this word' : 'Try again'}
           </button>
           <Link to={chaptersHref} className="w-full rounded-full bg-bg py-3 text-center font-semibold text-ink-muted">
             {chaptersLabel}

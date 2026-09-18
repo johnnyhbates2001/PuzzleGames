@@ -43,6 +43,7 @@ export async function backfillLeaderboardStats(): Promise<void> {
 
   const history = await getAllDailyChallengeHistory()
   const dailyScores: DailyScorePayload[] = history
+    .filter((entry) => entry.record.won !== false)
     .filter((entry) => entry.gameId !== 'wordle' || entry.record.guessCount != null)
     .map((entry) => ({
       gameId: entry.gameId,

@@ -10,6 +10,7 @@ import {
   getSettings,
   getWordleInProgress,
   getWordleProgress,
+  recordDailyChallengeFailure,
   recordFreePlayCompletion,
   recordWordleCompletion,
   saveWordleInProgress,
@@ -106,9 +107,12 @@ export default function WordleGamePage({ freePlay = false }: { freePlay?: boolea
   } | null>(null)
   const sourceRef = useRef<{ source: 'bank' | 'generated'; bankIndex?: number }>({ source: 'generated' })
   const guessErrorTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  // Set during load if today's Daily Challenge was already completed — the win effect
-  // reads this to skip re-awarding coins on a replay (recordDailyChallengeCompletion
-  // would otherwise let a player farm coins by re-solving the same puzzle all day).
+  // Set during load if today's Daily Challenge already has a result — a win (existing
+  // record) or, once the failure effect below has run this session, a loss. Both the
+  // win effect and that failure effect read/set this to skip re-recording on a replay:
+  // recordDailyChallengeCompletion would otherwise let a player farm coins by
+  // re-solving the same puzzle all day, and a retry-then-win after an initial loss
+  // would otherwise quietly erase that loss instead of leaving it as today's result.
   const dailyAlreadyCompletedRef = useRef(false)
   const initialReplayLevelRef = useRef((location.state as ReplayLocationState | null)?.replayLevel)
   const initialChapterReplayRef = useRef((location.state as ReplayLocationState | null)?.chapterReplay)
@@ -338,6 +342,18 @@ export default function WordleGamePage({ freePlay = false }: { freePlay?: boolea
     recordFreePlayCompletion,
   })
 
+  // Daily Challenge: running out of guesses is this game's result for the day just as
+  // much as solving it, so it needs the same one-shot recording — guarded by
+  // dailyAlreadyCompletedRef (now doubling as "today is already resolved, win or
+  // loss") so a retry-after-loss can't quietly re-earn today's reward by winning the
+  // next attempt, and so the loss itself breaks the daily streak (see
+  // recordDailyChallengeFailure and getDailyStreak in storage/db.ts).
+  useEffect(() => {
+    if (!isDaily || state.status !== 'lost' || dailyAlreadyCompletedRef.current) return
+    dailyAlreadyCompletedRef.current = true
+    void recordDailyChallengeFailure('wordle', state.elapsedMs, state.guesses.length)
+  }, [isDaily, state.status, state.elapsedMs, state.guesses.length])
+
   // 'out-of-guesses' whenever the reducer itself has already settled on 'lost' (it
   // also freezes the timer there — see withStatusCheck in state/wordleReducer.ts);
   // 'timeout' only while a Timed boss level's clock has run out first. Derived every
@@ -560,6 +576,7 @@ export default function WordleGamePage({ freePlay = false }: { freePlay?: boolea
           answer={state.level.answer}
           chaptersHref={isDaily ? '/' : freePlay ? '/wordle/chapters?tab=free' : '/wordle/chapters'}
           chaptersLabel={isDaily ? 'Back to Home' : freePlay ? 'Back to Free Play' : undefined}
+          isDaily={isDaily}
           onTryAgain={handleTryAgain}
         />
       )}
