@@ -55,6 +55,13 @@ describe('DRAG_MOVE', () => {
     const after = patchesReducer(state, { type: 'DRAG_MOVE', row: 0, col: 1 })
     expect(after).toBe(state)
   })
+
+  it('snaps the live preview back from an overshoot into an already-placed rectangle', () => {
+    let state = drag(fresh(), [0, 0], [0, 1]) // covers row 0 entirely
+    state = patchesReducer(state, { type: 'START_DRAG', row: 1, col: 0 })
+    state = patchesReducer(state, { type: 'DRAG_MOVE', row: 0, col: 0 }) // would overlap row 0
+    expect(state.dragEnd).toEqual({ row: 1, col: 0 }) // clamped back to the anchor
+  })
 })
 
 describe('CANCEL_DRAG', () => {
@@ -78,12 +85,16 @@ describe('COMMIT_DRAG', () => {
     expect(state.dragEnd).toBeNull()
   })
 
-  it('rejects a commit that would overlap an already-placed rectangle', () => {
+  it('snaps a commit that would overlap an already-placed rectangle back to the nearest free one, rather than dropping it', () => {
     let state = drag(fresh(), [0, 0], [0, 1]) // covers row 0 entirely
     state = patchesReducer(state, { type: 'START_DRAG', row: 1, col: 0 })
-    // drag from (1,0) up into row 0 — overlaps the first rectangle
+    // drag from (1,0) up into row 0, which is already covered — same column, so there's
+    // no room to shrink sideways either, and this clamps all the way back to the anchor.
     state = patchesReducer(state, { type: 'COMMIT_DRAG', row: 0, col: 0, now: 0 })
-    expect(state.placed.length).toBe(1) // the bad commit was dropped, not added
+    expect(state.placed).toEqual([
+      { rect: { row: 0, col: 0, width: 2, height: 1 }, clueIndex: 0, anchor: { row: 0, col: 0 } },
+      { rect: { row: 1, col: 0, width: 1, height: 1 }, clueIndex: 1, anchor: { row: 1, col: 0 } },
+    ])
   })
 
   it('detects the win the instant every clue has a correct, non-overlapping rectangle', () => {

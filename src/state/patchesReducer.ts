@@ -1,5 +1,5 @@
 import { boundingRect, clueIndexAt, rectCells, type Coord, type PatchesLevelRecord } from '../engine/patches/types'
-import { isMismatched, isRectFree, isSolved, placedRectAt, type PlacedRect } from '../engine/patches/validator'
+import { isMismatched, isSolved, nearestFreeCorner, placedRectAt, type PlacedRect } from '../engine/patches/validator'
 
 export interface PatchesGameState {
   level: PatchesLevelRecord
@@ -88,14 +88,22 @@ export function patchesReducer(state: PatchesGameState, action: PatchesAction): 
 
     case 'DRAG_MOVE': {
       if (state.status === 'won' || !state.dragAnchor) return state
-      return { ...state, dragEnd: { row: action.row, col: action.col } }
+      const clueIndex = clueIndexAt(state.level.clues, state.dragAnchor)
+      const target = { row: action.row, col: action.col }
+      // Snap the live preview back from an overshoot into an already-placed rectangle
+      // (or another clue's cell) the same way it's already snapped back from straying
+      // outside the grid — so what's previewed is always exactly what COMMIT_DRAG below
+      // would place, and a slightly-too-far drag never has to be redone from scratch.
+      const dragEnd = nearestFreeCorner(state.placed, state.level.clues, state.level.size, state.dragAnchor, target, clueIndex)
+      return { ...state, dragEnd }
     }
 
     case 'COMMIT_DRAG': {
       if (state.status === 'won' || !state.dragAnchor) return state
       const clueIndex = clueIndexAt(state.level.clues, state.dragAnchor)
-      const rect = boundingRect(state.dragAnchor, { row: action.row, col: action.col }, state.level.size)
-      if (!isRectFree(state.placed, state.level.clues, rect, clueIndex)) return { ...state, dragAnchor: null, dragEnd: null }
+      const target = { row: action.row, col: action.col }
+      const end = nearestFreeCorner(state.placed, state.level.clues, state.level.size, state.dragAnchor, target, clueIndex)
+      const rect = boundingRect(state.dragAnchor, end, state.level.size)
 
       const placed = [...state.placed, { rect, clueIndex, anchor: state.dragAnchor }]
       return withWinCheck({ ...state, placed, dragAnchor: null, dragEnd: null }, action.now)
