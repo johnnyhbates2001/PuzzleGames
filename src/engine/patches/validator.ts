@@ -1,4 +1,4 @@
-import { rectCells, rectContains, shapeOf, type Coord, type PatchClue, type Rect } from './types.ts'
+import { boundingRect, rectCells, rectContains, shapeOf, type Coord, type PatchClue, type Rect } from './types.ts'
 
 export interface PlacedRect {
   rect: Rect
@@ -25,6 +25,53 @@ export function isRectFree(placed: PlacedRect[], clues: PatchClue[], rect: Rect,
     if (cells.some((c) => c.row === clues[i].cell.row && c.col === clues[i].cell.col)) return false
   }
   return true
+}
+
+/** Finds the corner closest to `target` (never past it, always between it and `anchor`)
+ *  whose bounding rectangle with `anchor` is free — so a drag that overshoots by a cell
+ *  or two into an already-placed rectangle (or another clue's cell) snaps back to the
+ *  largest rectangle it can still legally form, the same way cellFromPoint already
+ *  clamps a drag that strays outside the grid entirely instead of discarding it. Anchor
+ *  itself is always free (START_DRAG only allows starting from an uncovered clue cell),
+ *  so this always has at least that trivial fallback and never needs to signal "no rect
+ *  fits at all". */
+export function nearestFreeCorner(
+  placed: PlacedRect[],
+  clues: PatchClue[],
+  size: number,
+  anchor: Coord,
+  target: Coord,
+  clueIndex: number,
+): Coord {
+  if (isRectFree(placed, clues, boundingRect(anchor, target, size), clueIndex)) return target
+
+  const rowStep = target.row >= anchor.row ? 1 : -1
+  const colStep = target.col >= anchor.col ? 1 : -1
+  const rowSpan = Math.abs(target.row - anchor.row)
+  const colSpan = Math.abs(target.col - anchor.col)
+
+  let best = anchor
+  let bestShrink = rowSpan + colSpan
+  let bestArea = 1
+
+  for (let dr = 0; dr <= rowSpan; dr++) {
+    for (let dc = 0; dc <= colSpan; dc++) {
+      if (dr === 0 && dc === 0) continue // anchor itself is the fallback already recorded above
+      const candidate = { row: anchor.row + dr * rowStep, col: anchor.col + dc * colStep }
+      const rect = boundingRect(anchor, candidate, size)
+      if (!isRectFree(placed, clues, rect, clueIndex)) continue
+      const shrink = rowSpan - dr + (colSpan - dc)
+      const area = rect.width * rect.height
+      // Prefer whatever stays closest to where the pointer actually is; among equally
+      // close options prefer the larger rectangle.
+      if (shrink < bestShrink || (shrink === bestShrink && area > bestArea)) {
+        best = candidate
+        bestShrink = shrink
+        bestArea = area
+      }
+    }
+  }
+  return best
 }
 
 export function isMismatched(rect: Rect, clue: PatchClue): boolean {

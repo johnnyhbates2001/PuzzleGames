@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { isMismatched, isRectFree, isSolved, placedRectAt } from './validator'
+import { isMismatched, isRectFree, isSolved, nearestFreeCorner, placedRectAt } from './validator'
 import type { PatchClue, Rect } from './types'
 
 // Same 2x2 two-wide-dominoes puzzle used in solver.test.ts.
@@ -24,6 +24,28 @@ describe('isRectFree', () => {
   it('refuses a rectangle that swallows another clue\'s cell', () => {
     const wholeGrid: Rect = { row: 0, col: 0, width: 2, height: 2 }
     expect(isRectFree([], CLUES, wholeGrid, 0)).toBe(false) // contains clue 1's cell too
+  })
+})
+
+describe('nearestFreeCorner', () => {
+  it('returns the target unchanged when its rectangle is already free', () => {
+    expect(nearestFreeCorner([], CLUES, 2, { row: 0, col: 0 }, { row: 0, col: 1 }, 0)).toEqual({ row: 0, col: 1 })
+  })
+
+  it('snaps a one-cell overshoot back to the largest still-free rectangle', () => {
+    // Clue 0 anchors at (0,0). BOTTOM is already placed on row 1. Dragging to (1,1)
+    // would overlap it, so the drag should snap back to row 0 — the same width the
+    // player was dragging, just without swallowing the placed row.
+    const placed = [{ rect: BOTTOM, clueIndex: 1 }]
+    const end = nearestFreeCorner(placed, CLUES, 2, { row: 0, col: 0 }, { row: 1, col: 1 }, 0)
+    expect(end).toEqual({ row: 0, col: 1 })
+  })
+
+  it('falls back to the anchor cell when nothing bigger fits', () => {
+    const placed = [{ rect: BOTTOM, clueIndex: 1 }]
+    // Dragging straight down into the placed row, with no room to the side either.
+    const end = nearestFreeCorner(placed, CLUES, 2, { row: 0, col: 0 }, { row: 1, col: 0 }, 0)
+    expect(end).toEqual({ row: 0, col: 0 })
   })
 })
 
