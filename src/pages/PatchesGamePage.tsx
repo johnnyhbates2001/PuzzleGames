@@ -46,10 +46,16 @@ const HINT_OPTIONS: HintOption[] = [
   { id: 'reveal-clue', icon: <SparkleIcon />, title: 'Reveal a patch', desc: "Places one clue's correct rectangle.", price: 120 },
 ]
 
+// Each swatch fixes its short side at the same 14px (h-3.5/w-3.5) and lets the
+// aspect-ratio class grow the long side from there — square fixes both sides equally,
+// wide fixes height and grows width, tall fixes width and grows height. Fixing height
+// for all three (as this used to) made 'tall' the odd one out: its width shrank below
+// the other two's instead of growing past them, so it read as a stray sliver rather
+// than a shape in the same family.
 const SHAPE_LEGEND: { shape: 'square' | 'wide' | 'tall'; label: string; className: string }[] = [
-  { shape: 'square', label: 'Square', className: 'aspect-square' },
-  { shape: 'wide', label: 'Wide', className: 'aspect-[3/2]' },
-  { shape: 'tall', label: 'Tall', className: 'aspect-[2/3]' },
+  { shape: 'square', label: 'Square', className: 'h-3.5 aspect-square' },
+  { shape: 'wide', label: 'Wide', className: 'h-3.5 aspect-[3/2]' },
+  { shape: 'tall', label: 'Tall', className: 'w-3.5 aspect-[2/3]' },
 ]
 
 // First-guess placeholder, not derived from real solve-time data — tune once the user
@@ -491,7 +497,7 @@ export default function PatchesGamePage({ freePlay = false }: { freePlay?: boole
             <div className="flex gap-4">
               {SHAPE_LEGEND.map(({ shape, label, className }) => (
                 <span key={shape} className="flex items-center gap-1.5 text-[11.5px] font-semibold text-ink-muted opacity-75">
-                  <span className={`h-3.5 rounded-[3px] border-2 border-ink-muted ${className}`} />
+                  <span className={`rounded-[3px] border-2 border-ink-muted ${className}`} />
                   {label}
                 </span>
               ))}
