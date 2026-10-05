@@ -4,6 +4,7 @@ import { useAppNavigate as useNavigate } from '../hooks/useAppNavigate'
 import { coordKey, type Coord, type Difficulty, type NonogramLevelRecord } from '../engine/nonogram/types'
 import { createInitialState, getWrongCells, nonogramReducer } from '../state/nonogramReducer'
 import type { Mark } from '../engine/nonogram/validator'
+import { findNonogramHint } from '../engine/nonogram/hints'
 import {
   consumeConsumables,
   getDailyChallenge,
@@ -39,10 +40,12 @@ import { FailSheet } from '../components/FailSheet'
 import { formatElapsed } from '../components/Timer'
 import { BossGateSheet, buildBossAssists, TIME_FREEZE_BONUS_MS, type BossAssist } from '../components/BossGateSheet'
 import { LevelContext } from '../components/LevelContext'
+import { HintExplanation } from '../components/HintExplanation'
+import { useHintExplanation } from '../hooks/useHintExplanation'
 import { BoltIcon, EyeIcon, FlagIcon, SparkleIcon } from '../components/icons'
 
 const HINT_OPTIONS: HintOption[] = [
-  { id: 'reveal-cell', icon: <EyeIcon />, title: 'Reveal a cell', desc: 'Fills or X-marks one correct square.', price: 25 },
+  { id: 'next-step', icon: <EyeIcon />, title: 'Show next step', desc: 'Points out the next logical move and explains why.', price: 25 },
   { id: 'check', icon: <FlagIcon />, title: 'Check my work', desc: 'Flags anything currently marked wrong.', price: 40 },
   { id: 'reveal-line', icon: <SparkleIcon />, title: 'Reveal a line', desc: 'Completes one whole row or column.', price: 120 },
 ]
@@ -114,6 +117,7 @@ export default function NonogramGamePage({ freePlay = false }: { freePlay?: bool
   const { playSound, buzz } = useAudio()
 
   const [state, dispatch] = useReducer(nonogramReducer, PLACEHOLDER_LEVEL, (level) => createInitialState(level))
+  const { explanation, show: showHint, dismiss: dismissHint } = useHintExplanation(state.grid)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [coins, setCoins] = useState(0)
@@ -398,6 +402,24 @@ export default function NonogramGamePage({ freePlay = false }: { freePlay?: bool
 
   const handleUseHint = useCallback(
     async (id: string, price: number) => {
+      if (id === 'next-step') {
+        const hint = findNonogramHint(state.level, state.grid)
+        if (!hint || !(await spendCoins(price))) return
+        setCoins((c) => c - price)
+        playSound('hint')
+        setCheckMessage(null)
+        setHintsOpen(false)
+        if (hint.kind === 'mistake') {
+          showHint(hint.message, [hint.cell, ...hint.focus], false)
+          dispatch({ type: 'HINT_CHECK' })
+        } else {
+          actingRef.current = 'hint'
+          showHint(hint.message, [...hint.focus, ...hint.cells], true)
+          dispatch({ type: 'HINT_MARK', cells: hint.cells, now: Date.now() })
+        }
+        return
+      }
+
       const ok = await spendCoins(price)
       if (!ok) return
       setCoins((c) => c - price)
@@ -411,16 +433,13 @@ export default function NonogramGamePage({ freePlay = false }: { freePlay?: bool
       }
 
       setCheckMessage(null)
-      if (id === 'reveal-cell') {
-        actingRef.current = 'hint'
-        dispatch({ type: 'HINT_REVEAL_CELL', now: Date.now() })
-      } else if (id === 'reveal-line') {
+      if (id === 'reveal-line') {
         actingRef.current = 'hint'
         dispatch({ type: 'HINT_REVEAL_LINE', now: Date.now() })
       }
       setHintsOpen(false)
     },
-    [state, playSound],
+    [state, playSound, showHint],
   )
 
   // Context chips for FailSheet — only meaningful while `failed` is set (a boss-
@@ -491,6 +510,7 @@ export default function NonogramGamePage({ freePlay = false }: { freePlay?: bool
             onRetractEnd={(key) => setRetractedCells((prev) => removeMapKey(prev, key))}
             hintedCells={hintedCells}
             onHintPulseEnd={(key) => setHintedCells((prev) => removeKey(prev, key))}
+            focusCells={explanation?.focus}
           />
         )}
 
@@ -511,6 +531,8 @@ export default function NonogramGamePage({ freePlay = false }: { freePlay?: bool
           hintPrice={HINT_OPTIONS[0].price}
           hintsDisabled={modifiers?.noHints}
         />
+
+        {explanation && <HintExplanation message={explanation.message} onDismiss={dismissHint} />}
       </div>
 
       <HintSheet

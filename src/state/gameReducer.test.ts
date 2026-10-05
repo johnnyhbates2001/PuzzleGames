@@ -351,3 +351,20 @@ describe('getWrongQueens', () => {
     expect(getWrongQueens(state).size).toBe(0)
   })
 })
+
+describe('HINT_STEP', () => {
+  it('places the deduced queen (with auto-X) and counts as a hint', () => {
+    const state = gameReducer(fresh(), { type: 'HINT_STEP', queens: [{ row: 0, col: 1 }], crosses: [], now: 0 })
+    expect(state.board[0][1].queen).toBe(true)
+    expect(state.board[0][0].autoXSources.size).toBeGreaterThan(0)
+    expect(state.hintsUsed).toBe(1)
+  })
+
+  it('crosses out the deduced squares without touching queens', () => {
+    let state = gameReducer(fresh(), { type: 'CELL_CLICK', row: 0, col: 1, now: 0 })
+    state = gameReducer(state, { type: 'CELL_CLICK', row: 0, col: 1, now: 0 })
+    state = gameReducer(state, { type: 'HINT_STEP', queens: [], crosses: [{ row: 3, col: 0 }, { row: 0, col: 1 }], now: 0 })
+    expect(state.board[3][0].manualX).toBe(true)
+    expect(state.board[0][1].queen).toBe(true)
+  })
+})

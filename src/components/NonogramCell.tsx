@@ -1,6 +1,7 @@
 import { memo, type CSSProperties } from 'react'
 import type { Mark } from '../engine/nonogram/validator'
 import { useEquippedCosmetic } from '../hooks/useCosmetics'
+import { HINT_FOCUS_RING } from './hintFocus'
 
 interface NonogramCellProps {
   row: number
@@ -24,6 +25,8 @@ interface NonogramCellProps {
    *  (now-marked) content gold. Cleared via onHintPulseEnd. */
   hinted?: boolean
   onHintPulseEnd?: () => void
+  /** Outlined gold while a "Show next step" explanation refers to this square. */
+  focused?: boolean
   onClick: (row: number, col: number) => void
 }
 
@@ -67,6 +70,7 @@ function NonogramCellImpl({
   onRetractEnd,
   hinted,
   onHintPulseEnd,
+  focused,
   onClick,
 }: NonogramCellProps) {
   const showGhost = !!retractGhostMark && mark === 'empty'
@@ -87,7 +91,7 @@ function NonogramCellImpl({
         borderRight ? 'border-r-2 border-r-grid-line-strong' : 'border-r border-r-grid-gap'
       } ${borderBottom ? 'border-b-2 border-b-grid-line-strong' : 'border-b border-b-grid-gap'} ${
         sweepDelayMs !== undefined ? 'anim-solve-sweep' : ''
-      } ${hinted ? 'anim-hint-pulse' : ''}`}
+      } ${hinted ? 'anim-hint-pulse' : ''} ${focused ? HINT_FOCUS_RING : ''}`}
       style={{ animationDelay: sweepDelayMs !== undefined ? `${sweepDelayMs}ms` : undefined }}
       onAnimationEnd={hinted ? handleAnimationEnd : undefined}
     >

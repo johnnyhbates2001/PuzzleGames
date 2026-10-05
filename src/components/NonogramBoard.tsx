@@ -30,6 +30,9 @@ interface NonogramBoardProps {
   /** Cells (coordKey) a reveal-hint just marked — pulses once, gold. */
   hintedCells?: Set<string>
   onHintPulseEnd?: (key: string) => void
+  /** Cells (coordKey) a "Show next step" hint's reasoning refers to — outlined gold
+   *  while its explanation is showing (see HintExplanation). */
+  focusCells?: Set<string>
   className?: string
 }
 
@@ -62,6 +65,7 @@ export function NonogramBoard({
   onRetractEnd,
   hintedCells,
   onHintPulseEnd,
+  focusCells,
   className,
 }: NonogramBoardProps) {
   const { size, rowClues, colClues } = level
@@ -166,6 +170,7 @@ export function NonogramBoard({
           retractGhostMark={retractedCells?.get(key) ?? null}
           onRetractEnd={() => onRetractEnd?.(key)}
           hinted={!!hintedCells?.has(key)}
+          focused={!!focusCells?.has(key)}
           onHintPulseEnd={() => onHintPulseEnd?.(key)}
           onClick={onCellClick}
         />,

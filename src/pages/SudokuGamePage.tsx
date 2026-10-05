@@ -3,6 +3,7 @@ import { useLocation, useParams } from 'react-router-dom'
 import { useAppNavigate as useNavigate } from '../hooks/useAppNavigate'
 import { SUDOKU_SIZE, boxIndex, coordKey, type Coord, type Difficulty } from '../engine/sudoku/types'
 import { createInitialState, getWrongCells } from '../state/sudokuReducer'
+import { findSudokuHint } from '../engine/sudoku/hints'
 import { boardValues, digitCounts, type SudokuCellState } from '../state/sudokuTypes'
 import {
   consumeConsumables,
@@ -36,10 +37,12 @@ import { FailSheet } from '../components/FailSheet'
 import { formatElapsed } from '../components/Timer'
 import { BossGateSheet, buildBossAssists, TIME_FREEZE_BONUS_MS, type BossAssist } from '../components/BossGateSheet'
 import { LevelContext } from '../components/LevelContext'
+import { HintExplanation } from '../components/HintExplanation'
+import { useHintExplanation } from '../hooks/useHintExplanation'
 import { BoltIcon, EyeIcon, FlagIcon, SparkleIcon } from '../components/icons'
 
 const HINT_OPTIONS: HintOption[] = [
-  { id: 'reveal-cell', icon: <EyeIcon />, title: 'Reveal a cell', desc: 'Fills one correct square of your choice.', price: 25 },
+  { id: 'next-step', icon: <EyeIcon />, title: 'Show next step', desc: 'Points out the next logical move and explains why.', price: 25 },
   { id: 'check', icon: <FlagIcon />, title: 'Check my work', desc: 'Flags anything currently placed wrong.', price: 40 },
   { id: 'solve-box', icon: <SparkleIcon />, title: 'Solve a box', desc: 'Completes one whole 3×3 box.', price: 120 },
 ]
@@ -131,6 +134,7 @@ export default function SudokuGamePage({ freePlay = false, variant: variantId = 
   const { playSound, buzz } = useAudio()
 
   const [state, dispatch] = useReducer(variant.reducer, PLACEHOLDER_LEVEL, (level) => createInitialState(level))
+  const { explanation, show: showHint, dismiss: dismissHint } = useHintExplanation(state.board)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [coins, setCoins] = useState(0)
@@ -458,6 +462,24 @@ export default function SudokuGamePage({ freePlay = false, variant: variantId = 
 
   const handleUseHint = useCallback(
     async (id: string, price: number) => {
+      if (id === 'next-step') {
+        const hint = findSudokuHint({ values: boardValues(state.board), solution: state.level.solution, cages: state.level.cages })
+        if (!hint || !(await spendCoins(price))) return
+        setCoins((c) => c - price)
+        playSound('hint')
+        setCheckMessage(null)
+        setHintsOpen(false)
+        if (hint.kind === 'mistake') {
+          showHint(hint.message, [hint.cell, ...hint.focus], false)
+          dispatch({ type: 'HINT_CHECK' })
+        } else {
+          actingRef.current = 'hint'
+          showHint(hint.message, [hint.cell, ...hint.focus], true)
+          dispatch({ type: 'HINT_PLACE', row: hint.cell.row, col: hint.cell.col, digit: hint.digit, now: Date.now() })
+        }
+        return
+      }
+
       const ok = await spendCoins(price)
       if (!ok) return
       setCoins((c) => c - price)
@@ -471,16 +493,13 @@ export default function SudokuGamePage({ freePlay = false, variant: variantId = 
       }
 
       setCheckMessage(null)
-      if (id === 'reveal-cell') {
-        actingRef.current = 'hint'
-        dispatch({ type: 'HINT_REVEAL_CELL', now: Date.now() })
-      } else if (id === 'solve-box') {
+      if (id === 'solve-box') {
         actingRef.current = 'hint'
         dispatch({ type: 'HINT_SOLVE_BOX', now: Date.now() })
       }
       setHintsOpen(false)
     },
-    [state, playSound],
+    [state, playSound, showHint],
   )
 
   useEffect(() => {
@@ -573,6 +592,7 @@ export default function SudokuGamePage({ freePlay = false, variant: variantId = 
               onRetractEnd={(key) => setRetractedCells((prev) => removeMapKey(prev, key))}
               hintedCells={hintedCells}
               onHintPulseEnd={(key) => setHintedCells((prev) => removeSetKey(prev, key))}
+              focusCells={explanation?.focus}
               completedUnitCells={completedUnitCells}
               onUnitCompleteEnd={(key) => setCompletedUnitCells((prev) => removeMapKey(prev, key))}
             />
@@ -602,6 +622,8 @@ export default function SudokuGamePage({ freePlay = false, variant: variantId = 
           hintPrice={HINT_OPTIONS[0].price}
           hintsDisabled={modifiers?.noHints}
         />
+
+        {explanation && <HintExplanation message={explanation.message} onDismiss={dismissHint} />}
       </div>
 
       <HintSheet

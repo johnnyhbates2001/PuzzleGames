@@ -35,6 +35,9 @@ export type GameAction =
   | { type: 'BEGIN_DRAG_MARK' }
   | { type: 'DRAG_MARK_CELL'; row: number; col: number; mode: 'add' | 'erase' }
   | { type: 'HINT_REVEAL_CELL'; now: number }
+  /** A "Show next step" hint (see engine/hints.ts): places the queens and crosses out
+   *  the squares it deduced. */
+  | { type: 'HINT_STEP'; queens: Coord[]; crosses: Coord[]; now: number }
   | { type: 'HINT_SOLVE_REGION'; now: number }
   | { type: 'HINT_CHECK' }
 
@@ -245,6 +248,16 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         { ...state, board, history: pushHistory(state), hintsUsed: state.hintsUsed + 1 },
         action.now,
       )
+    }
+
+    case 'HINT_STEP': {
+      if (state.status === 'won') return state
+      const board = cloneBoard(state.board)
+      for (const p of action.crosses) {
+        if (!board[p.row][p.col].queen) board[p.row][p.col] = { ...board[p.row][p.col], manualX: true }
+      }
+      for (const p of action.queens) revealQueen(board, p, state.level, state.autoPlaceX)
+      return withWinCheck({ ...state, board, history: pushHistory(state), hintsUsed: state.hintsUsed + 1 }, action.now)
     }
 
     case 'HINT_SOLVE_REGION': {

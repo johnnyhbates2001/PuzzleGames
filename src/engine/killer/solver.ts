@@ -30,6 +30,20 @@ for (let mask = 1; mask <= FULL_MASK; mask++) {
   COMBOS[k][s].push(mask)
 }
 
+/** Bitmask (bit d-1 = digit d) of digits an empty cell of a cage can still take: the
+ *  union of every set of distinct, not-yet-used digits that fills the cage's
+ *  `emptyCount` remaining cells to exactly `sum`. Ignores rows/columns/boxes — the
+ *  hint engine (engine/sudoku/hints.ts) layers those on separately so it can say which
+ *  rule ruled out which digit. */
+export function cageOptions(sum: number, emptyCount: number, placed: number[]): number {
+  const used = placed.reduce((m, d) => m | (1 << (d - 1)), 0)
+  const rest = sum - placed.reduce((s, d) => s + d, 0)
+  if (emptyCount < 1 || emptyCount > 9 || rest < 0 || rest > 45) return 0
+  let union = 0
+  for (const m of COMBOS[emptyCount][rest]) if ((m & used) === 0) union |= m
+  return union
+}
+
 function countBits(mask: number): number {
   let n = 0
   while (mask) {

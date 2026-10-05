@@ -2,6 +2,7 @@ import { memo } from 'react'
 import type { CellState } from '../state/types'
 import { hasX } from '../state/types'
 import { XMarkIcon } from './icons'
+import { HINT_FOCUS_RING } from './hintFocus'
 import { QueensMarkerGlyph } from './QueensMarkerGlyph'
 import { useLingeringFlag } from '../hooks/useLingeringFlag'
 import { useEquippedCosmetic } from '../hooks/useCosmetics'
@@ -46,6 +47,8 @@ interface CellProps {
    *  real (now-placed) queen gold. Cleared via onHintPulseEnd. */
   hinted?: boolean
   onHintPulseEnd?: () => void
+  /** Outlined gold while a "Show next step" explanation refers to this square. */
+  focused?: boolean
   onClick: (row: number, col: number) => void
 }
 
@@ -61,6 +64,7 @@ function CellImpl({
   onRetractEnd,
   hinted,
   onHintPulseEnd,
+  focused,
   onClick,
 }: CellProps) {
   const tinted = useLingeringFlag(conflict, CONFLICT_TINT_HOLD_MS)
@@ -75,7 +79,7 @@ function CellImpl({
       aria-label={cell.queen ? 'Queen' : hasX(cell) ? 'Marked' : 'Empty'}
       className={`relative flex aspect-square items-center justify-center text-[min(6vw,28px)] font-semibold leading-none select-none transition-shadow ${
         conflict ? 'anim-shake' : ''
-      } ${tinted ? 'ring-[2.5px] ring-inset ring-danger' : ''} ${sweepDelayMs !== undefined ? 'anim-solve-sweep' : ''} ${
+      } ${tinted ? 'ring-[2.5px] ring-inset ring-danger' : focused ? HINT_FOCUS_RING : ''} ${sweepDelayMs !== undefined ? 'anim-solve-sweep' : ''} ${
         hinted ? 'anim-hint-pulse' : ''
       }`}
       style={{ backgroundColor: regionColor, animationDelay: sweepDelayMs !== undefined ? `${sweepDelayMs}ms` : undefined }}

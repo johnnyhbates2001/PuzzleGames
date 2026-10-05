@@ -246,3 +246,12 @@ describe('getWrongCells', () => {
     expect(getWrongCells(fresh()).size).toBe(0)
   })
 })
+
+describe('HINT_MARK', () => {
+  it("applies a line's deduced fills and crosses", () => {
+    const cells = SOLUTION[0].map((filled, col) => ({ row: 0, col, mark: (filled ? 'filled' : 'x') as 'filled' | 'x' }))
+    const state = nonogramReducer(fresh(), { type: 'HINT_MARK', cells, now: 0 })
+    expect(state.grid[0]).toEqual(cells.map((p) => p.mark))
+    expect(state.hintsUsed).toBe(1)
+  })
+})

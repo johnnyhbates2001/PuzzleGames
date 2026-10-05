@@ -28,6 +28,9 @@ interface BoardProps {
   /** Cells (coordKey) a reveal-hint just filled — pulses once, gold. */
   hintedCells?: Set<string>
   onHintPulseEnd?: (key: string) => void
+  /** Cells (coordKey) a "Show next step" hint's reasoning refers to — outlined gold
+   *  while its explanation is showing (see HintExplanation). */
+  focusCells?: Set<string>
   className?: string
 }
 
@@ -73,6 +76,7 @@ export function Board({
   retractedCells,
   onRetractEnd,
   hintedCells,
+  focusCells,
   onHintPulseEnd,
   className,
 }: BoardProps) {
@@ -170,6 +174,7 @@ export function Board({
               retracting={!!retractedCells?.has(key)}
               onRetractEnd={() => onRetractEnd?.(key)}
               hinted={!!hintedCells?.has(key)}
+              focused={!!focusCells?.has(key)}
               onHintPulseEnd={() => onHintPulseEnd?.(key)}
               onClick={onCellClick}
             />
