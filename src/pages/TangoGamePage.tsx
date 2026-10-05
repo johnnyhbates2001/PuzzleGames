@@ -51,6 +51,11 @@ const HINT_OPTIONS: HintOption[] = [
 // couple of minutes; this leaves room for the 8x8 hard tier too.
 const TIMED_BUDGET_MS = 150_000
 
+// Every cell cycles empty → sun → moon, so a player heading for a moon always passes
+// through a sun first. Rule-breaking is only shown (and Perfect Run only judged) once the
+// board has sat untouched this long, so that in-between sun never flashes red.
+const SETTLE_MS = 800
+
 // Content doesn't matter: this state is replaced by LOAD before the player can interact.
 const BLANK_GRID: TangoGrid = emptyGrid(TANGO_SIZE.easy)
 const PLACEHOLDER_LEVEL: TangoLevelRecord = {
@@ -106,6 +111,7 @@ export default function TangoGamePage({ freePlay = false }: { freePlay?: boolean
   const [modifiers, setModifiers] = useState<LevelModifiers | null>(null)
   const [levelIndex, setLevelIndex] = useState<number | null>(null)
   const [hintedCells, setHintedCells] = useState<Set<string>>(new Set())
+  const [settled, setSettled] = useState<{ levelId: string; grid: TangoGrid } | null>(null)
   const hintingRef = useRef(false)
   const prevGridRef = useRef(state.grid)
   const [failed, setFailed] = useState<{ reason: 'timeout' | 'mistake' } | null>(null)
@@ -265,6 +271,14 @@ export default function TangoGamePage({ freePlay = false }: { freePlay?: boolean
     prevGridRef.current = state.grid
   }, [state.grid])
 
+  useEffect(() => {
+    const snapshot = { levelId: state.level.id, grid: state.grid }
+    const id = setTimeout(() => setSettled(snapshot), SETTLE_MS)
+    return () => clearTimeout(id)
+  }, [state.grid, state.level.id])
+  // Keyed by level so a newly loaded board never gets judged against the last one's grid.
+  const settledGrid = settled?.levelId === state.level.id ? settled.grid : null
+
   useGameLifecycle(loading, error, state.status, dispatch)
 
   // Autosave in-progress state so leaving and returning resumes this exact board.
@@ -300,11 +314,12 @@ export default function TangoGamePage({ freePlay = false }: { freePlay?: boolean
     recordFreePlayCompletion,
   })
 
-  // Perfect Run: fails the instant a wrong symbol appears — the same check the paid
-  // "check" hint uses, watched continuously while the modifier is active.
+  // Perfect Run: fails once a wrong symbol settles on the board (see SETTLE_MS) — the
+  // same check the paid "check" hint uses, watched continuously while the modifier is
+  // active.
   useEffect(() => {
-    if (!modifiers?.perfectRun || failed || state.status !== 'playing') return
-    if (getWrongCells(state).size > 0) {
+    if (!modifiers?.perfectRun || failed || state.status !== 'playing' || !settledGrid) return
+    if (getWrongCells({ ...state, grid: settledGrid }).size > 0) {
       if (activeAssists.mistake && !mistakeForgivenRef.current) {
         mistakeForgivenRef.current = true
         return
@@ -313,7 +328,7 @@ export default function TangoGamePage({ freePlay = false }: { freePlay?: boolean
       setFailed({ reason: 'mistake' })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state.grid, modifiers, failed, state.status, activeAssists.mistake])
+  }, [settledGrid, modifiers, failed, state.status, activeAssists.mistake])
 
   const handleTryAgain = useCallback(async () => {
     if (!validDifficulty) return
@@ -366,7 +381,18 @@ export default function TangoGamePage({ freePlay = false }: { freePlay?: boolean
     [state, playSound],
   )
 
-  const conflicts = useMemo(() => getConflicts(state.grid, state.level.edges), [state.grid, state.level.edges])
+  // Only conflicts present both now and on the settled board, on cells unchanged since —
+  // a fix clears its red at once, but a new conflict waits for SETTLE_MS.
+  const conflicts = useMemo(() => {
+    if (!settledGrid) return new Set<string>()
+    const settledConflicts = getConflicts(settledGrid, state.level.edges)
+    return new Set(
+      [...getConflicts(state.grid, state.level.edges)].filter((key) => {
+        const [r, c] = key.split(',').map(Number)
+        return settledConflicts.has(key) && settledGrid[r][c] === state.grid[r][c]
+      }),
+    )
+  }, [state.grid, settledGrid, state.level.edges])
 
   const failChips = useMemo(() => {
     if (!failed) return undefined

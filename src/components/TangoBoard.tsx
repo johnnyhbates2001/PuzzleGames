@@ -1,9 +1,7 @@
 import { memo } from 'react'
 import { EMPTY, type EdgeClue, type TangoGrid, type TangoValue } from '../engine/tango/types'
-import { useLingeringFlag } from '../hooks/useLingeringFlag'
 import { TangoSymbol } from './TangoSymbol'
 
-const CONFLICT_TINT_HOLD_MS = 900
 const SWEEP_STEP_MS = 42
 
 interface TangoBoardProps {
@@ -89,7 +87,6 @@ interface TangoCellProps {
 }
 
 const TangoCell = memo(function TangoCell({ row, col, size, value, given, conflict, sweepDelayMs, hinted, onHintPulseEnd, onClick }: TangoCellProps) {
-  const tinted = useLingeringFlag(conflict, CONFLICT_TINT_HOLD_MS)
   const borders = [col === size - 1 ? '' : 'border-r border-r-grid-gap', row === size - 1 ? '' : 'border-b border-b-grid-gap'].join(' ')
 
   return (
@@ -97,11 +94,20 @@ const TangoCell = memo(function TangoCell({ row, col, size, value, given, confli
       type="button"
       data-row={row}
       data-col={col}
-      onClick={() => onClick(row, col)}
+      // Cycles on pointer-down, not click: a phone can delay or swallow the second click
+      // of a fast double tap (read as a zoom / double-click), which left a quick
+      // sun → moon double tap stuck on sun. onClick is kept only for keyboard activation
+      // (detail === 0), so a tap never counts twice.
+      onPointerDown={(e) => {
+        if (e.button === 0) onClick(row, col)
+      }}
+      onClick={(e) => {
+        if (e.detail === 0) onClick(row, col)
+      }}
       aria-label={value === EMPTY ? 'Empty' : value === 1 ? 'Sun' : 'Moon'}
-      className={`relative flex aspect-square items-center justify-center select-none ${borders} ${given ? 'bg-bg' : 'bg-surface'} ${
+      className={`relative flex aspect-square touch-manipulation items-center justify-center select-none ${borders} ${given ? 'bg-bg' : 'bg-surface'} ${
         conflict ? 'anim-shake' : ''
-      } ${tinted ? 'ring-[2.5px] ring-inset ring-danger' : ''} ${sweepDelayMs !== undefined ? 'anim-solve-sweep' : ''} ${hinted ? 'anim-hint-pulse' : ''}`}
+      } ${conflict ? 'ring-[2.5px] ring-inset ring-danger' : ''} ${sweepDelayMs !== undefined ? 'anim-solve-sweep' : ''} ${hinted ? 'anim-hint-pulse' : ''}`}
       style={{ animationDelay: sweepDelayMs !== undefined ? `${sweepDelayMs}ms` : undefined }}
       onAnimationEnd={hinted ? (e) => e.animationName === 'hint-pulse' && onHintPulseEnd() : undefined}
     >
