@@ -22,7 +22,7 @@ export interface CosmeticItem {
   locked?: CosmeticLock
 }
 
-/** The 10 new shop categories from the Shop Expansion handoff — board skins stay on
+/** The shop categories from the Shop Expansion handoff — board skins stay on
  *  their own dedicated system (skins.ts) since it already existed and this expansion
  *  only added an `endlessRank` lock kind to it, not a new category key. */
 export type CosmeticCategory =
@@ -32,6 +32,7 @@ export type CosmeticCategory =
   | 'patchesBadgeShape'
   | 'nonogramTexture'
   | 'wordleTileStyle'
+  | 'tangoSymbolSet'
   | 'confetti'
   | 'celebration'
   | 'soundPack'
@@ -131,6 +132,20 @@ export const COSMETIC_CATEGORIES: CosmeticCategoryDef[] = [
       { id: 'retro-type', name: 'Retro Type', tag: 'Monospace terminal', price: 230 },
       { id: 'gradient-flip', name: 'Gradient Flip', tag: 'Locked · Chapter 12', price: null, locked: { chapterNeeded: 12 } },
       { id: 'neon-glow', name: 'Neon Glow', tag: 'Locked · Wordle Expert', price: null, locked: { achievementId: 'wordle-expert' } },
+    ],
+  },
+  {
+    key: 'tangoSymbolSet',
+    label: 'Tango · symbol sets',
+    blurb: 'Swap the sun and moon for another pair of pieces.',
+    defaultId: 'classic',
+    items: [
+      { id: 'classic', name: 'Sun & Moon', tag: 'Default', price: null },
+      { id: 'fire-ice', name: 'Fire & Ice', tag: 'Flame and snowflake', price: 290 },
+      { id: 'dots-rings', name: 'Dots & Rings', tag: 'Minimal', price: 210 },
+      { id: 'x-o', name: 'X & O', tag: 'Tic-tac-toe', price: 240 },
+      { id: 'go-stones', name: 'Go Stones', tag: 'Locked · Chapter 24', price: null, locked: { chapterNeeded: 24 } },
+      { id: 'neon', name: 'Neon', tag: 'Locked · Tango Expert', price: null, locked: { achievementId: 'tango-expert' } },
     ],
   },
   {

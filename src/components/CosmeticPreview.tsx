@@ -1,6 +1,8 @@
 import type { CosmeticCategory } from '../cosmetics'
 import { QueensMarkerGlyph } from './QueensMarkerGlyph'
 import { FlameIcon } from './icons'
+import { TangoSymbol } from './TangoSymbol'
+import { MOON, SUN } from '../engine/tango/types'
 
 const ACCENT_SWATCH: Record<string, string> = {
   coral: 'oklch(64% 0.18 30)',
@@ -225,6 +227,13 @@ export function CosmeticPreview({ category, id }: { category: CosmeticCategory; 
       return (
         <div className="relative aspect-square overflow-hidden rounded-[9px]">
           <NonogramTextureSwatch id={id} />
+        </div>
+      )
+    case 'tangoSymbolSet':
+      return (
+        <div className="flex aspect-square items-center justify-center gap-1 rounded-[9px] bg-accent-tint">
+          <TangoSymbol value={SUN} set={id} className="size-[34%]" />
+          <TangoSymbol value={MOON} set={id} className="size-[34%]" />
         </div>
       )
     case 'wordleTileStyle':
