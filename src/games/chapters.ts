@@ -6,6 +6,8 @@ import {
   getPatchesProgress,
   getNonogramProgress,
   getWordleProgress,
+  getKillerProgress,
+  getTangoProgress,
 } from '../storage/db'
 
 export const LEVELS_PER_CHAPTER = 20
@@ -23,7 +25,7 @@ export interface ChapterMeta {
   skinId?: string
 }
 
-// Shared across all 6 games to keep initial content-authoring low — each game can
+// Shared across all 8 games to keep initial content-authoring low — each game can
 // diverge later. Index 0 = chapter 1. Chapters 1-10 are easy, 11-25 medium, 26-50 hard
 // (see CHAPTERS_PER_TIER) — a skin unlocks every 3rd chapter regardless of tier
 // boundary, so a handful of tier-boundary chapter numbers (21, 24, 27, 30) kept their
@@ -169,7 +171,16 @@ export function buildChapterNodes(currentLevelIndexByDifficulty: Record<Difficul
   return nodes
 }
 
-const ALL_PROGRESS_GETTERS = [getProgress, getSudokuProgress, getZipProgress, getPatchesProgress, getNonogramProgress, getWordleProgress]
+const ALL_PROGRESS_GETTERS = [
+  getProgress,
+  getSudokuProgress,
+  getZipProgress,
+  getPatchesProgress,
+  getNonogramProgress,
+  getWordleProgress,
+  getKillerProgress,
+  getTangoProgress,
+]
 const ALL_DIFFICULTIES: Difficulty[] = ['easy', 'medium', 'hard']
 
 /** Highest story chapter number completed across every game/difficulty — used for the
@@ -225,7 +236,7 @@ export function endlessProgress(hardCurrentLevelIndex: number): EndlessProgress 
   }
 }
 
-const ALL_HARD_PROGRESS_GETTERS = [getProgress, getSudokuProgress, getZipProgress, getPatchesProgress, getNonogramProgress, getWordleProgress]
+const ALL_HARD_PROGRESS_GETTERS = ALL_PROGRESS_GETTERS
 
 /** Highest Endless rank reached (as a RANKS index) across every game's hard difficulty —
  *  used for the Endless-rank-gated Shop cosmetics (e.g. Eclipse/Coastal/Wildfire board

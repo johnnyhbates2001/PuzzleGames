@@ -1,10 +1,9 @@
 import { useEffect, useState } from 'react'
 import { AppLink as Link } from '../components/AppLink'
-import type { Difficulty } from '../engine/sudoku/types'
-import { averageTimeMs, type DifficultyProgress } from '../storage/db'
-import { SUDOKU_VARIANTS, type SudokuVariantId } from '../games/sudokuVariants'
+import { TANGO_SIZE, type Difficulty } from '../engine/tango/types'
+import { averageTimeMs, getTangoProgress, type DifficultyProgress } from '../storage/db'
 import { formatElapsed } from '../components/Timer'
-import { SudokuGridPreview } from '../components/SudokuGridPreview'
+import { TangoGridPreview } from '../components/TangoGridPreview'
 import { RulesButton, RulesSheet } from '../components/RulesSheet'
 import { useAutoOpenRulesOnce } from '../hooks/useAutoOpenRulesOnce'
 import { GAME_RULES } from '../games/rules'
@@ -17,15 +16,14 @@ const DOT_CLASS: Record<Difficulty, string> = {
   hard: 'bg-diff-hard',
 }
 
-export default function SudokuDifficultyPage({ variant: variantId = 'sudoku' }: { variant?: SudokuVariantId }) {
-  const variant = SUDOKU_VARIANTS[variantId]
+export default function TangoDifficultyPage() {
   const [progress, setProgress] = useState<Partial<Record<Difficulty, DifficultyProgress>>>({})
   const [rulesOpen, setRulesOpen] = useState(false)
-  useAutoOpenRulesOnce(variant.id, setRulesOpen)
+  useAutoOpenRulesOnce('tango', setRulesOpen)
 
   useEffect(() => {
     let cancelled = false
-    Promise.all(DIFFICULTIES.map((d) => variant.getProgress(d))).then((results) => {
+    Promise.all(DIFFICULTIES.map((d) => getTangoProgress(d))).then((results) => {
       if (cancelled) return
       const map: Partial<Record<Difficulty, DifficultyProgress>> = {}
       DIFFICULTIES.forEach((d, i) => {
@@ -36,11 +34,11 @@ export default function SudokuDifficultyPage({ variant: variantId = 'sudoku' }: 
     return () => {
       cancelled = true
     }
-  }, [variant])
+  }, [])
 
   return (
     <main
-      data-game={variant.id}
+      data-game="tango"
       className="mx-auto flex min-h-svh max-w-lg flex-col justify-center gap-6 bg-bg px-4 py-[max(2rem,env(safe-area-inset-top))] text-ink"
     >
       <div className="flex items-center justify-between">
@@ -55,7 +53,7 @@ export default function SudokuDifficultyPage({ variant: variantId = 'sudoku' }: 
         </Link>
         <RulesButton onClick={() => setRulesOpen(true)} />
       </div>
-      <h1 className="font-display text-[28px] font-extrabold">{variant.title}</h1>
+      <h1 className="font-display text-[28px] font-extrabold">Tango</h1>
       <div className="flex flex-col gap-3">
         {DIFFICULTIES.map((d) => {
           const p = progress[d]
@@ -63,18 +61,18 @@ export default function SudokuDifficultyPage({ variant: variantId = 'sudoku' }: 
           return (
             <Link
               key={d}
-              to={`${variant.basePath}/${d}`}
+              to={`/tango/${d}`}
               className="flex items-center gap-4 rounded-[20px] bg-surface p-4 shadow-card transition hover:shadow-md"
             >
               <div className="size-[52px] shrink-0 overflow-hidden rounded-xl bg-bg p-1.5">
-                <SudokuGridPreview />
+                <TangoGridPreview />
               </div>
               <div className="flex-1">
                 <div className="flex items-center gap-1.5">
                   <span className={`size-2 shrink-0 rounded-full ${DOT_CLASS[d]}`} />
                   <h2 className="text-[17px] font-bold">{LABELS[d]}</h2>
                 </div>
-                <p className="mt-0.5 text-[13px] text-ink-muted">9×9</p>
+                <p className="mt-0.5 text-[13px] text-ink-muted">{TANGO_SIZE[d]}×{TANGO_SIZE[d]}</p>
               </div>
               <div className="text-right">
                 <p className="text-[13px] text-ink-muted">{p ? p.completedCount : 0} done</p>
@@ -90,10 +88,10 @@ export default function SudokuDifficultyPage({ variant: variantId = 'sudoku' }: 
       <RulesSheet
         open={rulesOpen}
         onClose={() => setRulesOpen(false)}
-        title={variant.title}
-        steps={GAME_RULES[variant.id].steps}
-        tip={GAME_RULES[variant.id].tip}
-        gameId={variant.id}
+        title="Tango"
+        steps={GAME_RULES.tango.steps}
+        tip={GAME_RULES.tango.tip}
+        gameId="tango"
       />
     </main>
   )

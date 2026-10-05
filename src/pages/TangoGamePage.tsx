@@ -1,20 +1,24 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import { useLocation, useParams } from 'react-router-dom'
 import { useAppNavigate as useNavigate } from '../hooks/useAppNavigate'
-import { SUDOKU_SIZE, boxIndex, coordKey, type Coord, type Difficulty } from '../engine/sudoku/types'
-import { createInitialState, getWrongCells } from '../state/sudokuReducer'
-import { boardValues, digitCounts, type SudokuCellState } from '../state/sudokuTypes'
+import { coordKey, EMPTY, TANGO_SIZE, emptyGrid, type Difficulty, type TangoGrid, type TangoLevelRecord } from '../engine/tango/types'
+import { getConflicts } from '../engine/tango/validator'
+import { createInitialState, getWrongCells, tangoReducer } from '../state/tangoReducer'
 import {
   consumeConsumables,
   getDailyChallenge,
   getSettings,
+  getTangoInProgress,
+  getTangoProgress,
   recordFreePlayCompletion,
+  recordTangoCompletion,
+  saveTangoInProgress,
   spendCoins,
   type ConsumableKind,
-  type SudokuInProgressLevel,
+  type TangoInProgressLevel,
 } from '../storage/db'
-import { todayDateKey } from '../games/dailyChallenge'
-import { SUDOKU_VARIANTS, type SudokuFamilyLevel, type SudokuVariantId } from '../games/sudokuVariants'
+import { getFreePlayTangoLevel, getNextTangoLevel } from '../games/tangoLevels'
+import { getDailyTangoLevel, todayDateKey } from '../games/dailyChallenge'
 import {
   chapterForIndex,
   endlessProgress,
@@ -27,9 +31,8 @@ import {
 import { useGameLifecycle } from '../hooks/useGameLifecycle'
 import { useGameCompletion, type ChapterReplaySession } from '../hooks/useGameCompletion'
 import { useAudio } from '../hooks/useAudio'
-import { SudokuBoard } from '../components/SudokuBoard'
-import { SudokuKeypad } from '../components/SudokuKeypad'
-import { SudokuControls } from '../components/SudokuControls'
+import { TangoBoard } from '../components/TangoBoard'
+import { TangoControls } from '../components/TangoControls'
 import { GameHeader } from '../components/GameHeader'
 import { HintSheet, type HintOption } from '../components/HintSheet'
 import { FailSheet } from '../components/FailSheet'
@@ -39,20 +42,23 @@ import { LevelContext } from '../components/LevelContext'
 import { BoltIcon, EyeIcon, FlagIcon, SparkleIcon } from '../components/icons'
 
 const HINT_OPTIONS: HintOption[] = [
-  { id: 'reveal-cell', icon: <EyeIcon />, title: 'Reveal a cell', desc: 'Fills one correct square of your choice.', price: 25 },
+  { id: 'reveal-cell', icon: <EyeIcon />, title: 'Reveal a cell', desc: 'Fills the next square you still need.', price: 25 },
   { id: 'check', icon: <FlagIcon />, title: 'Check my work', desc: 'Flags anything currently placed wrong.', price: 40 },
-  { id: 'solve-box', icon: <SparkleIcon />, title: 'Solve a box', desc: 'Completes one whole 3×3 box.', price: 120 },
+  { id: 'solve-row', icon: <SparkleIcon />, title: 'Solve a row', desc: 'Completes one whole row.', price: 100 },
 ]
 
-// Shape must be a real 9x9 grid — the validator/board components are hardcoded to
-// SUDOKU_SIZE (real Sudoku is always 9x9, unlike Queens' per-difficulty size), so an
-// undersized placeholder would throw as soon as anything reads past index 0. Content
-// doesn't matter: this state is replaced by LOAD before the player can interact.
-const BLANK_GRID = Array.from({ length: SUDOKU_SIZE }, () => new Array<number>(SUDOKU_SIZE).fill(0))
-const PLACEHOLDER_LEVEL: SudokuFamilyLevel = {
+// First-guess placeholder, not derived from real solve-time data — a 6x6 Tango is a
+// couple of minutes; this leaves room for the 8x8 hard tier too.
+const TIMED_BUDGET_MS = 150_000
+
+// Content doesn't matter: this state is replaced by LOAD before the player can interact.
+const BLANK_GRID: TangoGrid = emptyGrid(TANGO_SIZE.easy)
+const PLACEHOLDER_LEVEL: TangoLevelRecord = {
   id: 'placeholder',
   difficulty: 'easy',
-  puzzle: BLANK_GRID,
+  size: TANGO_SIZE.easy,
+  givens: BLANK_GRID,
+  edges: [],
   solution: BLANK_GRID,
 }
 
@@ -67,62 +73,23 @@ function removeSetKey(set: Set<string>, key: string): Set<string> {
   return next
 }
 
-function removeMapKey<T>(map: Map<string, T>, key: string): Map<string, T> {
-  if (!map.has(key)) return map
-  const next = new Map(map)
-  next.delete(key)
-  return next
+/** Cells that went from empty to filled between two grids — what a hint just placed. */
+function addedCells(prev: TangoGrid, next: TangoGrid): string[] {
+  const out: string[] = []
+  next.forEach((row, r) =>
+    row.forEach((v, c) => {
+      if (v !== EMPTY && prev[r]?.[c] !== v) out.push(coordKey({ row: r, col: c }))
+    }),
+  )
+  return out
 }
-
-/** Cells whose value changed between two board snapshots. `removed`/`added` cover the
- *  0<->nonzero transitions Undo and a reveal-hint each produce; `changed` covers every
- *  value change (including an overwrite), used to find the just-placed digit for the
- *  unit-complete check. */
-function diffSudokuCells(prev: SudokuCellState[][], next: SudokuCellState[][]): { removed: Coord[]; added: Coord[]; changed: Coord[] } {
-  const removed: Coord[] = []
-  const added: Coord[] = []
-  const changed: Coord[] = []
-  for (let r = 0; r < prev.length; r++) {
-    for (let c = 0; c < prev[r].length; c++) {
-      const prevValue = prev[r][c]?.value ?? 0
-      const nextValue = next[r]?.[c]?.value ?? 0
-      if (prevValue === nextValue) continue
-      changed.push({ row: r, col: c })
-      if (prevValue !== 0 && nextValue === 0) removed.push({ row: r, col: c })
-      else if (prevValue === 0 && nextValue !== 0) added.push({ row: r, col: c })
-    }
-  }
-  return { removed, added, changed }
-}
-
-/** A row/col/box is complete once none of its 9 values are 0 and none repeat. */
-function isUnitComplete(values: number[]): boolean {
-  return values.every((v) => v !== 0) && new Set(values).size === SUDOKU_SIZE
-}
-
-function unitCoords(kind: 'row' | 'col' | 'box', row: number, col: number): Coord[] {
-  if (kind === 'row') return Array.from({ length: SUDOKU_SIZE }, (_, c) => ({ row, col: c }))
-  if (kind === 'col') return Array.from({ length: SUDOKU_SIZE }, (_, r) => ({ row: r, col }))
-  const box = boxIndex(row, col)
-  const coords: Coord[] = []
-  for (let r = 0; r < SUDOKU_SIZE; r++) {
-    for (let c = 0; c < SUDOKU_SIZE; c++) {
-      if (boxIndex(r, c) === box) coords.push({ row: r, col: c })
-    }
-  }
-  return coords
-}
-
-const UNIT_COMPLETE_STEP_MS = 55
 
 interface ReplayLocationState {
-  replayLevel?: SudokuFamilyLevel
+  replayLevel?: TangoLevelRecord
   chapterReplay?: ChapterReplaySession
 }
 
-/** Plays both classic Sudoku and Killer Sudoku — see games/sudokuVariants.ts. */
-export default function SudokuGamePage({ freePlay = false, variant: variantId = 'sudoku' }: { freePlay?: boolean; variant?: SudokuVariantId }) {
-  const variant = SUDOKU_VARIANTS[variantId]
+export default function TangoGamePage({ freePlay = false }: { freePlay?: boolean }) {
   const { difficulty } = useParams<{ difficulty: string }>()
   const navigate = useNavigate()
   const location = useLocation()
@@ -130,24 +97,17 @@ export default function SudokuGamePage({ freePlay = false, variant: variantId = 
   const validDifficulty = isValidDifficulty(difficulty) ? difficulty : null
   const { playSound, buzz } = useAudio()
 
-  const [state, dispatch] = useReducer(variant.reducer, PLACEHOLDER_LEVEL, (level) => createInitialState(level))
+  const [state, dispatch] = useReducer(tangoReducer, PLACEHOLDER_LEVEL, (level) => createInitialState(level))
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [coins, setCoins] = useState(0)
   const [hintsOpen, setHintsOpen] = useState(false)
   const [checkMessage, setCheckMessage] = useState<string | null>(null)
-  const [ripple, setRipple] = useState<{ row: number; col: number; seq: number } | null>(null)
   const [modifiers, setModifiers] = useState<LevelModifiers | null>(null)
   const [levelIndex, setLevelIndex] = useState<number | null>(null)
-  // Retract-ghost (value keyed by coordKey — the removed digit is gone from real state
-  // by the time the diff sees it, so the ghost needs to carry its own content), hint-
-  // pulse targets, and unit-complete cells. `actingRef` tells the board-diff effect
-  // below what caused the change it's about to see (plain placements leave it null).
-  const [retractedCells, setRetractedCells] = useState<Map<string, number>>(new Map())
   const [hintedCells, setHintedCells] = useState<Set<string>>(new Set())
-  const [completedUnitCells, setCompletedUnitCells] = useState<Map<string, number>>(new Map())
-  const actingRef = useRef<'undo' | 'hint' | 'digit' | null>(null)
-  const prevBoardRef = useRef(state.board)
+  const hintingRef = useRef(false)
+  const prevGridRef = useRef(state.grid)
   const [failed, setFailed] = useState<{ reason: 'timeout' | 'mistake' } | null>(null)
   const [awaitingBossConfirm, setAwaitingBossConfirm] = useState(false)
   const [bossChapter, setBossChapter] = useState<number | null>(null)
@@ -155,27 +115,26 @@ export default function SudokuGamePage({ freePlay = false, variant: variantId = 
   const [selectedAssists, setSelectedAssists] = useState<Set<ConsumableKind>>(new Set())
   const [activeAssists, setActiveAssists] = useState({ undo: false, time: false, mistake: false })
   const mistakeForgivenRef = useRef(false)
-  const pendingLoadRef = useRef<{ inProgress: SudokuInProgressLevel | undefined } | null>(null)
+  const pendingLoadRef = useRef<{ inProgress: TangoInProgressLevel | undefined } | null>(null)
   const sourceRef = useRef<{ source: 'bank' | 'generated'; bankIndex?: number }>({ source: 'generated' })
   // Set during load if today's Daily Challenge was already completed — the win effect
-  // reads this to skip re-awarding coins on a replay (recordDailyChallengeCompletion
-  // would otherwise let a player farm coins by re-solving the same puzzle all day).
+  // reads this to skip re-awarding coins on a replay.
   const dailyAlreadyCompletedRef = useRef(false)
   const initialReplayLevelRef = useRef((location.state as ReplayLocationState | null)?.replayLevel)
   const initialChapterReplayRef = useRef((location.state as ReplayLocationState | null)?.chapterReplay)
 
   const finishLoad = useCallback(
-    async (inProgress: SudokuInProgressLevel | undefined) => {
+    async (inProgress: TangoInProgressLevel | undefined) => {
       if (inProgress) {
         sourceRef.current = { source: inProgress.levelSource, bankIndex: inProgress.bankIndex }
-        dispatch({ type: 'LOAD', level: inProgress.level, snapshot: { board: inProgress.board, elapsedMs: inProgress.elapsedMs } })
+        dispatch({ type: 'LOAD', level: inProgress.level, snapshot: { grid: inProgress.grid, elapsedMs: inProgress.elapsedMs } })
         return
       }
-      const next = await variant.getNextLevel(validDifficulty as Difficulty)
+      const next = await getNextTangoLevel(validDifficulty as Difficulty)
       sourceRef.current = { source: next.source, bankIndex: next.bankIndex }
       dispatch({ type: 'LOAD', level: next.level })
     },
-    [validDifficulty, variant],
+    [validDifficulty],
   )
 
   const handleBeginBoss = useCallback(async () => {
@@ -221,7 +180,7 @@ export default function SudokuGamePage({ freePlay = false, variant: variantId = 
           if (cancelled) return
           setCoins(settings.coins)
           sourceRef.current = { source: 'bank' }
-          dispatch({ type: 'LOAD', level: chapterReplay.levels[chapterReplay.index] as SudokuFamilyLevel })
+          dispatch({ type: 'LOAD', level: chapterReplay.levels[chapterReplay.index] as TangoLevelRecord })
           return
         }
 
@@ -234,13 +193,12 @@ export default function SudokuGamePage({ freePlay = false, variant: variantId = 
 
         if (isDaily) {
           const dateKey = todayDateKey()
-          const [settings, existing] = await Promise.all([getSettings(), getDailyChallenge(dateKey, variant.id)])
+          const [settings, existing] = await Promise.all([getSettings(), getDailyChallenge(dateKey, 'tango')])
           if (cancelled) return
           setCoins(settings.coins)
           sourceRef.current = { source: 'generated' }
           dailyAlreadyCompletedRef.current = !!existing
-          const level = variant.getDailyLevel(dateKey)
-          dispatch({ type: 'LOAD', level })
+          dispatch({ type: 'LOAD', level: getDailyTangoLevel(dateKey) })
           return
         }
 
@@ -250,7 +208,7 @@ export default function SudokuGamePage({ freePlay = false, variant: variantId = 
           const settings = await getSettings()
           if (cancelled) return
           setCoins(settings.coins)
-          const next = await variant.getFreePlayLevel(validDifficulty as Difficulty)
+          const next = await getFreePlayTangoLevel(validDifficulty as Difficulty)
           sourceRef.current = { source: next.source }
           dispatch({ type: 'LOAD', level: next.level })
           return
@@ -258,8 +216,8 @@ export default function SudokuGamePage({ freePlay = false, variant: variantId = 
 
         const [settings, inProgress, progress] = await Promise.all([
           getSettings(),
-          variant.getInProgress(validDifficulty as Difficulty),
-          variant.getProgress(validDifficulty as Difficulty),
+          getTangoInProgress(validDifficulty as Difficulty),
+          getTangoProgress(validDifficulty as Difficulty),
         ])
         if (cancelled) return
         setCoins(settings.coins)
@@ -296,73 +254,37 @@ export default function SudokuGamePage({ freePlay = false, variant: variantId = 
     return () => {
       cancelled = true
     }
-  }, [validDifficulty, isDaily, freePlay, finishLoad, variant])
+  }, [validDifficulty, isDaily, freePlay, finishLoad])
 
   useEffect(() => {
-    if (actingRef.current) {
-      const prevBoard = prevBoardRef.current
-      const { removed, added, changed } = diffSudokuCells(prevBoard, state.board)
-      if (actingRef.current === 'undo' && removed.length > 0) {
-        setRetractedCells((prev) => {
-          const next = new Map(prev)
-          removed.forEach((c) => next.set(coordKey(c), prevBoard[c.row][c.col].value))
-          return next
-        })
-      }
-      if (actingRef.current === 'hint' && added.length > 0) {
-        setHintedCells((prev) => {
-          const next = new Set(prev)
-          added.forEach((c) => next.add(coordKey(c)))
-          return next
-        })
-      }
-      if (actingRef.current === 'digit' && changed.length > 0) {
-        const { row, col } = changed[0]
-        const prevValues = boardValues(prevBoard)
-        const nextValues = boardValues(state.board)
-        const newlyComplete = (['row', 'col', 'box'] as const)
-          .map((kind) => unitCoords(kind, row, col))
-          .filter((unit) => !isUnitComplete(unit.map((p) => prevValues[p.row][p.col])) && isUnitComplete(unit.map((p) => nextValues[p.row][p.col])))
-        if (newlyComplete.length > 0) {
-          const delays = new Map<string, number>()
-          for (const unit of newlyComplete) {
-            for (const p of unit) {
-              const delay = Math.max(Math.abs(p.row - row), Math.abs(p.col - col)) * UNIT_COMPLETE_STEP_MS
-              const key = coordKey(p)
-              const existing = delays.get(key)
-              if (existing === undefined || delay < existing) delays.set(key, delay)
-            }
-          }
-          setCompletedUnitCells((prev) => new Map([...prev, ...delays]))
-        }
-      }
-      actingRef.current = null
+    if (hintingRef.current) {
+      const added = addedCells(prevGridRef.current, state.grid)
+      if (added.length > 0) setHintedCells((prev) => new Set([...prev, ...added]))
+      hintingRef.current = false
     }
-    prevBoardRef.current = state.board
-  }, [state.board])
+    prevGridRef.current = state.grid
+  }, [state.grid])
 
   useGameLifecycle(loading, error, state.status, dispatch)
 
   // Autosave in-progress state so leaving and returning resumes this exact board.
-  // Daily Challenge intentionally skips this (see src/games/dailyChallenge.ts) — it
-  // always restarts fresh from the same deterministic puzzle within a day. Free Play
-  // skips it too — every visit is meant to generate a brand new puzzle, not resume.
+  // Daily Challenge and Free Play skip this, same as every other game.
   useEffect(() => {
     if (loading || !validDifficulty || isDaily || freePlay || initialChapterReplayRef.current || state.status !== 'playing') return
-    void variant.saveInProgress({
+    void saveTangoInProgress({
       difficulty: validDifficulty as Difficulty,
       level: state.level,
       levelSource: sourceRef.current.source,
       bankIndex: sourceRef.current.bankIndex,
-      board: state.board,
+      grid: state.grid,
       elapsedMs: state.elapsedMs,
       savedAt: Date.now(),
     })
-  }, [state.board, state.elapsedMs, state.level, state.status, loading, validDifficulty, isDaily, freePlay, variant])
+  }, [state.grid, state.elapsedMs, state.level, state.status, loading, validDifficulty, isDaily, freePlay])
 
   useGameCompletion({
-    gameId: variant.id,
-    basePath: variant.basePath,
+    gameId: 'tango',
+    basePath: '/tango',
     status: state.status,
     isDaily,
     isFreePlay: freePlay,
@@ -371,16 +293,15 @@ export default function SudokuGamePage({ freePlay = false, variant: variantId = 
     elapsedMs: state.elapsedMs,
     hintsUsed: state.hintsUsed,
     level: state.level,
-    extraKey: 'board',
-    extraValue: state.board,
+    extraKey: 'grid',
+    extraValue: state.grid,
     dailyAlreadyCompletedRef,
-    recordCompletion: variant.recordCompletion,
+    recordCompletion: recordTangoCompletion,
     recordFreePlayCompletion,
   })
 
-  // Perfect Run: fails the instant a wrong digit appears, using the same non-mutating
-  // check the paid "check" hint already uses — just watched continuously instead of
-  // on demand, and only while the modifier is actually active.
+  // Perfect Run: fails the instant a wrong symbol appears — the same check the paid
+  // "check" hint uses, watched continuously while the modifier is active.
   useEffect(() => {
     if (!modifiers?.perfectRun || failed || state.status !== 'playing') return
     if (getWrongCells(state).size > 0) {
@@ -392,7 +313,7 @@ export default function SudokuGamePage({ freePlay = false, variant: variantId = 
       setFailed({ reason: 'mistake' })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state.board, modifiers, failed, state.status, activeAssists.mistake])
+  }, [state.grid, modifiers, failed, state.status, activeAssists.mistake])
 
   const handleTryAgain = useCallback(async () => {
     if (!validDifficulty) return
@@ -400,61 +321,27 @@ export default function SudokuGamePage({ freePlay = false, variant: variantId = 
     setLoading(true)
     try {
       if (freePlay) {
-        const next = await variant.getFreePlayLevel(validDifficulty)
+        const next = await getFreePlayTangoLevel(validDifficulty)
         sourceRef.current = { source: next.source }
         dispatch({ type: 'LOAD', level: next.level })
         return
       }
-      const next = await variant.getNextLevel(validDifficulty)
+      const next = await getNextTangoLevel(validDifficulty)
       sourceRef.current = { source: next.source, bankIndex: next.bankIndex }
       dispatch({ type: 'LOAD', level: next.level })
     } finally {
       setLoading(false)
     }
-  }, [validDifficulty, freePlay, variant])
+  }, [validDifficulty, freePlay])
 
   const handleCellClick = useCallback(
     (row: number, col: number) => {
       playSound('tap')
       buzz(10)
-      dispatch({ type: 'SELECT_CELL', row, col })
+      dispatch({ type: 'CYCLE_CELL', row, col, now: Date.now() })
     },
     [playSound, buzz],
   )
-
-  // Purely cosmetic — never touches the reducer/persisted state. Only pulses on an
-  // actual value placement (not note-mode toggling, not a no-op re-entry of the same
-  // digit, not a given cell), mirroring INPUT_DIGIT's own guards so the ripple only
-  // fires when a placement will actually happen.
-  const maybeTriggerRipple = useCallback(
-    (digit: number) => {
-      if (!state.selected || state.noteMode) return
-      const { row, col } = state.selected
-      const cell = state.board[row][col]
-      if (cell.given || cell.value === digit) return
-      setRipple((r) => ({ row, col, seq: (r?.seq ?? 0) + 1 }))
-    },
-    [state.selected, state.noteMode, state.board],
-  )
-
-  const handleDigit = useCallback(
-    (digit: number) => {
-      playSound('tap')
-      buzz(10)
-      maybeTriggerRipple(digit)
-      actingRef.current = 'digit'
-      dispatch({ type: 'INPUT_DIGIT', digit, now: Date.now() })
-    },
-    [playSound, buzz, maybeTriggerRipple],
-  )
-
-  const handleErase = useCallback(() => {
-    dispatch({ type: 'ERASE', now: Date.now() })
-  }, [])
-
-  const handleToggleNoteMode = useCallback(() => {
-    dispatch({ type: 'TOGGLE_NOTE_MODE' })
-  }, [])
 
   const handleUseHint = useCallback(
     async (id: string, price: number) => {
@@ -471,60 +358,35 @@ export default function SudokuGamePage({ freePlay = false, variant: variantId = 
       }
 
       setCheckMessage(null)
-      if (id === 'reveal-cell') {
-        actingRef.current = 'hint'
-        dispatch({ type: 'HINT_REVEAL_CELL', now: Date.now() })
-      } else if (id === 'solve-box') {
-        actingRef.current = 'hint'
-        dispatch({ type: 'HINT_SOLVE_BOX', now: Date.now() })
-      }
+      hintingRef.current = true
+      if (id === 'reveal-cell') dispatch({ type: 'HINT_REVEAL_CELL', now: Date.now() })
+      else if (id === 'solve-row') dispatch({ type: 'HINT_SOLVE_ROW', now: Date.now() })
       setHintsOpen(false)
     },
     [state, playSound],
   )
 
-  useEffect(() => {
-    function onKeyDown(e: KeyboardEvent) {
-      if (e.key >= '1' && e.key <= '9') {
-        const digit = Number(e.key)
-        maybeTriggerRipple(digit)
-        actingRef.current = 'digit'
-        dispatch({ type: 'INPUT_DIGIT', digit, now: Date.now() })
-      } else if (e.key === 'Backspace' || e.key === 'Delete' || e.key === '0') {
-        dispatch({ type: 'ERASE', now: Date.now() })
-      } else if (e.key.toLowerCase() === 'n') {
-        dispatch({ type: 'TOGGLE_NOTE_MODE' })
-      }
-    }
-    window.addEventListener('keydown', onKeyDown)
-    return () => window.removeEventListener('keydown', onKeyDown)
-  }, [maybeTriggerRipple])
+  const conflicts = useMemo(() => getConflicts(state.grid, state.level.edges), [state.grid, state.level.edges])
 
-  const conflicts = useMemo(() => variant.getConflicts(boardValues(state.board), state.level), [state.board, state.level, variant])
-  const placedCounts = useMemo(() => digitCounts(state.board), [state.board])
-
-  // Context chips for FailSheet — only meaningful while `failed` is set (a boss-
-  // modifier watcher just fired), so no need to compute this on every render.
   const failChips = useMemo(() => {
     if (!failed) return undefined
     const chips: string[] = []
-    if (modifiers?.timed) chips.push(`Timed · ${formatElapsed(variant.timedBudgetMs + (activeAssists.time ? TIME_FREEZE_BONUS_MS : 0))}`)
-    const filled = state.board.reduce((sum, row) => sum + row.filter((c) => c.value !== 0).length, 0)
-    chips.push(`Reached ${filled} of ${SUDOKU_SIZE * SUDOKU_SIZE}`)
+    if (modifiers?.timed) chips.push(`Timed · ${formatElapsed(TIMED_BUDGET_MS + (activeAssists.time ? TIME_FREEZE_BONUS_MS : 0))}`)
+    const filled = state.grid.reduce((sum, row) => sum + row.filter((v) => v !== EMPTY).length, 0)
+    chips.push(`Reached ${filled} of ${state.level.size * state.level.size}`)
     return chips
-  }, [failed, modifiers, state.board, activeAssists.time, variant])
-  const selectedValue = state.selected ? state.board[state.selected.row][state.selected.col].value || null : null
+  }, [failed, modifiers, state.grid, state.level.size, activeAssists.time])
 
   if (!validDifficulty && !isDaily) {
-    return <ErrorScreen message="Unknown difficulty." onBack={() => navigate(variant.basePath)} />
+    return <ErrorScreen message="Unknown difficulty." onBack={() => navigate('/tango')} />
   }
   if (error) {
-    return <ErrorScreen message={error} onBack={() => navigate(variant.basePath)} />
+    return <ErrorScreen message={error} onBack={() => navigate('/tango')} />
   }
 
   return (
     <main
-      data-game={variant.id}
+      data-game="tango"
       className="mx-auto flex min-h-svh max-w-lg flex-col items-center justify-center gap-6 bg-bg px-4 py-[max(1.5rem,env(safe-area-inset-top))] text-ink"
     >
       <GameHeader
@@ -532,7 +394,7 @@ export default function SudokuGamePage({ freePlay = false, variant: variantId = 
         runStartedAt={state.runStartedAt}
         coins={coins}
         timerKey={state.level.id}
-        budgetMs={modifiers?.timed ? variant.timedBudgetMs + (activeAssists.time ? TIME_FREEZE_BONUS_MS : 0) : undefined}
+        budgetMs={modifiers?.timed ? TIMED_BUDGET_MS + (activeAssists.time ? TIME_FREEZE_BONUS_MS : 0) : undefined}
         onTimerExpire={() => {
           dispatch({ type: 'PAUSE', now: Date.now() })
           setFailed({ reason: 'timeout' })
@@ -560,41 +422,22 @@ export default function SudokuGamePage({ freePlay = false, variant: variantId = 
         {loading ? (
           <p className="text-ink-muted">Loading level…</p>
         ) : (
-          <>
-            <SudokuBoard
-              board={state.board}
-              cages={state.level.cages}
-              selected={state.selected}
-              conflicts={conflicts}
-              ripple={ripple}
-              solved={state.status === 'won'}
-              onCellClick={handleCellClick}
-              retractedCells={retractedCells}
-              onRetractEnd={(key) => setRetractedCells((prev) => removeMapKey(prev, key))}
-              hintedCells={hintedCells}
-              onHintPulseEnd={(key) => setHintedCells((prev) => removeSetKey(prev, key))}
-              completedUnitCells={completedUnitCells}
-              onUnitCompleteEnd={(key) => setCompletedUnitCells((prev) => removeMapKey(prev, key))}
-            />
-            <SudokuKeypad
-              selectedValue={selectedValue}
-              digitCounts={placedCounts}
-              canErase={state.selected !== null}
-              onDigit={handleDigit}
-              onErase={handleErase}
-            />
-          </>
+          <TangoBoard
+            grid={state.grid}
+            givens={state.level.givens}
+            edges={state.level.edges}
+            conflicts={conflicts}
+            solved={state.status === 'won'}
+            onCellClick={handleCellClick}
+            hintedCells={hintedCells}
+            onHintPulseEnd={(key) => setHintedCells((prev) => removeSetKey(prev, key))}
+          />
         )}
 
-        <SudokuControls
+        <TangoControls
           canUndo={(!modifiers?.noUndo || activeAssists.undo) && state.history.length > 0}
-          noteMode={state.noteMode}
-          onUndo={() => {
-            actingRef.current = 'undo'
-            dispatch({ type: 'UNDO' })
-          }}
-          onClear={() => dispatch({ type: 'CLEAR', now: Date.now() })}
-          onToggleNoteMode={handleToggleNoteMode}
+          onUndo={() => dispatch({ type: 'UNDO' })}
+          onClear={() => dispatch({ type: 'CLEAR' })}
           onOpenHints={() => {
             setCheckMessage(null)
             setHintsOpen(true)
@@ -616,7 +459,7 @@ export default function SudokuGamePage({ freePlay = false, variant: variantId = 
       {failed && (
         <FailSheet
           reason={failed.reason}
-          chaptersHref={freePlay ? `${variant.basePath}/chapters?tab=free` : `${variant.basePath}/chapters`}
+          chaptersHref={freePlay ? '/tango/chapters?tab=free' : '/tango/chapters'}
           onTryAgain={handleTryAgain}
           chips={failChips}
         />
@@ -626,7 +469,7 @@ export default function SudokuGamePage({ freePlay = false, variant: variantId = 
         <BossGateSheet
           chapterNumber={bossChapter}
           modifiers={modifiers}
-          backHref={`${variant.basePath}/chapters`}
+          backHref="/tango/chapters"
           onBegin={handleBeginBoss}
           assists={assistOptions}
           selectedAssists={selectedAssists}
@@ -654,4 +497,3 @@ function ErrorScreen({ message, onBack }: { message: string; onBack: () => void 
     </main>
   )
 }
-

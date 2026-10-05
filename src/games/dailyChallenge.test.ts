@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { getDailyNonogramLevel, getDailyQueensLevel, getDailyWordleLevel, hashSeed } from './dailyChallenge'
+import {
+  getDailyKillerLevel,
+  getDailyNonogramLevel,
+  getDailyQueensLevel,
+  getDailyTangoLevel,
+  getDailyWordleLevel,
+  hashSeed,
+} from './dailyChallenge'
 
 const WORDLE_POOL = ['crane', 'stare', 'apple', 'grape', 'mango', 'zesty', 'burnt', 'quilt']
 
@@ -56,5 +63,33 @@ describe('getDailyWordleLevel', () => {
   it('picks a word from the given pool', () => {
     const level = getDailyWordleLevel('2026-08-24', WORDLE_POOL)
     expect(WORDLE_POOL).toContain(level.answer)
+  })
+})
+
+describe('getDailyKillerLevel', () => {
+  it('generates the identical puzzle for the same date', () => {
+    const a = getDailyKillerLevel('2026-08-24')
+    const b = getDailyKillerLevel('2026-08-24')
+    expect(a.cages).toEqual(b.cages)
+    expect(a.puzzle).toEqual(b.puzzle)
+    expect(a.id).toBe(b.id)
+  })
+
+  it('generates a different puzzle for a different date', () => {
+    expect(getDailyKillerLevel('2026-08-24').solution).not.toEqual(getDailyKillerLevel('2026-08-25').solution)
+  })
+})
+
+describe('getDailyTangoLevel', () => {
+  it('generates the identical puzzle for the same date', () => {
+    const a = getDailyTangoLevel('2026-08-24')
+    const b = getDailyTangoLevel('2026-08-24')
+    expect(a.givens).toEqual(b.givens)
+    expect(a.edges).toEqual(b.edges)
+    expect(a.id).toBe(b.id)
+  })
+
+  it('generates a different puzzle for a different date', () => {
+    expect(getDailyTangoLevel('2026-08-24').solution).not.toEqual(getDailyTangoLevel('2026-08-25').solution)
   })
 })

@@ -7,6 +7,8 @@ import type { PlacedRect } from '../engine/patches/validator'
 import type { NonogramLevelRecord } from '../engine/nonogram/types'
 import type { Mark as NonogramMark } from '../engine/nonogram/validator'
 import type { WordleLevelRecord } from '../engine/wordle/types'
+import type { KillerLevelRecord } from '../engine/killer/types'
+import type { TangoGrid, TangoLevelRecord } from '../engine/tango/types'
 import type { SubmittedGuess } from '../engine/wordle/validator'
 import type { CellState } from '../state/types'
 import type { SudokuCellState } from '../state/sudokuTypes'
@@ -14,7 +16,7 @@ import type { DailyGameId } from '../games/dailyChallenge'
 import type { CosmeticCategory } from '../cosmetics'
 
 const DB_NAME = 'queens-pwa'
-const DB_VERSION = 9
+const DB_VERSION = 10
 
 export interface Settings {
   autoPlaceX: boolean
@@ -155,6 +157,32 @@ export interface WordleInProgressLevel {
   savedAt: number
 }
 
+export interface KillerInProgressLevel {
+  difficulty: Difficulty
+  /** Full level record, always — including runtime-generated (non-bank) levels, which have
+   *  nothing else to resume from. Also insulates resume from a future bank re-shuffle. */
+  level: KillerLevelRecord
+  levelSource: 'bank' | 'generated'
+  /** Bookkeeping only — never used to reconstruct the level. */
+  bankIndex?: number
+  board: SudokuCellState[][]
+  elapsedMs: number
+  savedAt: number
+}
+
+export interface TangoInProgressLevel {
+  difficulty: Difficulty
+  /** Full level record, always — including runtime-generated (non-bank) levels, which have
+   *  nothing else to resume from. Also insulates resume from a future bank re-shuffle. */
+  level: TangoLevelRecord
+  levelSource: 'bank' | 'generated'
+  /** Bookkeeping only — never used to reconstruct the level. */
+  bankIndex?: number
+  grid: TangoGrid
+  elapsedMs: number
+  savedAt: number
+}
+
 export interface DailyChallengeRecord {
   gameId: DailyGameId
   completedAt: number
@@ -187,6 +215,10 @@ interface QueensDB extends DBSchema {
   nonogramInProgress: { key: Difficulty; value: NonogramInProgressLevel }
   wordleProgress: { key: Difficulty; value: DifficultyProgress }
   wordleInProgress: { key: Difficulty; value: WordleInProgressLevel }
+  killerProgress: { key: Difficulty; value: DifficultyProgress }
+  killerInProgress: { key: Difficulty; value: KillerInProgressLevel }
+  tangoProgress: { key: Difficulty; value: DifficultyProgress }
+  tangoInProgress: { key: Difficulty; value: TangoInProgressLevel }
   /** Key = local date string ('YYYY-MM-DD'). Value = number of levels completed that day,
    *  across every game — feeds the home-screen streak and the stats-page heatmap. */
   dailyActivity: { key: string; value: number }
@@ -265,6 +297,12 @@ function getDB(): Promise<IDBPDatabase<QueensDB>> {
         if (oldVersion < 9) {
           db.createObjectStore('wordleProgress')
           db.createObjectStore('wordleInProgress')
+        }
+        if (oldVersion < 10) {
+          db.createObjectStore('killerProgress')
+          db.createObjectStore('killerInProgress')
+          db.createObjectStore('tangoProgress')
+          db.createObjectStore('tangoInProgress')
         }
       },
     })
@@ -597,7 +635,15 @@ export function computeCoinAward(difficulty: Difficulty, isPersonalBest: boolean
   return !assisted && isPersonalBest ? base + PERSONAL_BEST_BONUS : base
 }
 
-type ProgressStoreName = 'progress' | 'sudokuProgress' | 'zipProgress' | 'patchesProgress' | 'nonogramProgress' | 'wordleProgress'
+type ProgressStoreName =
+  | 'progress'
+  | 'sudokuProgress'
+  | 'zipProgress'
+  | 'patchesProgress'
+  | 'nonogramProgress'
+  | 'wordleProgress'
+  | 'killerProgress'
+  | 'tangoProgress'
 type InProgressStoreName =
   | 'inProgress'
   | 'sudokuInProgress'
@@ -605,6 +651,8 @@ type InProgressStoreName =
   | 'patchesInProgress'
   | 'nonogramInProgress'
   | 'wordleInProgress'
+  | 'killerInProgress'
+  | 'tangoInProgress'
 
 /** Shared by the four record*Completion functions below, which differ only in which
  *  pair of stores they touch. In one transaction: advances the bank pointer, clears the
@@ -835,8 +883,75 @@ export async function clearWordleInProgress(difficulty: Difficulty): Promise<voi
   await db.delete('wordleInProgress', difficulty)
 }
 
+export async function getKillerProgress(difficulty: Difficulty): Promise<DifficultyProgress> {
+  const db = await getDB()
+  return (await db.get('killerProgress', difficulty)) ?? defaultProgress(difficulty)
+}
+
+/** See recordCompletion — same shape, Killer's stores. */
+export async function recordKillerCompletion(
+  difficulty: Difficulty,
+  elapsedMs: number,
+  assisted = false,
+): Promise<CompletionResult> {
+  return finishCompletion('killerProgress', 'killerInProgress', difficulty, elapsedMs, assisted)
+}
+
+export async function getKillerInProgress(difficulty: Difficulty): Promise<KillerInProgressLevel | undefined> {
+  const db = await getDB()
+  return db.get('killerInProgress', difficulty)
+}
+
+export async function saveKillerInProgress(entry: KillerInProgressLevel): Promise<void> {
+  const db = await getDB()
+  await db.put('killerInProgress', entry, entry.difficulty)
+}
+
+export async function clearKillerInProgress(difficulty: Difficulty): Promise<void> {
+  const db = await getDB()
+  await db.delete('killerInProgress', difficulty)
+}
+
+export async function getTangoProgress(difficulty: Difficulty): Promise<DifficultyProgress> {
+  const db = await getDB()
+  return (await db.get('tangoProgress', difficulty)) ?? defaultProgress(difficulty)
+}
+
+/** See recordCompletion — same shape, Tango's stores. */
+export async function recordTangoCompletion(
+  difficulty: Difficulty,
+  elapsedMs: number,
+  assisted = false,
+): Promise<CompletionResult> {
+  return finishCompletion('tangoProgress', 'tangoInProgress', difficulty, elapsedMs, assisted)
+}
+
+export async function getTangoInProgress(difficulty: Difficulty): Promise<TangoInProgressLevel | undefined> {
+  const db = await getDB()
+  return db.get('tangoInProgress', difficulty)
+}
+
+export async function saveTangoInProgress(entry: TangoInProgressLevel): Promise<void> {
+  const db = await getDB()
+  await db.put('tangoInProgress', entry, entry.difficulty)
+}
+
+export async function clearTangoInProgress(difficulty: Difficulty): Promise<void> {
+  const db = await getDB()
+  await db.delete('tangoInProgress', difficulty)
+}
+
 const ALL_DIFFICULTIES: Difficulty[] = ['easy', 'medium', 'hard']
-const ALL_PROGRESS_GETTERS = [getProgress, getSudokuProgress, getZipProgress, getPatchesProgress, getNonogramProgress, getWordleProgress]
+const ALL_PROGRESS_GETTERS = [
+  getProgress,
+  getSudokuProgress,
+  getZipProgress,
+  getPatchesProgress,
+  getNonogramProgress,
+  getWordleProgress,
+  getKillerProgress,
+  getTangoProgress,
+]
 
 /** Total completed levels across every game and difficulty — used for the Stats page's
  *  "Solved" tile and the Neon skin's solve-count unlock. */
@@ -1014,6 +1129,10 @@ const ALL_STORE_NAMES = [
   'nonogramInProgress',
   'wordleProgress',
   'wordleInProgress',
+  'killerProgress',
+  'killerInProgress',
+  'tangoProgress',
+  'tangoInProgress',
 ] as const
 
 /** Wipes every stored value — coins, skins, streaks, and every game's progress — back

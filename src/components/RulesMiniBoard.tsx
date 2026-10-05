@@ -1,5 +1,8 @@
 import { REGION_COLORS } from './Cell'
 import { CrownIcon, XMarkIcon } from './icons'
+import { KillerGridPreview } from './KillerGridPreview'
+import { TangoSymbol } from './TangoSymbol'
+import { MOON, SUN } from '../engine/tango/types'
 
 /** A small, hand-built illustrative example sitting beside the "How to play" title —
  *  not real puzzle data, just enough of each game's visual language (region colors,
@@ -19,6 +22,14 @@ export function RulesMiniBoard({ gameId }: { gameId: string }) {
       return <NonogramMiniBoard />
     case 'wordle':
       return <WordleMiniBoard />
+    case 'killer':
+      return (
+        <div className="size-[70px] shrink-0 overflow-hidden rounded-[8px] border-2 border-grid-line-strong bg-grid-gap p-[2px]">
+          <KillerGridPreview />
+        </div>
+      )
+    case 'tango':
+      return <TangoMiniBoard />
     default:
       return null
   }
@@ -143,6 +154,30 @@ function WordleMiniBoard() {
       {tiles.map((tile, i) => (
         <span key={i} className={`flex size-[30px] items-center justify-center rounded-[6px] text-[15px] font-bold ${tone[tile.state]}`}>
           {tile.letter}
+        </span>
+      ))}
+    </div>
+  )
+}
+
+function TangoMiniBoard() {
+  // A sun, then an '=' sign forcing its neighbour to match, then a '×' forcing the
+  // opposite — the three ideas from the rules, left to right.
+  const cells = [SUN, SUN, MOON] as const
+  return (
+    <div className="relative grid h-[34px] w-[100px] shrink-0 grid-cols-3 self-center overflow-hidden rounded-[8px] border-2 border-grid-line-strong">
+      {cells.map((v, i) => (
+        <div key={i} className={`flex items-center justify-center bg-surface ${i < 2 ? 'border-r border-r-grid-gap' : ''}`}>
+          <TangoSymbol value={v} className="size-[60%]" />
+        </div>
+      ))}
+      {(['=', '×'] as const).map((sign, i) => (
+        <span
+          key={sign}
+          className="absolute top-1/2 flex size-[14px] -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-surface text-[11px] leading-none font-extrabold text-ink-muted"
+          style={{ left: `${((i + 1) / 3) * 100}%` }}
+        >
+          {sign}
         </span>
       ))}
     </div>

@@ -8,7 +8,7 @@ import { BookIcon, CheckIcon, ChevronRightIcon, FlameIcon, XMarkIcon } from '../
 import { getDailyChallenge, getDailyStreak, getHeatmap, getSettings, maybeApplyStreakFreeze, setLastSeenStreak } from '../storage/db'
 import type { Difficulty } from '../engine/types'
 import { todayDateKey, type DailyGameId } from '../games/dailyChallenge'
-import { buildChapterNodes, endlessProgress } from '../games/chapters'
+import { buildChapterNodes, endlessProgress, TOTAL_STORY_CHAPTERS } from '../games/chapters'
 import { PREVIEW_BY_ID, PRIMARY_ROUTE_OVERRIDE, PROGRESS_GETTER } from '../games/gamePreviews'
 
 const DIFFICULTIES: Difficulty[] = ['easy', 'medium', 'hard']
@@ -165,7 +165,9 @@ export default function HomePage() {
               </span>
               <div>
                 <p className="text-[16px] font-bold text-ink">Start with {GAMES[0].title}</p>
-                <p className="mt-0.5 text-[12.5px] text-ink-muted">Five puzzle types, thirty chapters each.</p>
+                <p className="mt-0.5 text-[12.5px] text-ink-muted">
+                  {GAMES.length} puzzle types, {TOTAL_STORY_CHAPTERS} chapters each.
+                </p>
               </div>
             </div>
             <Link
@@ -183,7 +185,9 @@ export default function HomePage() {
                 {Object.values(dailyResultByGame).filter((r) => r === 'won').length} of {GAMES.length} done
               </p>
             </div>
-            <div className="mt-3 grid grid-cols-5 gap-2">
+            {/* 4 columns, not 5 — with 8 games that's two even rows instead of a 5 + 3
+                split with an orphaned tail. */}
+            <div className="mt-3 grid grid-cols-4 gap-2">
               {GAMES.map((game) => {
                 const result = dailyResultByGame[game.id]
                 const gameStreak = dailyStreakByGame[game.id] ?? 0

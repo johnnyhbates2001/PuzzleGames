@@ -183,6 +183,14 @@
   --color-accent: oklch(56% 0.14 145);
   --color-accent-tint: oklch(93% 0.04 145);
 }
+[data-game='killer'] {
+  --color-accent: oklch(52% 0.18 20);
+  --color-accent-tint: oklch(94% 0.04 20);
+}
+[data-game='tango'] {
+  --color-accent: oklch(54% 0.13 75);
+  --color-accent-tint: oklch(94% 0.05 75);
+}
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']):not([data-theme='yellow']) [data-game='sudoku'] {
@@ -205,6 +213,14 @@
     --color-accent: oklch(66% 0.13 145);
     --color-accent-tint: oklch(29% 0.045 145);
   }
+  :root:not([data-theme='light']):not([data-theme='yellow']) [data-game='killer'] {
+    --color-accent: oklch(66% 0.16 20);
+    --color-accent-tint: oklch(30% 0.05 20);
+  }
+  :root:not([data-theme='light']):not([data-theme='yellow']) [data-game='tango'] {
+    --color-accent: oklch(72% 0.13 75);
+    --color-accent-tint: oklch(30% 0.05 75);
+  }
 }
 
 :root[data-theme='dark'] [data-game='sudoku'] {
@@ -226,6 +242,14 @@
 :root[data-theme='dark'] [data-game='wordle'] {
   --color-accent: oklch(66% 0.13 145);
   --color-accent-tint: oklch(29% 0.045 145);
+}
+:root[data-theme='dark'] [data-game='killer'] {
+  --color-accent: oklch(66% 0.16 20);
+  --color-accent-tint: oklch(30% 0.05 20);
+}
+:root[data-theme='dark'] [data-game='tango'] {
+  --color-accent: oklch(72% 0.13 75);
+  --color-accent-tint: oklch(30% 0.05 75);
 }
 
 /* Accent themes (Shop Expansion) — a purchasable app-wide accent recolor, deliberately

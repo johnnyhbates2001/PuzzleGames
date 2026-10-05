@@ -8,13 +8,16 @@ import type { Difficulty } from '../engine/types'
 import {
   getBestStreak,
   getHeatmap,
+  getKillerProgress,
   getNonogramProgress,
   getPatchesProgress,
   getProgress,
   getSettings,
   getStreak,
   getSudokuProgress,
+  getTangoProgress,
   getTotalSolved,
+  getWordleProgress,
   getZipProgress,
   type DifficultyProgress,
 } from '../storage/db'
@@ -27,6 +30,9 @@ const PROGRESS_GETTER: Record<string, (d: Difficulty) => Promise<DifficultyProgr
   zip: getZipProgress,
   patches: getPatchesProgress,
   nonogram: getNonogramProgress,
+  wordle: getWordleProgress,
+  killer: getKillerProgress,
+  tango: getTangoProgress,
 }
 
 interface GameSummary {

@@ -11,6 +11,8 @@ import {
   getSudokuProgress,
   getZipProgress,
   getWordleProgress,
+  getKillerProgress,
+  getTangoProgress,
   type DifficultyProgress,
 } from '../storage/db'
 import type { Difficulty } from '../engine/types'
@@ -25,6 +27,8 @@ const PROGRESS_GETTER: Record<string, (d: Difficulty) => Promise<DifficultyProgr
   patches: getPatchesProgress,
   nonogram: getNonogramProgress,
   wordle: getWordleProgress,
+  killer: getKillerProgress,
+  tango: getTangoProgress,
 }
 
 async function solvedForGame(gameId: string): Promise<number> {
@@ -54,5 +58,6 @@ export async function buildAchievementContext(): Promise<AchievementContext> {
     unassistedCompletions: settings.unassistedCompletions,
     ownedSkinCount: settings.ownedSkins.length,
     totalSkinCount: SKINS.length,
+    previouslyUnlocked: settings.seenAchievements,
   }
 }
