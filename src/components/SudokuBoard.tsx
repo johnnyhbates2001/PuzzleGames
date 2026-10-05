@@ -32,6 +32,9 @@ interface SudokuBoardProps {
   /** Cells (coordKey) a reveal-hint just filled — pulses once, gold. */
   hintedCells?: Set<string>
   onHintPulseEnd?: (key: string) => void
+  /** Cells (coordKey) a "Show next step" hint's reasoning refers to — outlined gold
+   *  while its explanation is showing (see HintExplanation). */
+  focusCells?: Set<string>
   /** Cells (coordKey) belonging to a row/col/box that a direct digit placement just
    *  completed, mapped to their outward-stagger delay from the placed cell. */
   completedUnitCells?: Map<string, number>
@@ -109,6 +112,7 @@ export function SudokuBoard({
   retractedCells,
   onRetractEnd,
   hintedCells,
+  focusCells,
   onHintPulseEnd,
   completedUnitCells,
   onUnitCompleteEnd,
@@ -147,6 +151,7 @@ export function SudokuBoard({
                 retractGhostValue={retractedCells?.get(key)}
                 onRetractEnd={() => onRetractEnd?.(key)}
                 hinted={!!hintedCells?.has(key)}
+                focused={!!focusCells?.has(key)}
                 onHintPulseEnd={() => onHintPulseEnd?.(key)}
                 unitCompleteDelayMs={completedUnitCells?.get(key)}
                 onUnitCompleteEnd={() => onUnitCompleteEnd?.(key)}

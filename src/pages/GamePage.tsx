@@ -4,7 +4,8 @@ import { useAppNavigate as useNavigate } from '../hooks/useAppNavigate'
 import type { Coord, Difficulty, LevelRecord } from '../engine/types'
 import { coordKey } from '../engine/types'
 import { getConflicts } from '../engine/validator'
-import type { CellState } from '../state/types'
+import { hasX, type CellState } from '../state/types'
+import { findQueensHint } from '../engine/hints'
 import { createInitialState, gameReducer, getWrongQueens } from '../state/gameReducer'
 import {
   consumeConsumables,
@@ -43,10 +44,12 @@ import { FailSheet } from '../components/FailSheet'
 import { formatElapsed } from '../components/Timer'
 import { BossGateSheet, buildBossAssists, TIME_FREEZE_BONUS_MS, type BossAssist } from '../components/BossGateSheet'
 import { LevelContext } from '../components/LevelContext'
+import { HintExplanation } from '../components/HintExplanation'
+import { useHintExplanation } from '../hooks/useHintExplanation'
 import { BoltIcon, EyeIcon, FlagIcon, SparkleIcon } from '../components/icons'
 
 const HINT_OPTIONS: HintOption[] = [
-  { id: 'reveal-cell', icon: <EyeIcon />, title: 'Reveal a cell', desc: 'Fills one correct square of your choice.', price: 25 },
+  { id: 'next-step', icon: <EyeIcon />, title: 'Show next step', desc: 'Points out the next logical move and explains why.', price: 25 },
   { id: 'check', icon: <FlagIcon />, title: 'Check my work', desc: 'Flags anything currently placed wrong.', price: 40 },
   { id: 'solve-region', icon: <SparkleIcon />, title: 'Solve a region', desc: 'Completes one whole colored region.', price: 120 },
 ]
@@ -105,6 +108,7 @@ export default function GamePage({ freePlay = false }: { freePlay?: boolean }) {
   const { playSound, buzz } = useAudio()
 
   const [state, dispatch] = useReducer(gameReducer, PLACEHOLDER_LEVEL, (level) => createInitialState(level, true))
+  const { explanation, show: showHint, dismiss: dismissHint } = useHintExplanation(state.board)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [coins, setCoins] = useState(0)
@@ -430,6 +434,27 @@ export default function GamePage({ freePlay = false }: { freePlay?: boolean }) {
 
   const handleUseHint = useCallback(
     async (id: string, price: number) => {
+      if (id === 'next-step') {
+        const hint = findQueensHint(state.level, state.board.map((row) => row.map((cell) => ({ queen: cell.queen, x: hasX(cell) }))))
+        if (!hint || !(await spendCoins(price))) return
+        setCoins((c) => c - price)
+        playSound('hint')
+        setCheckMessage(null)
+        setHintsOpen(false)
+        if (hint.kind === 'mistake') {
+          showHint(hint.message, [hint.cell, ...hint.focus], false)
+          dispatch({ type: 'HINT_CHECK' })
+        } else if (hint.kind === 'queen') {
+          actingRef.current = 'hint'
+          showHint(hint.message, [hint.cell, ...hint.focus], true)
+          dispatch({ type: 'HINT_STEP', queens: [hint.cell], crosses: [], now: Date.now() })
+        } else {
+          showHint(hint.message, [...hint.focus, ...hint.cells], true)
+          dispatch({ type: 'HINT_STEP', queens: [], crosses: hint.cells, now: Date.now() })
+        }
+        return
+      }
+
       const ok = await spendCoins(price)
       if (!ok) return
       setCoins((c) => c - price)
@@ -443,16 +468,13 @@ export default function GamePage({ freePlay = false }: { freePlay?: boolean }) {
       }
 
       setCheckMessage(null)
-      if (id === 'reveal-cell') {
-        actingRef.current = 'hint'
-        dispatch({ type: 'HINT_REVEAL_CELL', now: Date.now() })
-      } else if (id === 'solve-region') {
+      if (id === 'solve-region') {
         actingRef.current = 'hint'
         dispatch({ type: 'HINT_SOLVE_REGION', now: Date.now() })
       }
       setHintsOpen(false)
     },
-    [state, playSound],
+    [state, playSound, showHint],
   )
 
   const conflicts = useMemo(() => {
@@ -538,6 +560,7 @@ export default function GamePage({ freePlay = false }: { freePlay?: boolean }) {
             onRetractEnd={(key) => setRetractedCells((prev) => removeKey(prev, key))}
             hintedCells={hintedCells}
             onHintPulseEnd={(key) => setHintedCells((prev) => removeKey(prev, key))}
+            focusCells={explanation?.focus}
           />
         )}
 
@@ -560,6 +583,8 @@ export default function GamePage({ freePlay = false }: { freePlay?: boolean }) {
           hintPrice={HINT_OPTIONS[0].price}
           hintsDisabled={modifiers?.noHints}
         />
+
+        {explanation && <HintExplanation message={explanation.message} onDismiss={dismissHint} />}
       </div>
 
       <HintSheet

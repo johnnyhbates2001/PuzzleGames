@@ -1,4 +1,5 @@
 import { memo, type CSSProperties } from 'react'
+import { HINT_FOCUS_RING } from './hintFocus'
 import { useLingeringFlag } from '../hooks/useLingeringFlag'
 import { useEquippedCosmetic } from '../hooks/useCosmetics'
 
@@ -35,6 +36,8 @@ interface SudokuCellProps {
    *  (now-placed) digit gold. Cleared via onHintPulseEnd. */
   hinted?: boolean
   onHintPulseEnd?: () => void
+  /** Outlined gold while a "Show next step" explanation refers to this square. */
+  focused?: boolean
   /** Ms to delay this cell's completion bump by — set only when a direct digit
    *  placement just completed a row/col/box this cell belongs to (see SudokuGamePage).
    *  Cleared via onUnitCompleteEnd once the animation finishes. */
@@ -93,6 +96,7 @@ function SudokuCellImpl({
   onRetractEnd,
   hinted,
   onHintPulseEnd,
+  focused,
   unitCompleteDelayMs,
   onUnitCompleteEnd,
   onClick,
@@ -114,7 +118,7 @@ function SudokuCellImpl({
       data-row={row}
       data-col={col}
       aria-label={value === 0 ? 'Empty' : String(value)}
-      className={`relative flex aspect-square items-center justify-center text-[min(4.5vw,20px)] leading-none select-none ${borderClasses(row, col)} ${backgroundClass(selected, sameValue, peer)} ${conflict ? 'anim-shake' : ''} ${tinted ? 'ring-[2.5px] ring-inset ring-danger' : ''} ${sweepDelayMs !== undefined ? 'anim-solve-sweep' : ''} ${hinted ? 'anim-hint-pulse' : ''} ${unitCompleteDelayMs !== undefined ? 'anim-unit-complete' : ''}`}
+      className={`relative flex aspect-square items-center justify-center text-[min(4.5vw,20px)] leading-none select-none ${borderClasses(row, col)} ${backgroundClass(selected, sameValue, peer)} ${conflict ? 'anim-shake' : ''} ${tinted ? 'ring-[2.5px] ring-inset ring-danger' : focused ? HINT_FOCUS_RING : ''} ${sweepDelayMs !== undefined ? 'anim-solve-sweep' : ''} ${hinted ? 'anim-hint-pulse' : ''} ${unitCompleteDelayMs !== undefined ? 'anim-unit-complete' : ''}`}
       style={{ animationDelay: delayMs !== undefined ? `${delayMs}ms` : undefined }}
       onAnimationEnd={hinted || unitCompleteDelayMs !== undefined ? handleAnimationEnd : undefined}
     >

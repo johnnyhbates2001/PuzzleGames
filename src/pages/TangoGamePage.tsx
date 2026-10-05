@@ -3,6 +3,7 @@ import { useLocation, useParams } from 'react-router-dom'
 import { useAppNavigate as useNavigate } from '../hooks/useAppNavigate'
 import { coordKey, EMPTY, TANGO_SIZE, emptyGrid, type Difficulty, type TangoGrid, type TangoLevelRecord } from '../engine/tango/types'
 import { getConflicts } from '../engine/tango/validator'
+import { findTangoHint } from '../engine/tango/hints'
 import { createInitialState, getWrongCells, tangoReducer } from '../state/tangoReducer'
 import {
   consumeConsumables,
@@ -39,10 +40,12 @@ import { FailSheet } from '../components/FailSheet'
 import { formatElapsed } from '../components/Timer'
 import { BossGateSheet, buildBossAssists, TIME_FREEZE_BONUS_MS, type BossAssist } from '../components/BossGateSheet'
 import { LevelContext } from '../components/LevelContext'
+import { HintExplanation } from '../components/HintExplanation'
+import { useHintExplanation } from '../hooks/useHintExplanation'
 import { BoltIcon, EyeIcon, FlagIcon, SparkleIcon } from '../components/icons'
 
 const HINT_OPTIONS: HintOption[] = [
-  { id: 'reveal-cell', icon: <EyeIcon />, title: 'Reveal a cell', desc: 'Fills the next square you still need.', price: 25 },
+  { id: 'next-step', icon: <EyeIcon />, title: 'Show next step', desc: 'Points out the next logical move and explains why.', price: 25 },
   { id: 'check', icon: <FlagIcon />, title: 'Check my work', desc: 'Flags anything currently placed wrong.', price: 40 },
   { id: 'solve-row', icon: <SparkleIcon />, title: 'Solve a row', desc: 'Completes one whole row.', price: 100 },
 ]
@@ -103,6 +106,7 @@ export default function TangoGamePage({ freePlay = false }: { freePlay?: boolean
   const { playSound, buzz } = useAudio()
 
   const [state, dispatch] = useReducer(tangoReducer, PLACEHOLDER_LEVEL, (level) => createInitialState(level))
+  const { explanation, show: showHint, dismiss: dismissHint } = useHintExplanation(state.grid)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [coins, setCoins] = useState(0)
@@ -360,6 +364,24 @@ export default function TangoGamePage({ freePlay = false }: { freePlay?: boolean
 
   const handleUseHint = useCallback(
     async (id: string, price: number) => {
+      if (id === 'next-step') {
+        const hint = findTangoHint(state.grid, state.level.solution, state.level.edges)
+        if (!hint || !(await spendCoins(price))) return
+        setCoins((c) => c - price)
+        playSound('hint')
+        setCheckMessage(null)
+        setHintsOpen(false)
+        if (hint.kind === 'mistake') {
+          showHint(hint.message, [hint.cell, ...hint.focus], false)
+          dispatch({ type: 'HINT_CHECK' })
+        } else {
+          hintingRef.current = true
+          showHint(hint.message, [...hint.cells, ...hint.focus], true)
+          dispatch({ type: 'HINT_PLACE', cells: hint.cells, value: hint.value, now: Date.now() })
+        }
+        return
+      }
+
       const ok = await spendCoins(price)
       if (!ok) return
       setCoins((c) => c - price)
@@ -374,11 +396,10 @@ export default function TangoGamePage({ freePlay = false }: { freePlay?: boolean
 
       setCheckMessage(null)
       hintingRef.current = true
-      if (id === 'reveal-cell') dispatch({ type: 'HINT_REVEAL_CELL', now: Date.now() })
-      else if (id === 'solve-row') dispatch({ type: 'HINT_SOLVE_ROW', now: Date.now() })
+      if (id === 'solve-row') dispatch({ type: 'HINT_SOLVE_ROW', now: Date.now() })
       setHintsOpen(false)
     },
-    [state, playSound],
+    [state, playSound, showHint],
   )
 
   // Only conflicts present both now and on the settled board, on cells unchanged since —
@@ -457,6 +478,7 @@ export default function TangoGamePage({ freePlay = false }: { freePlay?: boolean
             onCellClick={handleCellClick}
             hintedCells={hintedCells}
             onHintPulseEnd={(key) => setHintedCells((prev) => removeSetKey(prev, key))}
+            focusCells={explanation?.focus}
           />
         )}
 
@@ -471,6 +493,8 @@ export default function TangoGamePage({ freePlay = false }: { freePlay?: boolean
           hintPrice={HINT_OPTIONS[0].price}
           hintsDisabled={modifiers?.noHints}
         />
+
+        {explanation && <HintExplanation message={explanation.message} onDismiss={dismissHint} />}
       </div>
 
       <HintSheet
