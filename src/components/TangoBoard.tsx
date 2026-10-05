@@ -30,7 +30,11 @@ export function TangoBoard({ grid, givens, edges, conflicts, solved, onCellClick
   const n = grid.length
   const signSize = SIGN_SIZE_CLASS[n > 6 ? 'compact' : 'regular']
   return (
-    <div className={`relative mx-auto w-full overflow-hidden rounded-[20px] border-2 border-grid-line-strong ${className ?? ''}`}>
+    // The complete screens position their blurred preview with `absolute` via className,
+    // which must win over the `relative` the overlay layer otherwise needs.
+    <div
+      className={`${className?.includes('absolute') ? '' : 'relative'} mx-auto w-full overflow-hidden rounded-[20px] border-2 border-grid-line-strong ${className ?? ''}`}
+    >
       <div className="grid w-full" style={{ gridTemplateColumns: `repeat(${n}, minmax(0, 1fr))` }}>
         {grid.map((row, r) =>
           row.map((value, c) => {

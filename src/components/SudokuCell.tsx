@@ -4,42 +4,15 @@ import { useEquippedCosmetic } from '../hooks/useCosmetics'
 
 const CONFLICT_TINT_HOLD_MS = 900
 
-/** Killer Sudoku cage info for one cell: which sides sit on the cage's boundary (and
- *  so get a dashed line), plus the cage sum if this is the cage's label cell. */
-export interface CageOutline {
-  top: boolean
-  right: boolean
-  bottom: boolean
-  left: boolean
-  sum?: number
-}
-
-/** Dashed cage lines sit just inside the cell on boundary sides and run to the cell
- *  edge on interior sides, so neighbouring cells' segments join into one outline. */
-const CAGE_INSET = '3px'
-const CAGE_LINE = '1.5px dashed color-mix(in oklch, var(--color-ink) 45%, transparent)'
-
-function cageOutlineStyle(cage: CageOutline): CSSProperties {
-  return {
-    top: cage.top ? CAGE_INSET : 0,
-    right: cage.right ? CAGE_INSET : 0,
-    bottom: cage.bottom ? CAGE_INSET : 0,
-    left: cage.left ? CAGE_INSET : 0,
-    borderTop: cage.top ? CAGE_LINE : undefined,
-    borderRight: cage.right ? CAGE_LINE : undefined,
-    borderBottom: cage.bottom ? CAGE_LINE : undefined,
-    borderLeft: cage.left ? CAGE_LINE : undefined,
-  }
-}
-
 interface SudokuCellProps {
   row: number
   col: number
   value: number
   given: boolean
   notes: Set<number>
-  /** Killer Sudoku only — see SudokuBoard's buildCageOutlines. */
-  cage?: CageOutline
+  /** Killer Sudoku only — set on the cell that carries its cage's sum label. The dashed
+   *  cage outlines themselves are drawn by SudokuBoard, over the whole grid. */
+  cageSum?: number
   selected: boolean
   peer: boolean
   sameValue: boolean
@@ -108,7 +81,7 @@ function SudokuCellImpl({
   value,
   given,
   notes,
-  cage,
+  cageSum,
   selected,
   peer,
   sameValue,
@@ -145,10 +118,9 @@ function SudokuCellImpl({
       style={{ animationDelay: delayMs !== undefined ? `${delayMs}ms` : undefined }}
       onAnimationEnd={hinted || unitCompleteDelayMs !== undefined ? handleAnimationEnd : undefined}
     >
-      {cage && <span className="pointer-events-none absolute" style={cageOutlineStyle(cage)} />}
-      {cage?.sum !== undefined && (
-        <span className="pointer-events-none absolute top-[1px] left-[2px] z-[1] bg-inherit px-[1px] text-[min(2.3vw,10px)] leading-none font-semibold text-ink-muted">
-          {cage.sum}
+      {cageSum !== undefined && (
+        <span className="pointer-events-none absolute top-[1px] left-[2px] z-[2] bg-inherit px-[1px] text-[min(2.3vw,10px)] leading-none font-semibold text-ink-muted">
+          {cageSum}
         </span>
       )}
       {rippleDelayMs !== undefined && (
@@ -170,7 +142,7 @@ function SudokuCellImpl({
           {retractGhostValue}
         </span>
       ) : notes.size > 0 ? (
-        <div className={`absolute inset-0 grid grid-cols-3 grid-rows-3 p-0.5 ${cage?.sum !== undefined ? 'pt-[min(2.6vw,11px)]' : ''}`}>
+        <div className={`absolute inset-0 grid grid-cols-3 grid-rows-3 p-0.5 ${cageSum !== undefined ? 'pt-[min(2.6vw,11px)]' : ''}`}>
           {Array.from({ length: 9 }, (_, i) => i + 1).map((d) => (
             <span key={d} className="flex items-center justify-center text-[min(1.6vw,8px)] leading-none text-ink-muted">
               {notes.has(d) ? d : ''}
