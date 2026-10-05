@@ -24,6 +24,9 @@ import NonogramCompletePage from './pages/NonogramCompletePage'
 import WordleDifficultyPage from './pages/WordleDifficultyPage'
 import WordleGamePage from './pages/WordleGamePage'
 import WordleCompletePage from './pages/WordleCompletePage'
+import TangoDifficultyPage from './pages/TangoDifficultyPage'
+import TangoGamePage from './pages/TangoGamePage'
+import TangoCompletePage from './pages/TangoCompletePage'
 import LoginPage from './pages/LoginPage'
 import SignupPage from './pages/SignupPage'
 import RecoverPage from './pages/RecoverPage'
@@ -101,6 +104,18 @@ const router = createBrowserRouter([
       { path: 'wordle/free/:difficulty/complete', element: <WordleCompletePage freePlay /> },
       { path: 'wordle/:difficulty', element: <WordleGamePage /> },
       { path: 'wordle/:difficulty/complete', element: <WordleCompletePage /> },
+      { path: 'killer', element: <SudokuDifficultyPage variant="killer" /> },
+      { path: 'killer/chapters', element: <ChaptersPage gameId="killer" /> },
+      { path: 'killer/free/:difficulty', element: <SudokuGamePage variant="killer" freePlay /> },
+      { path: 'killer/free/:difficulty/complete', element: <SudokuCompletePage variant="killer" freePlay /> },
+      { path: 'killer/:difficulty', element: <SudokuGamePage variant="killer" /> },
+      { path: 'killer/:difficulty/complete', element: <SudokuCompletePage variant="killer" /> },
+      { path: 'tango', element: <TangoDifficultyPage /> },
+      { path: 'tango/chapters', element: <ChaptersPage gameId="tango" /> },
+      { path: 'tango/free/:difficulty', element: <TangoGamePage freePlay /> },
+      { path: 'tango/free/:difficulty/complete', element: <TangoCompletePage freePlay /> },
+      { path: 'tango/:difficulty', element: <TangoGamePage /> },
+      { path: 'tango/:difficulty/complete', element: <TangoCompletePage /> },
     ],
   },
 ])

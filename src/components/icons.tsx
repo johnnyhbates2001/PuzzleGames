@@ -336,3 +336,24 @@ export function AwardsTabIcon({ size = 21, className }: IconProps) {
     </svg>
   )
 }
+
+/** Tango's two symbols — filled, not stroked like the rest of this set, since they're
+ *  board pieces rather than UI glyphs. Colored by the caller (see TangoSymbol). */
+export function SunIcon({ size = 22, className }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" width={size} height={size} className={className} fill="currentColor">
+      <circle cx="12" cy="12" r="5.5" />
+      <g stroke="currentColor" strokeWidth={2.2} strokeLinecap="round">
+        <path d="M12 1.8v2.4M12 19.8v2.4M1.8 12h2.4M19.8 12h2.4M4.8 4.8l1.7 1.7M17.5 17.5l1.7 1.7M4.8 19.2l1.7-1.7M17.5 6.5l1.7-1.7" />
+      </g>
+    </svg>
+  )
+}
+
+export function MoonIcon({ size = 22, className }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" width={size} height={size} className={className} fill="currentColor">
+      <path d="M20.5 14.6A8.6 8.6 0 0 1 9.4 3.5a8.6 8.6 0 1 0 11.1 11.1z" />
+    </svg>
+  )
+}

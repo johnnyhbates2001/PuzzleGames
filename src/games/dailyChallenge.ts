@@ -5,14 +5,18 @@ import { generateLevel as generateZipLevel } from '../engine/zip/generator'
 import { generateLevel as generatePatchesLevel } from '../engine/patches/generator'
 import { generateLevel as generateNonogramLevel } from '../engine/nonogram/generator'
 import { generateLevel as generateWordleLevel } from '../engine/wordle/generator'
+import { generateLevel as generateKillerLevel } from '../engine/killer/generator'
+import { generateLevel as generateTangoLevel } from '../engine/tango/generator'
 import type { LevelRecord } from '../engine/types'
 import type { SudokuLevelRecord } from '../engine/sudoku/types'
 import type { ZipLevelRecord } from '../engine/zip/types'
 import type { PatchesLevelRecord } from '../engine/patches/types'
 import type { NonogramLevelRecord } from '../engine/nonogram/types'
 import type { WordleLevelRecord } from '../engine/wordle/types'
+import type { KillerLevelRecord } from '../engine/killer/types'
+import type { TangoLevelRecord } from '../engine/tango/types'
 
-export const DAILY_GAMES = ['queens', 'sudoku', 'zip', 'patches', 'nonogram', 'wordle'] as const
+export const DAILY_GAMES = ['queens', 'sudoku', 'zip', 'patches', 'nonogram', 'wordle', 'killer', 'tango'] as const
 export type DailyGameId = (typeof DAILY_GAMES)[number]
 
 /** The engine difficulty every Daily Challenge is generated at — fixed rather than
@@ -90,6 +94,24 @@ export function getDailyNonogramLevel(dateKey: string): NonogramLevelRecord {
     if (level) return { ...level, id: `daily-nonogram-${dateKey}` }
   }
   throw new Error(`Failed to generate the ${dateKey} Nonogram daily challenge`)
+}
+
+export function getDailyKillerLevel(dateKey: string): KillerLevelRecord {
+  const rng = mulberry32(seedFor('killer', dateKey))
+  for (let attempt = 0; attempt < GENERATE_RETRIES; attempt++) {
+    const level = generateKillerLevel(DAILY_DIFFICULTY, rng)
+    if (level) return { ...level, id: `daily-killer-${dateKey}` }
+  }
+  throw new Error(`Failed to generate the ${dateKey} Killer Sudoku daily challenge`)
+}
+
+export function getDailyTangoLevel(dateKey: string): TangoLevelRecord {
+  const rng = mulberry32(seedFor('tango', dateKey))
+  for (let attempt = 0; attempt < GENERATE_RETRIES; attempt++) {
+    const level = generateTangoLevel(DAILY_DIFFICULTY, rng)
+    if (level) return { ...level, id: `daily-tango-${dateKey}` }
+  }
+  throw new Error(`Failed to generate the ${dateKey} Tango daily challenge`)
 }
 
 /** Unlike the other daily generators, this needs the answer pool passed in (loaded via

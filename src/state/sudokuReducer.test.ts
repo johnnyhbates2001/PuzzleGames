@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createInitialState, getWrongCells, sudokuReducer, type SudokuGameState } from './sudokuReducer'
+import { createInitialState, createSudokuReducer, getWrongCells, sudokuReducer, type SudokuGameState } from './sudokuReducer'
 import type { SudokuLevelRecord } from '../engine/sudoku/types'
 
 // A minimal 1-cell-missing 9x9 puzzle so a single INPUT_DIGIT completes the solve —
@@ -258,5 +258,15 @@ describe('getWrongCells', () => {
 
   it('is empty on a freshly loaded board', () => {
     expect(getWrongCells(fresh()).size).toBe(0)
+  })
+})
+
+describe('createSudokuReducer (Killer variant win check)', () => {
+  it('only wins when the variant validator agrees', () => {
+    const neverSolved = createSudokuReducer<SudokuLevelRecord>(() => false)
+    let state = createInitialState(LEVEL)
+    state = neverSolved(state, { type: 'SELECT_CELL', row: 0, col: 0 })
+    state = neverSolved(state, { type: 'INPUT_DIGIT', digit: SOLUTION[0][0], now: 0 })
+    expect(state.status).toBe('playing')
   })
 })

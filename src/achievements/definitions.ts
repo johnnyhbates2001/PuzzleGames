@@ -2,13 +2,17 @@ export interface AchievementContext {
   totalSolved: number
   solvedByGame: Record<string, number>
   streak: number
-  /** The longest current Daily Challenge streak across the 5 games — each game now has
+  /** The longest current Daily Challenge streak across every game — each game now has
    *  its own daily puzzle and its own streak, so this achievement context tracks the best
    *  one rather than one shared number. */
   maxDailyStreak: number
   unassistedCompletions: number
   ownedSkinCount: number
   totalSkinCount: number
+  /** Achievement ids the player has already been shown as unlocked (Settings.
+   *  seenAchievements) — lets an achievement whose bar moves when a new game ships
+   *  (All-Rounder) stay earned instead of quietly re-locking. */
+  previouslyUnlocked: string[]
 }
 
 /** Keyed to one of 5 shared SVG marks (see AwardsPage.tsx's ICON_BY_GROUP) rather than
@@ -31,6 +35,8 @@ const GAME_LABELS: Record<string, string> = {
   patches: 'Patches',
   nonogram: 'Nonogram',
   wordle: 'Wordle',
+  killer: 'Killer Sudoku',
+  tango: 'Tango',
 }
 
 function perGameExpertAchievements(): AchievementDef[] {
@@ -84,7 +90,8 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     title: 'All-Rounder',
     description: 'Solve at least one puzzle in every game.',
     iconGroup: 'star',
-    check: (ctx) => Object.keys(GAME_LABELS).every((id) => (ctx.solvedByGame[id] ?? 0) >= 1),
+    check: (ctx) =>
+      ctx.previouslyUnlocked.includes('all-rounder') || Object.keys(GAME_LABELS).every((id) => (ctx.solvedByGame[id] ?? 0) >= 1),
   },
   ...perGameExpertAchievements(),
   {

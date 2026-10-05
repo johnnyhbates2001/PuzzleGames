@@ -4,6 +4,8 @@ import { ZipGridPreview } from '../components/ZipGridPreview'
 import { PatchesGridPreview } from '../components/PatchesGridPreview'
 import { NonogramGridPreview } from '../components/NonogramGridPreview'
 import { WordleGridPreview } from '../components/WordleGridPreview'
+import { KillerGridPreview } from '../components/KillerGridPreview'
+import { TangoGridPreview } from '../components/TangoGridPreview'
 import {
   getNonogramProgress,
   getPatchesProgress,
@@ -11,6 +13,8 @@ import {
   getSudokuProgress,
   getZipProgress,
   getWordleProgress,
+  getKillerProgress,
+  getTangoProgress,
   type DifficultyProgress,
 } from '../storage/db'
 import { DIFFICULTY_SIZE, type Difficulty } from '../engine/types'
@@ -18,12 +22,15 @@ import { ZIP_SIZE } from '../engine/zip/types'
 import { PATCHES_SIZE } from '../engine/patches/types'
 import { NONOGRAM_SIZE } from '../engine/nonogram/types'
 import { WORDLE_RULES } from '../engine/wordle/types'
+import { TANGO_SIZE } from '../engine/tango/types'
 import { getChapterLevels as getQueensChapterLevels } from './queensLevels'
 import { getChapterLevels as getSudokuChapterLevels } from './sudokuLevels'
 import { getChapterLevels as getZipChapterLevels } from './zipLevels'
 import { getChapterLevels as getPatchesChapterLevels } from './patchesLevels'
 import { getChapterLevels as getNonogramChapterLevels } from './nonogramLevels'
 import { getChapterLevels as getWordleChapterLevels } from './wordleLevels'
+import { getChapterLevels as getKillerChapterLevels } from './killerLevels'
+import { getChapterLevels as getTangoChapterLevels } from './tangoLevels'
 
 /** Small per-game tile art shown on Home and in each game's Chapters/Free-play rows —
  *  Queens has no bespoke preview component, so it falls back to the static app icon. */
@@ -34,6 +41,8 @@ export const PREVIEW_BY_ID: Record<string, ReactNode> = {
   patches: <PatchesGridPreview />,
   nonogram: <NonogramGridPreview />,
   wordle: <WordleGridPreview />,
+  killer: <KillerGridPreview />,
+  tango: <TangoGridPreview />,
 }
 
 export const PROGRESS_GETTER: Record<string, (d: Difficulty) => Promise<DifficultyProgress>> = {
@@ -43,6 +52,8 @@ export const PROGRESS_GETTER: Record<string, (d: Difficulty) => Promise<Difficul
   patches: getPatchesProgress,
   nonogram: getNonogramProgress,
   wordle: getWordleProgress,
+  killer: getKillerProgress,
+  tango: getTangoProgress,
 }
 
 /** Fetches one story chapter's 20 levels, in order — powers "replay this chapter"
@@ -56,6 +67,8 @@ export const CHAPTER_LEVELS_GETTER: Record<string, (d: Difficulty, chapterNumber
   patches: getPatchesChapterLevels,
   nonogram: getNonogramChapterLevels,
   wordle: getWordleChapterLevels,
+  killer: getKillerChapterLevels,
+  tango: getTangoChapterLevels,
 }
 
 // Every game now has a chapter map, routed to as the primary entry point instead of
@@ -68,9 +81,11 @@ export const PRIMARY_ROUTE_OVERRIDE: Record<string, string> = {
   patches: '/patches/chapters',
   nonogram: '/nonogram/chapters',
   wordle: '/wordle/chapters',
+  killer: '/killer/chapters',
+  tango: '/tango/chapters',
 }
 
-/** Board-size caption for the Free-play tab's three difficulty rows. Sudoku's is a
+/** Board-size caption for the Free-play tab's three difficulty rows. Sudoku's (and Killer's) is a
  *  flat constant (not per-difficulty like the other games); Wordle has no board size
  *  to report at all, so it reports its attempt count/Hard Mode instead. */
 export const SIZE_LABEL: Record<string, (d: Difficulty) => string> = {
@@ -80,4 +95,6 @@ export const SIZE_LABEL: Record<string, (d: Difficulty) => string> = {
   patches: (d) => `${PATCHES_SIZE[d]}×${PATCHES_SIZE[d]}`,
   nonogram: (d) => `${NONOGRAM_SIZE[d]}×${NONOGRAM_SIZE[d]}`,
   wordle: (d) => `${WORDLE_RULES[d].attempts} guesses${WORDLE_RULES[d].hardMode ? ' · Hard mode' : ''}`,
+  killer: () => '9×9',
+  tango: (d) => `${TANGO_SIZE[d]}×${TANGO_SIZE[d]}`,
 }

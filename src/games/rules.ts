@@ -50,4 +50,19 @@ export const GAME_RULES: Record<string, GameRules> = {
     ],
     tip: 'Hard tier turns on Hard Mode: every green and yellow letter you’ve found must be used in your next guess.',
   },
+  killer: {
+    steps: [
+      'Fill every row, every column, and every 3×3 box with the digits 1 through 9, just like Sudoku — but the board starts (almost) empty.',
+      'Each dashed cage shows a sum in its corner: the digits inside must add up to exactly that number.',
+      'No digit may repeat within a cage, row, column, or box.',
+    ],
+    tip: 'Start with the smallest and largest cages — a 2-cell cage of 3 can only be 1 and 2.',
+  },
+  tango: {
+    steps: [
+      'Fill every cell with a sun or a moon.',
+      'Every row and column holds the same number of suns as moons, and no more than two of the same symbol may sit next to each other.',
+      'An = between two cells means they match; a × means they’re opposite. Tap a cell to cycle empty → sun → moon.',
+    ],
+  },
 }

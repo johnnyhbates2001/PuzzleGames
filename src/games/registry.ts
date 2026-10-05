@@ -43,4 +43,16 @@ export const GAMES: GameDefinition[] = [
     description: 'Guess the hidden word — every guess tells you which letters are right.',
     route: '/wordle',
   },
+  {
+    id: 'killer',
+    title: 'Killer Sudoku',
+    description: 'Sudoku with no starting digits — dashed cages tell you what their cells add up to.',
+    route: '/killer',
+  },
+  {
+    id: 'tango',
+    title: 'Tango',
+    description: 'Fill the grid with suns and moons — balanced lines, no three in a row.',
+    route: '/tango',
+  },
 ]

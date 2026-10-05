@@ -1,6 +1,8 @@
+import { useMemo } from 'react'
 import type { SudokuCellState } from '../state/sudokuTypes'
 import { boxIndex } from '../engine/sudoku/types'
-import { SudokuCell } from './SudokuCell'
+import { cageIndexGrid, cageLabelCell, type Cage } from '../engine/killer/types'
+import { SudokuCell, type CageOutline } from './SudokuCell'
 
 interface RippleOrigin {
   row: number
@@ -10,6 +12,8 @@ interface RippleOrigin {
 
 interface SudokuBoardProps {
   board: SudokuCellState[][]
+  /** Killer Sudoku only — draws each cage's dashed outline and sum label. */
+  cages?: Cage[]
   selected: { row: number; col: number } | null
   conflicts: Set<string>
   /** The cell a digit was just placed in, plus a sequence number — purely cosmetic,
@@ -40,11 +44,29 @@ function isPeer(row: number, col: number, origin: { row: number; col: number }):
   return row === origin.row || col === origin.col || boxIndex(row, col) === boxIndex(origin.row, origin.col)
 }
 
+/** Per-cell cage outline info, computed once per level (not per render) so SudokuCell's
+ *  memo still holds while the player types. */
+function buildCageOutlines(cages: Cage[]): CageOutline[][] {
+  const owner = cageIndexGrid(cages)
+  const labels = new Map(cages.map((cage) => [cageLabelCell(cage), cage.sum] as const))
+  const labelAt = new Map([...labels].map(([cell, sum]) => [`${cell.row},${cell.col}`, sum]))
+  return owner.map((row, r) =>
+    row.map((ci, c) => ({
+      top: r === 0 || owner[r - 1][c] !== ci,
+      bottom: r === 8 || owner[r + 1][c] !== ci,
+      left: c === 0 || owner[r][c - 1] !== ci,
+      right: c === 8 || owner[r][c + 1] !== ci,
+      sum: labelAt.get(`${r},${c}`),
+    })),
+  )
+}
+
 const RIPPLE_STEP_MS = 25
 const SWEEP_STEP_MS = 42
 
 export function SudokuBoard({
   board,
+  cages,
   selected,
   conflicts,
   ripple,
@@ -59,6 +81,7 @@ export function SudokuBoard({
   className,
 }: SudokuBoardProps) {
   const selectedValue = selected ? board[selected.row][selected.col].value : 0
+  const cageOutlines = useMemo(() => (cages ? buildCageOutlines(cages) : null), [cages])
 
   return (
     <div
@@ -75,6 +98,7 @@ export function SudokuBoard({
               value={cell.value}
               given={cell.given}
               notes={cell.notes}
+              cage={cageOutlines?.[r][c]}
               selected={selected !== null && selected.row === r && selected.col === c}
               peer={selected !== null && isPeer(r, c, selected)}
               sameValue={selectedValue !== 0 && cell.value === selectedValue && !(selected!.row === r && selected!.col === c)}

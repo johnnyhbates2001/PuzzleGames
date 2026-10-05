@@ -5,6 +5,8 @@ import {
   getProgress,
   getSudokuProgress,
   getWordleProgress,
+  getKillerProgress,
+  getTangoProgress,
   getZipProgress,
   type DifficultyProgress,
 } from '../storage/db'
@@ -20,6 +22,8 @@ const PROGRESS_GETTERS: Record<string, (difficulty: Difficulty) => Promise<Diffi
   patches: getPatchesProgress,
   nonogram: getNonogramProgress,
   wordle: getWordleProgress,
+  killer: getKillerProgress,
+  tango: getTangoProgress,
 }
 
 /** One-time seed of the account's leaderboard tables (game_stats, daily_scores) from

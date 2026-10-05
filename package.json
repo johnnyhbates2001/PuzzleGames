@@ -16,6 +16,8 @@
     "gen:patches-banks": "node --experimental-strip-types scripts/generate-patches-banks.ts",
     "gen:nonogram-banks": "node --experimental-strip-types scripts/generate-nonogram-banks.ts",
     "gen:wordle-banks": "node --experimental-strip-types scripts/generate-wordle-banks.ts",
+    "gen:tango-banks": "node --experimental-strip-types scripts/generate-tango-banks.ts",
+    "gen:killer-banks": "node --experimental-strip-types scripts/generate-killer-banks.ts",
     "gen:icons": "node --experimental-strip-types scripts/generate-icons.ts",
     "gen:splash": "node --experimental-strip-types scripts/generate-splash.ts"
   },

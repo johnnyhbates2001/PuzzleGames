@@ -2,26 +2,24 @@ import { useEffect, useState } from 'react'
 import { useLocation, useParams } from 'react-router-dom'
 import { AppLink as Link } from '../components/AppLink'
 import { useAppNavigate as useNavigate } from '../hooks/useAppNavigate'
-import type { Difficulty } from '../engine/sudoku/types'
-import type { SudokuCellState } from '../state/sudokuTypes'
-import { getStreak } from '../storage/db'
-import { SUDOKU_VARIANTS, type SudokuFamilyLevel, type SudokuVariantId } from '../games/sudokuVariants'
-import { SudokuBoard } from '../components/SudokuBoard'
+import type { Difficulty, TangoGrid, TangoLevelRecord } from '../engine/tango/types'
+import { getStreak, getTangoProgress } from '../storage/db'
+import { TangoBoard } from '../components/TangoBoard'
 import { CompleteSheet } from '../components/CompleteSheet'
 import type { ChapterCompleteInfo } from '../hooks/useGameCompletion'
 
 interface ChapterReplayState {
   chapterNumber: number
   chapterName: string
-  levels: SudokuFamilyLevel[]
+  levels: TangoLevelRecord[]
   index: number
 }
 
 interface CompleteLocationState {
   timeMs: number
   levelNumber?: number
-  level: SudokuFamilyLevel
-  board: SudokuCellState[][]
+  level: TangoLevelRecord
+  grid: TangoGrid
   coinsAwarded: number
   isPersonalBest?: boolean
   dailyBonusApplied?: boolean
@@ -37,9 +35,7 @@ function isValidDifficulty(value: string | undefined): value is Difficulty {
   return value === 'easy' || value === 'medium' || value === 'hard'
 }
 
-export default function SudokuCompletePage({ freePlay = false, variant: variantId = 'sudoku' }: { freePlay?: boolean; variant?: SudokuVariantId }) {
-  const variant = SUDOKU_VARIANTS[variantId]
-  const base = variant.basePath
+export default function TangoCompletePage({ freePlay = false }: { freePlay?: boolean }) {
   const { difficulty } = useParams<{ difficulty: string }>()
   const location = useLocation()
   const navigate = useNavigate()
@@ -54,13 +50,13 @@ export default function SudokuCompletePage({ freePlay = false, variant: variantI
   useEffect(() => {
     if (!validDifficulty || freePlay || isChapterReplay) return
     let cancelled = false
-    variant.getProgress(validDifficulty).then((progress) => {
+    getTangoProgress(validDifficulty).then((progress) => {
       if (!cancelled) setBestMs(progress.bestTimeMs)
     })
     return () => {
       cancelled = true
     }
-  }, [validDifficulty, freePlay, isChapterReplay, variant])
+  }, [validDifficulty, freePlay, isChapterReplay])
 
   useEffect(() => {
     if (isDaily) return
@@ -76,11 +72,11 @@ export default function SudokuCompletePage({ freePlay = false, variant: variantI
   if ((!validDifficulty && !isDaily) || !completion) {
     return (
       <main
-        data-game={variant.id}
+        data-game="tango"
         className="mx-auto flex min-h-svh max-w-lg flex-col items-center justify-center gap-4 bg-bg px-4 text-center text-ink"
       >
         <p>No completion to show.</p>
-        <Link to={base} className="rounded-full bg-accent px-4 py-2 text-sm font-medium text-white">
+        <Link to="/tango" className="rounded-full bg-accent px-4 py-2 text-sm font-medium text-white">
           Back to difficulties
         </Link>
       </main>
@@ -91,7 +87,7 @@ export default function SudokuCompletePage({ freePlay = false, variant: variantI
     timeMs,
     levelNumber,
     level,
-    board,
+    grid,
     coinsAwarded,
     isPersonalBest,
     dailyBonusApplied,
@@ -102,15 +98,14 @@ export default function SudokuCompletePage({ freePlay = false, variant: variantI
   } = completion
 
   return (
-    <main data-game={variant.id} className="fixed inset-0 overflow-hidden bg-bg">
+    <main data-game="tango" className="fixed inset-0 overflow-hidden bg-bg">
       <CompleteSheet
         boardPreview={
-          <SudokuBoard
-            board={board}
-            cages={level.cages}
-            selected={null}
+          <TangoBoard
+            grid={grid}
+            givens={level.givens}
+            edges={level.edges}
             conflicts={new Set()}
-            ripple={null}
             onCellClick={() => {}}
             className="pointer-events-none absolute inset-x-4 top-[max(1.5rem,env(safe-area-inset-top))] max-w-lg opacity-65 blur-[3px] sm:mx-auto sm:inset-x-0"
           />
@@ -127,28 +122,28 @@ export default function SudokuCompletePage({ freePlay = false, variant: variantI
         dailyStreak={dailyStreak}
         chapterComplete={chapterComplete}
         chapterReplay={chapterReplay && { ...chapterReplay, sessionFinished: !!sessionDone }}
-        chaptersHref={isDaily ? '/' : freePlay ? `${base}/chapters?tab=free` : `${base}/chapters`}
+        chaptersHref={isDaily ? '/' : freePlay ? '/tango/chapters?tab=free' : '/tango/chapters'}
         chaptersLabel={isDaily ? 'Back to Home' : freePlay ? 'Back to Free Play' : undefined}
         onNextLevel={() => {
           if (chapterReplay && !sessionDone) {
-            navigate(`${base}/${validDifficulty}`, { state: { chapterReplay }, replace: true })
+            navigate(`/tango/${validDifficulty}`, { state: { chapterReplay }, replace: true })
             return
           }
           if (chapterReplay && sessionDone) {
-            navigate(`${base}/chapters`, { replace: true })
+            navigate('/tango/chapters', { replace: true })
             return
           }
-          navigate(`${base}/${freePlay ? 'free/' : ''}${validDifficulty}`, { replace: true })
+          navigate(`/tango/${freePlay ? 'free/' : ''}${validDifficulty}`, { replace: true })
         }}
         onReplay={() => {
           if (chapterReplay) {
-            navigate(`${base}/${validDifficulty}`, {
+            navigate(`/tango/${validDifficulty}`, {
               state: { chapterReplay: { ...chapterReplay, index: chapterReplay.index - 1 } },
               replace: true,
             })
             return
           }
-          navigate(isDaily ? `${base}/daily` : `${base}/${freePlay ? 'free/' : ''}${validDifficulty}`, {
+          navigate(isDaily ? '/tango/daily' : `/tango/${freePlay ? 'free/' : ''}${validDifficulty}`, {
             state: { replayLevel: level },
             replace: true,
           })
