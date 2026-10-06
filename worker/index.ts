@@ -5,6 +5,7 @@ import { handleLogin, handleLogout, handleMe, handleRecover, handleSignup } from
 import { handleGetBackup, handlePutBackup } from './routes/backup'
 import { handleFriendRequest, handleFriendRespond, handleListFriends, handleRemoveFriend } from './routes/friends'
 import {
+  handleGetDailyBoard,
   handleGetDailyLeaderboard,
   handleGetGameLeaderboard,
   handlePostDailyScore,
@@ -35,6 +36,7 @@ router.post('/api/friends/respond', handleFriendRespond)
 router.delete('/api/friends/:username', handleRemoveFriend)
 
 router.post('/api/scores/daily', handlePostDailyScore)
+router.get('/api/leaderboard/daily/:dateKey', handleGetDailyBoard)
 router.get('/api/leaderboard/daily/:gameId/:dateKey', handleGetDailyLeaderboard)
 router.post('/api/scores/game', handlePostGameScore)
 router.get('/api/leaderboard/game/:gameId', handleGetGameLeaderboard)

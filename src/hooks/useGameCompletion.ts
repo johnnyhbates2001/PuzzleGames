@@ -10,7 +10,8 @@ import {
   type CompletionResult,
   type FreePlayCompletionResult,
 } from '../storage/db'
-import { postDailyScore, postGameScore } from '../api/scores'
+import { postDailyScore, postGameScore, type DailyScorePayload } from '../api/scores'
+import { ApiError } from '../api/client'
 import type { Difficulty } from '../engine/types'
 import { todayDateKey, type DailyGameId } from '../games/dailyChallenge'
 import { CHAPTER_META, LEVELS_PER_CHAPTER, chapterForIndex, storyLevelsForTier } from '../games/chapters'
@@ -89,6 +90,26 @@ interface UseGameCompletionOptions<K extends string, V> {
   recordFreePlayCompletion: (difficulty: Difficulty, elapsedMs: number, assisted: boolean) => Promise<FreePlayCompletionResult>
 }
 
+/** Waits before each retry of a failed live daily-score post. Anything still failing
+ *  after these is picked up by the background resync (see src/sync/backfill.ts's
+ *  syncRecentDailyScores) the next time the app is opened or comes back online. */
+const DAILY_SCORE_RETRY_DELAYS_MS = [2_000, 10_000]
+
+async function postDailyScoreWithRetry(payload: DailyScorePayload): Promise<void> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      await postDailyScore(payload)
+      return
+    } catch (error) {
+      // A 4xx other than an expired session means the server rejected the score
+      // itself — sending the same payload again can't change that.
+      const rejected = error instanceof ApiError && error.status >= 400 && error.status < 500 && error.status !== 401
+      if (rejected || attempt >= DAILY_SCORE_RETRY_DELAYS_MS.length) throw error
+      await new Promise((resolve) => setTimeout(resolve, DAILY_SCORE_RETRY_DELAYS_MS[attempt]))
+    }
+  }
+}
+
 /** How long the board's solve-sweep gets to play (see each Board's `solved` prop)
  *  before we navigate away — not the sweep's full duration (which runs longer on
  *  bigger grids), just enough that the sweep's tail overlaps the complete screen's
@@ -148,7 +169,7 @@ export function useGameCompletion<K extends string, V>({
         // second, possibly worse, attempt (see recordDailyChallengeCompletion's own
         // no-double-award guard for the same reasoning).
         if (user && !alreadyCompletedToday) {
-          void postDailyScore({
+          void postDailyScoreWithRetry({
             gameId,
             dateKey: todayDateKey(),
             elapsedMs: gameId === 'wordle' ? undefined : elapsedMs,

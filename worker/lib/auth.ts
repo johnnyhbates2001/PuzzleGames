@@ -17,6 +17,25 @@ export async function deleteSession(env: Env, token: string): Promise<void> {
   await env.DB.prepare('DELETE FROM sessions WHERE token = ?').bind(token).run()
 }
 
+/** How stale a session may get before GET /me slides its expiry forward — once a
+ *  day at most, so an app opened daily never hits the 30-day cutoff (a silent
+ *  sign-out quietly stops daily scores from syncing) without a write per request. */
+const SESSION_RENEW_AFTER_MS = 24 * 60 * 60 * 1000
+
+/** Pushes this request's session expiry back out to the full max age if it was last
+ *  set more than SESSION_RENEW_AFTER_MS ago. Returns the token when it renewed, so
+ *  the caller can re-send the cookie with a fresh Max-Age too; null otherwise. */
+export async function renewSessionIfStale(request: Request, env: Env): Promise<string | null> {
+  const token = readSessionCookie(request)
+  if (!token) return null
+  const now = Date.now()
+  const fullExpiry = now + SESSION_MAX_AGE_SECONDS * 1000
+  const result = await env.DB.prepare('UPDATE sessions SET expires_at = ? WHERE token = ? AND expires_at > ? AND expires_at < ?')
+    .bind(fullExpiry, token, now, fullExpiry - SESSION_RENEW_AFTER_MS)
+    .run()
+  return result.meta.changes > 0 ? token : null
+}
+
 /** Returns the signed-in user for this request, or null if there's no session
  *  cookie, the session doesn't exist, or it's expired (expired rows are lazily
  *  swept here rather than needing a cron). */

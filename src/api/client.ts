@@ -24,8 +24,10 @@ export function apiGet<T>(path: string): Promise<T> {
   return request<T>(path)
 }
 
-export function apiPost<T>(path: string, data?: unknown): Promise<T> {
-  return request<T>(path, { method: 'POST', body: data !== undefined ? JSON.stringify(data) : undefined })
+/** `keepalive` lets the request finish even if the page is closed or backgrounded
+ *  mid-flight — for small fire-and-forget writes like a daily score. */
+export function apiPost<T>(path: string, data?: unknown, options?: { keepalive?: boolean }): Promise<T> {
+  return request<T>(path, { method: 'POST', body: data !== undefined ? JSON.stringify(data) : undefined, keepalive: options?.keepalive })
 }
 
 export function apiPatch<T>(path: string, data?: unknown): Promise<T> {

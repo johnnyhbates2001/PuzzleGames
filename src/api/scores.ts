@@ -9,21 +9,35 @@ export interface DailyScorePayload {
 }
 
 export function postDailyScore(payload: DailyScorePayload): Promise<{ ok: boolean }> {
-  return apiPost('/scores/daily', payload)
+  // keepalive: players often close the app straight after winning, which would
+  // otherwise cancel this request before it reaches the server.
+  return apiPost('/scores/daily', payload, { keepalive: true })
 }
 
-export interface DailyLeaderboardEntry {
+export interface DailyBoardPlayer {
   userId: string
   username: string
   avatarType: string
   avatarValue: string
+  isMe: boolean
+}
+
+export interface DailyBoardScore {
+  userId: string
+  gameId: string
   elapsedMs: number | null
   guesses: number | null
   assisted: boolean
 }
 
-export function fetchDailyLeaderboard(gameId: string, dateKey: string): Promise<{ entries: DailyLeaderboardEntry[] }> {
-  return apiGet(`/leaderboard/daily/${gameId}/${dateKey}`)
+export interface DailyBoard {
+  players: DailyBoardPlayer[]
+  scores: DailyBoardScore[]
+}
+
+/** Every game's daily scores for `dateKey`, for the caller and all their friends. */
+export function fetchDailyBoard(dateKey: string): Promise<DailyBoard> {
+  return apiGet(`/leaderboard/daily/${dateKey}`)
 }
 
 export interface GameScorePayload {
