@@ -3,7 +3,7 @@ import { toPublicUser } from '../types'
 import type { RouteContext } from '../lib/router'
 import { errorResponse, json, readJson } from '../lib/http'
 import { generateId, generateRecoveryCode, hashPassword, hashRecoveryCode, verifyPassword, verifyRecoveryCode } from '../lib/crypto'
-import { createSession, deleteSession, getUserFromRequest } from '../lib/auth'
+import { createSession, deleteSession, getUserFromRequest, renewSessionIfStale } from '../lib/auth'
 import { clearSessionCookie, setSessionCookie } from '../lib/cookies'
 import { allowSignup } from '../lib/rateLimit'
 import { isValidPassword, isValidUsername } from '../lib/validate'
@@ -110,8 +110,11 @@ export async function handleRecover({ request, env, url }: RouteContext): Promis
   )
 }
 
-export async function handleMe({ request, env }: RouteContext): Promise<Response> {
+export async function handleMe({ request, env, url }: RouteContext): Promise<Response> {
   const user = await getUserFromRequest(request, env)
   if (!user) return errorResponse('Not signed in', 401)
-  return json({ user: toPublicUser(user) })
+  // Every app launch calls this, so sliding the session here keeps a regularly
+  // used device signed in indefinitely instead of a hard 30 days after login.
+  const renewedToken = await renewSessionIfStale(request, env)
+  return json({ user: toPublicUser(user) }, renewedToken ? { headers: { 'Set-Cookie': setSessionCookie(url, renewedToken) } } : undefined)
 }

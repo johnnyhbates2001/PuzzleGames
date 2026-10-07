@@ -980,14 +980,16 @@ export interface DailyChallengeHistoryEntry {
   record: DailyChallengeRecord
 }
 
-/** Every Daily Challenge completion ever recorded on this device, across every game
- *  — used only for the one-time leaderboard backfill when a device first links to a
- *  new account (see src/sync/backfill.ts); nothing else needs the whole history at
- *  once, so this doesn't get a more targeted query. */
-export async function getAllDailyChallengeHistory(): Promise<DailyChallengeHistoryEntry[]> {
+/** Every Daily Challenge result recorded on this device, across every game — or,
+ *  with `sinceDateKey`, only those on or after that date. Keys are
+ *  `YYYY-MM-DD:gameId`, so they sort by date and a lower-bound key range is enough.
+ *  Used by the leaderboard sync (see src/sync/backfill.ts): the whole history when a
+ *  device first links to an account, just the last few days for routine resyncs. */
+export async function getAllDailyChallengeHistory(sinceDateKey?: string): Promise<DailyChallengeHistoryEntry[]> {
   const db = await getDB()
-  const keys = await db.getAllKeys('dailyChallenge')
-  const values = await db.getAll('dailyChallenge')
+  const range = sinceDateKey ? IDBKeyRange.lowerBound(sinceDateKey) : undefined
+  const keys = await db.getAllKeys('dailyChallenge', range)
+  const values = await db.getAll('dailyChallenge', range)
   return keys.map((key, i) => {
     const [dateKeyStr, gameId] = key.split(':') as [string, DailyGameId]
     return { dateKey: dateKeyStr, gameId, record: values[i] }

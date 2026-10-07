@@ -1,11 +1,13 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
 import { useAuth } from './useAuth'
 import { fetchCloudBackup, pullBackup, pushBackup } from '../sync/backup'
-import { backfillLeaderboardStats } from '../sync/backfill'
+import { backfillLeaderboardStats, syncRecentDailyScores } from '../sync/backfill'
 import { getSettings, getTotalSolved } from '../storage/db'
 import type { BackupSnapshot } from '../storage/db'
 
 const AUTO_BACKUP_MIN_INTERVAL_MS = 60_000
+/** Floor between automatic (launch/foreground/reconnect) recent-score resyncs. */
+const RECENT_SCORE_SYNC_MIN_INTERVAL_MS = 30_000
 
 interface PendingConflict {
   cloudUpdatedAt: number
@@ -27,6 +29,11 @@ interface BackupContextValue {
    *  to call anytime, as many times as needed, since the backend only ever raises
    *  game_stats and never overwrites an existing daily_scores row. */
   resyncHistory: () => Promise<boolean>
+  /** Re-sends the last week of daily results to the leaderboard right now (see
+   *  src/sync/backfill.ts's syncRecentDailyScores). Never throws — the Friends page
+   *  awaits this before loading the daily board, and a failed sync shouldn't stop
+   *  the board from loading with whatever the server already has. */
+  syncRecentScores: () => Promise<void>
 }
 
 const BackupContext = createContext<BackupContextValue | null>(null)
@@ -41,6 +48,7 @@ export function BackupProvider({ children }: { children: ReactNode }) {
   const [lastSyncedAt, setLastSyncedAt] = useState<number | null>(null)
   const [conflict, setConflict] = useState<PendingConflict | null>(null)
   const lastAutoBackupRef = useRef(0)
+  const lastRecentScoreSyncRef = useRef(0)
 
   // Reconcile once per sign-in.
   useEffect(() => {
@@ -126,6 +134,37 @@ export function BackupProvider({ children }: { children: ReactNode }) {
     }
   }, [user])
 
+  const syncRecentScores = useCallback(async () => {
+    if (!user) return
+    lastRecentScoreSyncRef.current = Date.now()
+    await syncRecentDailyScores().catch((error: unknown) => console.error('Recent daily score sync failed', error))
+  }, [user])
+
+  // Background self-healing for the daily leaderboard: resync the last week's daily
+  // results on launch/sign-in, whenever the app comes back to the foreground, and on
+  // reconnect — so a score whose live post was lost shows up for friends without
+  // anyone having to press Settings' "Resync". Held off while a backup conflict is
+  // pending, since this device's local history may be about to be replaced.
+  useEffect(() => {
+    if (!user || conflict) return
+
+    function maybeSync() {
+      if (Date.now() - lastRecentScoreSyncRef.current < RECENT_SCORE_SYNC_MIN_INTERVAL_MS) return
+      void syncRecentScores()
+    }
+    function handleVisibility() {
+      if (!document.hidden) maybeSync()
+    }
+
+    maybeSync()
+    document.addEventListener('visibilitychange', handleVisibility)
+    window.addEventListener('online', maybeSync)
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibility)
+      window.removeEventListener('online', maybeSync)
+    }
+  }, [user, conflict, syncRecentScores])
+
   const resolveConflict = useCallback(
     async (choice: 'local' | 'cloud') => {
       if (!conflict || !user) return
@@ -177,7 +216,7 @@ export function BackupProvider({ children }: { children: ReactNode }) {
   }, [user, conflict])
 
   return (
-    <BackupContext.Provider value={{ status, lastSyncedAt, conflict, backupNow, restoreNow, resolveConflict, resyncHistory }}>
+    <BackupContext.Provider value={{ status, lastSyncedAt, conflict, backupNow, restoreNow, resolveConflict, resyncHistory, syncRecentScores }}>
       {children}
     </BackupContext.Provider>
   )

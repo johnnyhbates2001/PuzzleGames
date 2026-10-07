@@ -30,52 +30,76 @@ function isPlausibleHistoricalDateKey(dateKey: unknown): dateKey is string {
   return !Number.isNaN(parsed) && parsed <= Date.now() + MAX_DATE_SKEW_MS
 }
 
-/** Single self-contained upsert — the "only ever raise the stored value" merge (see
- *  the plan) is expressed directly in SQL via scalar max()/min() against the table's
- *  own current row, so no prior SELECT is needed. That also makes this safe to fire
- *  many of at once via env.DB.batch() (see handlePostScoreBackfill), since each
- *  statement is correct independent of statement order or of what's already stored. */
-function gameStatUpsert(
-  env: Env,
-  userId: string,
-  gameId: string,
-  difficulty: string,
-  completedCount: number,
-  bestTimeMs: number | null,
-  totalTimeMs: number,
-): D1PreparedStatement {
-  return env.DB.prepare(
-    `INSERT INTO game_stats (user_id, game_id, difficulty, completed_count, best_time_ms, total_time_ms, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?)
-     ON CONFLICT (user_id, game_id, difficulty) DO UPDATE SET
-       completed_count = max(game_stats.completed_count, excluded.completed_count),
-       best_time_ms = CASE
-         WHEN game_stats.best_time_ms IS NULL THEN excluded.best_time_ms
-         WHEN excluded.best_time_ms IS NULL THEN game_stats.best_time_ms
-         ELSE min(game_stats.best_time_ms, excluded.best_time_ms)
-       END,
-       total_time_ms = max(game_stats.total_time_ms, excluded.total_time_ms),
-       updated_at = excluded.updated_at`,
-  ).bind(userId, gameId, difficulty, completedCount, bestTimeMs, totalTimeMs, Date.now())
+// D1 caps a single statement at 100 bound parameters, and every row below binds 7 —
+// so 14 rows per multi-row statement is the most that fits.
+const ROWS_PER_STATEMENT = 14
+
+function chunk<T>(items: T[], size: number): T[][] {
+  const chunks: T[][] = []
+  for (let i = 0; i < items.length; i += size) chunks.push(items.slice(i, i + size))
+  return chunks
 }
 
-/** Unlike the live daily-score upsert (handlePostDailyScore), this never overwrites
- *  an existing row — backfilled history is strictly lower-priority than a real
- *  synced completion, so a genuine score always wins over an imported one. */
-function dailyScoreInsertIfAbsent(
-  env: Env,
-  userId: string,
-  gameId: string,
-  dateKey: string,
-  elapsedMs: number | null,
-  guesses: number | null,
-  assisted: boolean,
-): D1PreparedStatement {
-  return env.DB.prepare(
-    `INSERT INTO daily_scores (user_id, game_id, date_key, elapsed_ms, guesses, assisted, completed_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?)
-     ON CONFLICT (user_id, game_id, date_key) DO NOTHING`,
-  ).bind(userId, gameId, dateKey, elapsedMs, guesses, assisted ? 1 : 0, Date.now())
+function valuesPlaceholders(rowCount: number): string {
+  return Array.from({ length: rowCount }, () => '(?, ?, ?, ?, ?, ?, ?)').join(', ')
+}
+
+interface GameStatRow {
+  gameId: string
+  difficulty: string
+  completedCount: number
+  bestTimeMs: number | null
+  totalTimeMs: number
+}
+
+/** Self-contained upserts — the "only ever raise the stored value" merge (see the
+ *  plan) is expressed directly in SQL via scalar max()/min() against the table's own
+ *  current row, so no prior SELECT is needed. That also makes these safe to fire many
+ *  of at once via env.DB.batch() (see handlePostScoreBackfill), since each statement
+ *  is correct independent of statement order or of what's already stored. Packs up
+ *  to ROWS_PER_STATEMENT rows into each statement: D1 counts every statement in a
+ *  batch toward its per-request query limit (50 on the Free plan), so one statement
+ *  per row made a large backfill fail outright. */
+function gameStatUpserts(env: Env, userId: string, rows: GameStatRow[]): D1PreparedStatement[] {
+  const now = Date.now()
+  return chunk(rows, ROWS_PER_STATEMENT).map((group) =>
+    env.DB.prepare(
+      `INSERT INTO game_stats (user_id, game_id, difficulty, completed_count, best_time_ms, total_time_ms, updated_at)
+       VALUES ${valuesPlaceholders(group.length)}
+       ON CONFLICT (user_id, game_id, difficulty) DO UPDATE SET
+         completed_count = max(game_stats.completed_count, excluded.completed_count),
+         best_time_ms = CASE
+           WHEN game_stats.best_time_ms IS NULL THEN excluded.best_time_ms
+           WHEN excluded.best_time_ms IS NULL THEN game_stats.best_time_ms
+           ELSE min(game_stats.best_time_ms, excluded.best_time_ms)
+         END,
+         total_time_ms = max(game_stats.total_time_ms, excluded.total_time_ms),
+         updated_at = excluded.updated_at`,
+    ).bind(...group.flatMap((r) => [userId, r.gameId, r.difficulty, r.completedCount, r.bestTimeMs, r.totalTimeMs, now])),
+  )
+}
+
+interface DailyScoreRow {
+  gameId: string
+  dateKey: string
+  elapsedMs: number | null
+  guesses: number | null
+  assisted: boolean
+}
+
+/** Unlike the live daily-score upsert (handlePostDailyScore), these never overwrite
+ *  an existing row — a resynced score is strictly lower-priority than a live synced
+ *  completion, so a genuine score always wins over an imported one. Batched the same
+ *  way as gameStatUpserts, for the same reason. */
+function dailyScoreInsertsIfAbsent(env: Env, userId: string, rows: DailyScoreRow[]): D1PreparedStatement[] {
+  const now = Date.now()
+  return chunk(rows, ROWS_PER_STATEMENT).map((group) =>
+    env.DB.prepare(
+      `INSERT INTO daily_scores (user_id, game_id, date_key, elapsed_ms, guesses, assisted, completed_at)
+       VALUES ${valuesPlaceholders(group.length)}
+       ON CONFLICT (user_id, game_id, date_key) DO NOTHING`,
+    ).bind(...group.flatMap((r) => [userId, r.gameId, r.dateKey, r.elapsedMs, r.guesses, r.assisted ? 1 : 0, now])),
+  )
 }
 
 interface DailyScoreBody {
@@ -164,6 +188,57 @@ export const handleGetDailyLeaderboard = withAuth(async ({ env, user, params }: 
   return json({ entries })
 })
 
+interface DailyBoardPlayerRow {
+  id: string
+  username: string
+  avatar_type: string
+  avatar_value: string
+}
+
+interface DailyBoardScoreRow {
+  user_id: string
+  game_id: string
+  elapsed_ms: number | null
+  guesses: number | null
+  assisted: number
+}
+
+/** Every game's daily scores for one date, for the caller and their friends, in one
+ *  request — what the Friends page's Daily view renders as a game-by-player grid.
+ *  Players are listed even with no scores yet, so a friend who hasn't played today
+ *  still gets a column. Ranking is left to the client, which already needs per-game
+ *  rules (Wordle by guesses, everything else by time) to highlight winners. */
+export const handleGetDailyBoard = withAuth(async ({ env, user, params }: AuthedContext) => {
+  if (!isPlausibleHistoricalDateKey(params.dateKey)) return errorResponse('Invalid date', 400)
+
+  const friendIds = await getFriendIds(env, user.id)
+  const placeholders = friendIds.map(() => '?').join(',')
+  const [players, scores] = await env.DB.batch([
+    env.DB.prepare(`SELECT id, username, avatar_type, avatar_value FROM users WHERE id IN (${placeholders})`).bind(...friendIds),
+    env.DB.prepare(
+      `SELECT user_id, game_id, elapsed_ms, guesses, assisted FROM daily_scores
+       WHERE date_key = ? AND user_id IN (${placeholders})`,
+    ).bind(params.dateKey, ...friendIds),
+  ])
+
+  return json({
+    players: (players.results as unknown as DailyBoardPlayerRow[]).map((row) => ({
+      userId: row.id,
+      username: row.username,
+      avatarType: row.avatar_type,
+      avatarValue: row.avatar_value,
+      isMe: row.id === user.id,
+    })),
+    scores: (scores.results as unknown as DailyBoardScoreRow[]).map((row) => ({
+      userId: row.user_id,
+      gameId: row.game_id,
+      elapsedMs: row.elapsed_ms,
+      guesses: row.guesses,
+      assisted: !!row.assisted,
+    })),
+  })
+})
+
 interface GameScoreBody {
   gameId?: string
   difficulty?: string
@@ -184,7 +259,10 @@ export const handlePostGameScore = withAuth(async ({ request, env, user }: Authe
     return errorResponse('gameId, difficulty, completedCount, and totalTimeMs are required')
   }
 
-  await gameStatUpsert(env, user.id, body.gameId, body.difficulty, body.completedCount, body.bestTimeMs ?? null, body.totalTimeMs).run()
+  const [statement] = gameStatUpserts(env, user.id, [
+    { gameId: body.gameId, difficulty: body.difficulty, completedCount: body.completedCount, bestTimeMs: body.bestTimeMs ?? null, totalTimeMs: body.totalTimeMs },
+  ])
+  await statement.run()
 
   return json({ ok: true })
 })
@@ -194,19 +272,20 @@ interface BackfillBody {
   dailyScores?: { gameId?: string; dateKey?: string; elapsedMs?: number; guesses?: number; assisted?: boolean }[]
 }
 
-// Generous headroom over anything a real device could have: 6 games x 3
-// difficulties for gameStats, and years of daily history across 6 games for
-// dailyScores — see the plan's cost analysis, this is nowhere close to a quota
-// concern, just a sane upper bound on one request's payload.
+// Per-request caps, sized so a full request stays well inside D1's 50-queries-per-
+// invocation Free-plan limit: 400 daily scores pack into 29 statements, 32 game stats
+// into 3, plus the session lookup. A device with more history than that (a year of
+// all 8 dailies is ~2900) sends it over several requests — see src/sync/backfill.ts,
+// which mirrors MAX_BACKFILL_DAILY_SCORES as its chunk size.
 const MAX_BACKFILL_GAME_STATS = 32
-const MAX_BACKFILL_DAILY_SCORES = 5000
+const MAX_BACKFILL_DAILY_SCORES = 400
 
-/** One-time seed of this account's leaderboard tables from a device's existing local
- *  history — called only when a device first links to a brand-new account (see
- *  src/hooks/useBackupSync.tsx), so a returning player's friends-leaderboard stats
- *  reflect real past performance instead of starting at zero. Silently skips any
- *  malformed entry rather than failing the whole request — this is best-effort
- *  seeding of the caller's own data, not a strict API contract. */
+/** Seeds/repairs this account's leaderboard tables from a device's local history —
+ *  called when a device first links to an account, from Settings' "Resync" button,
+ *  and (with just the last week of dailies) routinely in the background, so a live
+ *  score sync that failed gets filled in later (see src/sync/backfill.ts). Silently
+ *  skips any malformed entry rather than failing the whole request — this is
+ *  best-effort seeding of the caller's own data, not a strict API contract. */
 export const handlePostScoreBackfill = withAuth(async ({ request, env, user }: AuthedContext) => {
   const body = await readJson<BackfillBody>(request)
   if (!body) return errorResponse('Missing body')
@@ -217,17 +296,21 @@ export const handlePostScoreBackfill = withAuth(async ({ request, env, user }: A
     return errorResponse('Too many entries')
   }
 
-  const statements: D1PreparedStatement[] = []
-
+  const statRows: GameStatRow[] = []
   for (const entry of gameStats) {
     if (!isGameId(entry.gameId) || !isDifficultyId(entry.difficulty)) continue
     if (typeof entry.completedCount !== 'number' || typeof entry.totalTimeMs !== 'number') continue
     if (entry.completedCount <= 0) continue
-    statements.push(
-      gameStatUpsert(env, user.id, entry.gameId, entry.difficulty, entry.completedCount, entry.bestTimeMs ?? null, entry.totalTimeMs),
-    )
+    statRows.push({
+      gameId: entry.gameId,
+      difficulty: entry.difficulty,
+      completedCount: entry.completedCount,
+      bestTimeMs: entry.bestTimeMs ?? null,
+      totalTimeMs: entry.totalTimeMs,
+    })
   }
 
+  const dailyRows: DailyScoreRow[] = []
   for (const entry of dailyScores) {
     if (!isGameId(entry.gameId) || !isPlausibleHistoricalDateKey(entry.dateKey)) continue
     let elapsedMs: number | null = null
@@ -239,12 +322,13 @@ export const handlePostScoreBackfill = withAuth(async ({ request, env, user }: A
       if (typeof entry.elapsedMs !== 'number' || entry.elapsedMs < MIN_ELAPSED_MS) continue
       elapsedMs = entry.elapsedMs
     }
-    statements.push(dailyScoreInsertIfAbsent(env, user.id, entry.gameId, entry.dateKey, elapsedMs, guesses, !!entry.assisted))
+    dailyRows.push({ gameId: entry.gameId, dateKey: entry.dateKey, elapsedMs, guesses, assisted: !!entry.assisted })
   }
 
+  const statements = [...gameStatUpserts(env, user.id, statRows), ...dailyScoreInsertsIfAbsent(env, user.id, dailyRows)]
   if (statements.length > 0) await env.DB.batch(statements)
 
-  return json({ ok: true, applied: statements.length })
+  return json({ ok: true, applied: statRows.length + dailyRows.length })
 })
 
 interface GameLeaderboardRow {
