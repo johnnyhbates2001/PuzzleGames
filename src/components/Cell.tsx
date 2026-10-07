@@ -3,6 +3,7 @@ import type { CellState } from '../state/types'
 import { hasX } from '../state/types'
 import { XMarkIcon } from './icons'
 import { HINT_FOCUS_RING } from './hintFocus'
+import { HintOverlay } from './HintOverlay'
 import { QueensMarkerGlyph } from './QueensMarkerGlyph'
 import { useLingeringFlag } from '../hooks/useLingeringFlag'
 import { useEquippedCosmetic } from '../hooks/useCosmetics'
@@ -49,6 +50,10 @@ interface CellProps {
   onHintPulseEnd?: () => void
   /** Outlined gold while a "Show next step" explanation refers to this square. */
   focused?: boolean
+  /** Square a "Show next step" hint is waiting for the player to fill in. */
+  target?: boolean
+  /** Square flagged as wrong by "Check my work" or a hint, until the player changes it. */
+  flagged?: boolean
   onClick: (row: number, col: number) => void
 }
 
@@ -65,6 +70,8 @@ function CellImpl({
   hinted,
   onHintPulseEnd,
   focused,
+  target,
+  flagged,
   onClick,
 }: CellProps) {
   const tinted = useLingeringFlag(conflict, CONFLICT_TINT_HOLD_MS)
@@ -85,6 +92,7 @@ function CellImpl({
       style={{ backgroundColor: regionColor, animationDelay: sweepDelayMs !== undefined ? `${sweepDelayMs}ms` : undefined }}
       onAnimationEnd={hinted ? onHintPulseEnd : undefined}
     >
+      <HintOverlay target={target} flagged={flagged} />
       {cell.queen ? (
         <span className={`anim-pop-in flex text-[min(6vw,28px)] ${tinted ? 'text-danger' : 'text-slate-900'}`}>
           <QueensMarkerGlyph marker={marker} className="size-[1em]" />

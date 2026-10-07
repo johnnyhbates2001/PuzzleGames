@@ -440,6 +440,21 @@
     animation: hint-pulse 260ms ease-out 3;
   }
 
+  /* The tint inside a hint's target / "Check my work" flag overlay (HintOverlay.tsx) —
+     a slow breathe so the square reads as waiting on the player. */
+  @keyframes hint-breathe {
+    0%,
+    100% {
+      opacity: 0.45;
+    }
+    50% {
+      opacity: 1;
+    }
+  }
+  .anim-hint-breathe {
+    animation: hint-breathe 1.6s ease-in-out infinite;
+  }
+
   /* Sudoku — a row/column/box that just became fully (and correctly) filled */
   @keyframes unit-complete {
     0%,

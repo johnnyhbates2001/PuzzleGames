@@ -1,5 +1,6 @@
 import { memo, type CSSProperties } from 'react'
 import { HINT_FOCUS_RING } from './hintFocus'
+import { HintOverlay } from './HintOverlay'
 import { useLingeringFlag } from '../hooks/useLingeringFlag'
 import { useEquippedCosmetic } from '../hooks/useCosmetics'
 
@@ -38,6 +39,10 @@ interface SudokuCellProps {
   onHintPulseEnd?: () => void
   /** Outlined gold while a "Show next step" explanation refers to this square. */
   focused?: boolean
+  /** Square a "Show next step" hint is waiting for the player to fill in. */
+  target?: boolean
+  /** Square flagged as wrong by "Check my work" or a hint, until the player changes it. */
+  flagged?: boolean
   /** Ms to delay this cell's completion bump by — set only when a direct digit
    *  placement just completed a row/col/box this cell belongs to (see SudokuGamePage).
    *  Cleared via onUnitCompleteEnd once the animation finishes. */
@@ -97,6 +102,8 @@ function SudokuCellImpl({
   hinted,
   onHintPulseEnd,
   focused,
+  target,
+  flagged,
   unitCompleteDelayMs,
   onUnitCompleteEnd,
   onClick,
@@ -122,6 +129,7 @@ function SudokuCellImpl({
       style={{ animationDelay: delayMs !== undefined ? `${delayMs}ms` : undefined }}
       onAnimationEnd={hinted || unitCompleteDelayMs !== undefined ? handleAnimationEnd : undefined}
     >
+      <HintOverlay target={target} flagged={flagged} />
       {cageSum !== undefined && (
         <span className="pointer-events-none absolute top-[1px] left-[2px] z-[2] bg-inherit px-[1px] text-[min(2.3vw,10px)] leading-none font-semibold text-ink-muted">
           {cageSum}

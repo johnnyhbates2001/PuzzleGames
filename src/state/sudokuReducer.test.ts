@@ -271,13 +271,3 @@ describe('createSudokuReducer (Killer variant win check)', () => {
   })
 })
 
-describe('HINT_PLACE', () => {
-  it('fills the deduced digit, clears its notes, and can win', () => {
-    let state = sudokuReducer(fresh(), { type: 'HINT_PLACE', row: 0, col: 0, digit: SOLUTION[0][0], now: 0 })
-    expect(state.board[0][0].value).toBe(SOLUTION[0][0])
-    expect(state.hintsUsed).toBe(1)
-    expect(state.status).toBe('won')
-    state = sudokuReducer(fresh(), { type: 'HINT_PLACE', row: 0, col: 1, digit: 1, now: 0 })
-    expect(state.board[0][1].value).toBe(SOLUTION[0][1]) // givens are never overwritten
-  })
-})

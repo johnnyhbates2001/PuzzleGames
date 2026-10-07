@@ -41,6 +41,8 @@ interface PatchesBoardProps {
   /** Cells (coordKey) a reveal-hint just placed — pulses once, gold. */
   hintedCells?: Set<string>
   onHintPulseEnd?: (key: string) => void
+  /** Cells (coordKey) flagged as wrong by "Check my work". */
+  flaggedCells?: Set<string>
   className?: string
 }
 
@@ -66,6 +68,7 @@ export function PatchesBoard({
   onRetractEnd,
   hintedCells,
   onHintPulseEnd,
+  flaggedCells,
   className,
 }: PatchesBoardProps) {
   const regionColors = useRegionColors()
@@ -239,6 +242,7 @@ export function PatchesBoard({
           onRetractEnd={ghost ? () => onRetractEnd?.(ghost.id) : undefined}
           hinted={!!hintedCells?.has(key)}
           onHintPulseEnd={() => onHintPulseEnd?.(key)}
+          flagged={!!flaggedCells?.has(key)}
         />,
       )
     }

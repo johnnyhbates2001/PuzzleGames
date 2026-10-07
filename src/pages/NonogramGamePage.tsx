@@ -41,12 +41,12 @@ import { formatElapsed } from '../components/Timer'
 import { BossGateSheet, buildBossAssists, TIME_FREEZE_BONUS_MS, type BossAssist } from '../components/BossGateSheet'
 import { LevelContext } from '../components/LevelContext'
 import { HintExplanation } from '../components/HintExplanation'
-import { useHintExplanation } from '../hooks/useHintExplanation'
+import { hintHighlights, keysWhere, stillWrong, useHintExplanation } from '../hooks/useHintExplanation'
 import { BoltIcon, EyeIcon, FlagIcon, SparkleIcon } from '../components/icons'
 
 const HINT_OPTIONS: HintOption[] = [
-  { id: 'next-step', icon: <EyeIcon />, title: 'Show next step', desc: 'Points out the next logical move and explains why.', price: 25 },
-  { id: 'check', icon: <FlagIcon />, title: 'Check my work', desc: 'Flags anything currently marked wrong.', price: 40 },
+  { id: 'next-step', icon: <EyeIcon />, title: 'Show next step', desc: 'Explains the next logical move — then you make it.', price: 25 },
+  { id: 'check', icon: <FlagIcon />, title: 'Check my work', desc: 'Circles anything currently marked wrong.', price: 40 },
   { id: 'reveal-line', icon: <SparkleIcon />, title: 'Reveal a line', desc: 'Completes one whole row or column.', price: 120 },
 ]
 
@@ -117,7 +117,7 @@ export default function NonogramGamePage({ freePlay = false }: { freePlay?: bool
   const { playSound, buzz } = useAudio()
 
   const [state, dispatch] = useReducer(nonogramReducer, PLACEHOLDER_LEVEL, (level) => createInitialState(level))
-  const { explanation, show: showHint, dismiss: dismissHint } = useHintExplanation(state.grid)
+  const { explanation, show: showHint, dismiss: dismissHint } = useHintExplanation(state)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [coins, setCoins] = useState(0)
@@ -409,14 +409,21 @@ export default function NonogramGamePage({ freePlay = false }: { freePlay?: bool
         playSound('hint')
         setCheckMessage(null)
         setHintsOpen(false)
+        // The hint explains the move and highlights the squares; the player marks them.
         if (hint.kind === 'mistake') {
-          showHint(hint.message, [hint.cell, ...hint.focus], false)
-          dispatch({ type: 'HINT_CHECK' })
+          const wrongMark = state.grid[hint.cell.row][hint.cell.col]
+          showHint({ label: 'Fix this', message: hint.message, tone: 'fix', focus: hint.focus, pending: (s) => keysWhere([hint.cell], (p) => s.grid[p.row][p.col] === wrongMark) })
         } else {
-          actingRef.current = 'hint'
-          showHint(hint.message, [...hint.focus, ...hint.cells], true)
-          dispatch({ type: 'HINT_MARK', cells: hint.cells, now: Date.now() })
+          const marks = new Map(hint.cells.map((p) => [`${p.row},${p.col}`, p.mark]))
+          showHint({
+            label: 'Next step',
+            message: hint.message,
+            tone: 'step',
+            focus: hint.focus,
+            pending: (s) => keysWhere(hint.cells, (p) => s.grid[p.row][p.col] !== marks.get(`${p.row},${p.col}`)),
+          })
         }
+        dispatch({ type: 'HINT_CHECK' })
         return
       }
 
@@ -427,8 +434,19 @@ export default function NonogramGamePage({ freePlay = false }: { freePlay?: bool
 
       if (id === 'check') {
         const wrong = getWrongCells(state)
-        setCheckMessage(wrong.size === 0 ? 'Looking good — nothing wrong yet!' : `${wrong.size} cell${wrong.size === 1 ? '' : 's'} marked wrong.`)
         dispatch({ type: 'HINT_CHECK' })
+        if (wrong.size === 0) {
+          setCheckMessage('Looking good — nothing wrong yet!')
+          return
+        }
+        setCheckMessage(null)
+        setHintsOpen(false)
+        showHint({
+          label: 'Check my work',
+          message: wrong.size === 1 ? "One square is marked wrong." : `${wrong.size} squares are marked wrong.`,
+          tone: 'fix',
+          pending: stillWrong(wrong, getWrongCells),
+        })
         return
       }
 
@@ -510,7 +528,7 @@ export default function NonogramGamePage({ freePlay = false }: { freePlay?: bool
             onRetractEnd={(key) => setRetractedCells((prev) => removeMapKey(prev, key))}
             hintedCells={hintedCells}
             onHintPulseEnd={(key) => setHintedCells((prev) => removeKey(prev, key))}
-            focusCells={explanation?.focus}
+            {...hintHighlights(explanation)}
           />
         )}
 
@@ -532,7 +550,15 @@ export default function NonogramGamePage({ freePlay = false }: { freePlay?: bool
           hintsDisabled={modifiers?.noHints}
         />
 
-        {explanation && <HintExplanation message={explanation.message} onDismiss={dismissHint} />}
+        {explanation && (
+          <HintExplanation
+            label={explanation.label}
+            message={explanation.message}
+            tone={explanation.tone}
+            remaining={explanation.targets.size}
+            onDismiss={dismissHint}
+          />
+        )}
       </div>
 
       <HintSheet

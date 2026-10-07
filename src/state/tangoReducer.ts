@@ -28,7 +28,6 @@ export type TangoAction =
   | { type: 'LOAD'; level: TangoLevelRecord; snapshot?: PersistedTangoSnapshot }
   | { type: 'HINT_REVEAL_CELL'; now: number }
   /** A "Show next step" hint (see engine/tango/hints.ts): fills the deduced squares. */
-  | { type: 'HINT_PLACE'; cells: Coord[]; value: TangoValue; now: number }
   | { type: 'HINT_SOLVE_ROW'; now: number }
   | { type: 'HINT_CHECK' }
 
@@ -121,13 +120,6 @@ export function tangoReducer(state: TangoGameState, action: TangoAction): TangoG
       if (!target) return state
       const grid = cloneGrid(state.grid)
       grid[target.row][target.col] = state.level.solution[target.row][target.col]
-      return withWinCheck({ ...state, grid, history: pushHistory(state), hintsUsed: state.hintsUsed + 1 }, action.now)
-    }
-
-    case 'HINT_PLACE': {
-      if (state.status === 'won') return state
-      const grid = cloneGrid(state.grid)
-      for (const p of action.cells) if (!isGiven(state.level, p.row, p.col)) grid[p.row][p.col] = action.value
       return withWinCheck({ ...state, grid, history: pushHistory(state), hintsUsed: state.hintsUsed + 1 }, action.now)
     }
 

@@ -66,12 +66,3 @@ describe('tangoReducer', () => {
   })
 })
 
-describe('HINT_PLACE', () => {
-  it('fills every deduced square but never a given', () => {
-    let state = createInitialState(level([[0, 0], [5, 5]]))
-    state = tangoReducer(state, { type: 'HINT_PLACE', cells: [{ row: 0, col: 0 }, { row: 0, col: 1 }], value: SOLUTION[0][0], now: 0 })
-    expect(state.grid[0][0]).toBe(SOLUTION[0][0])
-    expect(state.grid[0][1]).toBe(SOLUTION[0][1])
-    expect(state.hintsUsed).toBe(1)
-  })
-})

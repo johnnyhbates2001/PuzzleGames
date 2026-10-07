@@ -37,7 +37,6 @@ export type SudokuAction<L extends SudokuLevelRecord = SudokuLevelRecord> =
   | { type: 'LOAD'; level: L; snapshot?: PersistedSudokuSnapshot }
   | { type: 'HINT_REVEAL_CELL'; now: number }
   /** A "Show next step" hint (see engine/sudoku/hints.ts): fills the deduced digit. */
-  | { type: 'HINT_PLACE'; row: number; col: number; digit: number; now: number }
   | { type: 'HINT_SOLVE_BOX'; now: number }
   | { type: 'HINT_CHECK' }
 
@@ -204,16 +203,6 @@ export function createSudokuReducer<L extends SudokuLevelRecord>(isLevelSolved: 
         const digit = state.level.solution[target.row][target.col]
         board[target.row][target.col] = { ...cell, value: digit, notes: new Set() }
         clearPeerNotes(board, target.row, target.col, digit)
-        return withWinCheck({ ...state, board, history: pushHistory(state), hintsUsed: state.hintsUsed + 1 }, action.now)
-      }
-
-      case 'HINT_PLACE': {
-        if (state.status === 'won') return state
-        const cell = state.board[action.row][action.col]
-        if (cell.given) return state
-        const board = cloneBoard(state.board)
-        board[action.row][action.col] = { ...cell, value: action.digit, notes: new Set() }
-        clearPeerNotes(board, action.row, action.col, action.digit)
         return withWinCheck({ ...state, board, history: pushHistory(state), hintsUsed: state.hintsUsed + 1 }, action.now)
       }
 

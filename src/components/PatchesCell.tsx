@@ -2,6 +2,7 @@ import { memo, type CSSProperties } from 'react'
 import type { PatchShape } from '../engine/patches/types'
 import { useLingeringFlag } from '../hooks/useLingeringFlag'
 import { useEquippedCosmetic } from '../hooks/useCosmetics'
+import { HintOverlay } from './HintOverlay'
 
 const CONFLICT_TINT_HOLD_MS = 900
 
@@ -34,6 +35,8 @@ interface PatchesCellProps {
    *  (now-placed) fill gold. Cleared via onHintPulseEnd. */
   hinted?: boolean
   onHintPulseEnd?: () => void
+  /** Square flagged as wrong by "Check my work", until the player changes it. */
+  flagged?: boolean
 }
 
 // Each shape fixes its own short side at the same 62%-of-cell baseline and lets the
@@ -87,6 +90,7 @@ function PatchesCellImpl({
   onRetractEnd,
   hinted,
   onHintPulseEnd,
+  flagged,
 }: PatchesCellProps) {
   const tinted = useLingeringFlag(mismatched, CONFLICT_TINT_HOLD_MS)
   const badgeShape = useEquippedCosmetic('patchesBadgeShape')
@@ -131,6 +135,7 @@ function PatchesCellImpl({
       {previewColor && (
         <span className="pointer-events-none absolute inset-0 opacity-55" style={{ backgroundColor: previewColor }} />
       )}
+      <HintOverlay flagged={flagged} />
       {tinted && <span className="pointer-events-none absolute inset-0 rounded-[2px] ring-[2.5px] ring-inset ring-danger" />}
       {clueArea !== null && clueShape !== null && (
         <span

@@ -1,4 +1,5 @@
 import { memo } from 'react'
+import { HintOverlay } from './HintOverlay'
 
 interface ZipCellProps {
   row: number
@@ -27,6 +28,8 @@ interface ZipCellProps {
    *  pulses the real (now-in-path) tint gold. Cleared via onHintPulseEnd. */
   hinted?: boolean
   onHintPulseEnd?: () => void
+  /** Square flagged as wrong by "Check my work", until the player changes it. */
+  flagged?: boolean
 }
 
 function ZipCellImpl({
@@ -45,6 +48,7 @@ function ZipCellImpl({
   onRetractEnd,
   hinted,
   onHintPulseEnd,
+  flagged,
 }: ZipCellProps) {
   const showGhost = retracting && !inPath
 
@@ -67,6 +71,7 @@ function ZipCellImpl({
       style={{ animationDelay: sweepDelayMs !== undefined ? `${sweepDelayMs}ms` : undefined }}
       onAnimationEnd={shake || hinted ? handleAnimationEnd : undefined}
     >
+      <HintOverlay flagged={flagged} />
       {showGhost && (
         <span className="anim-retract absolute inset-0 bg-accent-tint" onAnimationEnd={onRetractEnd} />
       )}

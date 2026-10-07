@@ -35,6 +35,8 @@ import { ZipBoard } from '../components/ZipBoard'
 import { ZipControls } from '../components/ZipControls'
 import { GameHeader } from '../components/GameHeader'
 import { HintSheet, type HintOption } from '../components/HintSheet'
+import { HintExplanation } from '../components/HintExplanation'
+import { stillWrong, useHintExplanation } from '../hooks/useHintExplanation'
 import { FailSheet } from '../components/FailSheet'
 import { formatElapsed } from '../components/Timer'
 import { BossGateSheet, buildBossAssists, TIME_FREEZE_BONUS_MS, type BossAssist } from '../components/BossGateSheet'
@@ -43,7 +45,7 @@ import { BoltIcon, EyeIcon, FlagIcon } from '../components/icons'
 
 const HINT_OPTIONS: HintOption[] = [
   { id: 'reveal-next', icon: <EyeIcon />, title: 'Reveal next step', desc: 'Extends your path by one correct cell.', price: 25 },
-  { id: 'check', icon: <FlagIcon />, title: 'Check my work', desc: 'Flags any step that strayed from the path.', price: 40 },
+  { id: 'check', icon: <FlagIcon />, title: 'Check my work', desc: 'Circles any step that strayed from the path.', price: 40 },
 ]
 
 // First-guess placeholder, not derived from real solve-time data — tune once the user
@@ -97,6 +99,7 @@ export default function ZipGamePage({ freePlay = false }: { freePlay?: boolean }
   const { playSound, buzz } = useAudio()
 
   const [state, dispatch] = useReducer(zipReducer, PLACEHOLDER_LEVEL, (level) => createInitialState(level))
+  const { explanation, show: showHint, dismiss: dismissHint } = useHintExplanation(state)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [coins, setCoins] = useState(0)
@@ -417,8 +420,14 @@ export default function ZipGamePage({ freePlay = false }: { freePlay?: boolean }
 
       if (id === 'check') {
         const wrong = getWrongCells(state)
-        setCheckMessage(wrong.size === 0 ? 'Looking good — nothing wrong yet!' : `${wrong.size} step${wrong.size === 1 ? '' : 's'} strayed from the path.`)
         dispatch({ type: 'HINT_CHECK' })
+        if (wrong.size === 0) {
+          setCheckMessage('Looking good — nothing wrong yet!')
+          return
+        }
+        setCheckMessage(null)
+        setHintsOpen(false)
+        showHint({ label: 'Check my work', message: wrong.size === 1 ? 'Your last step strayed from the path.' : `Your last ${wrong.size} steps strayed from the path — back up to where it went wrong.`, tone: 'fix', pending: stillWrong(wrong, getWrongCells) })
         return
       }
 
@@ -429,7 +438,7 @@ export default function ZipGamePage({ freePlay = false }: { freePlay?: boolean }
       }
       setHintsOpen(false)
     },
-    [state, playSound],
+    [state, playSound, showHint],
   )
 
   if (!validDifficulty && !isDaily) {
@@ -490,6 +499,7 @@ export default function ZipGamePage({ freePlay = false }: { freePlay?: boolean }
             onRetractEnd={(key) => setRetractedCells((prev) => removeKey(prev, key))}
             hintedCells={hintedCells}
             onHintPulseEnd={(key) => setHintedCells((prev) => removeKey(prev, key))}
+            flaggedCells={explanation?.targets}
           />
         )}
 
@@ -509,6 +519,16 @@ export default function ZipGamePage({ freePlay = false }: { freePlay?: boolean }
           hintPrice={HINT_OPTIONS[0].price}
           hintsDisabled={modifiers?.noHints}
         />
+
+        {explanation && (
+          <HintExplanation
+            label={explanation.label}
+            message={explanation.message}
+            tone={explanation.tone}
+            remaining={explanation.targets.size}
+            onDismiss={dismissHint}
+          />
+        )}
       </div>
 
       <HintSheet
