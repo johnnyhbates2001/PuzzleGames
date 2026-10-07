@@ -37,7 +37,6 @@ export type NonogramAction =
   | { type: 'LOAD'; level: NonogramLevelRecord; snapshot?: PersistedNonogramSnapshot }
   | { type: 'HINT_REVEAL_CELL'; now: number }
   /** A "Show next step" hint (see engine/nonogram/hints.ts): applies the line's forced marks. */
-  | { type: 'HINT_MARK'; cells: { row: number; col: number; mark: Mark }[]; now: number }
   | { type: 'HINT_REVEAL_LINE'; now: number }
   | { type: 'HINT_CHECK' }
 
@@ -183,13 +182,6 @@ export function nonogramReducer(state: NonogramState, action: NonogramAction): N
       if (!target) return state
       const grid = cloneGrid(state.grid)
       revealCell(grid, target, state.level.solution)
-      return withWinCheck({ ...state, grid, history: pushHistory(state), hintsUsed: state.hintsUsed + 1 }, action.now)
-    }
-
-    case 'HINT_MARK': {
-      if (state.status === 'won') return state
-      const grid = cloneGrid(state.grid)
-      for (const p of action.cells) grid[p.row][p.col] = p.mark
       return withWinCheck({ ...state, grid, history: pushHistory(state), hintsUsed: state.hintsUsed + 1 }, action.now)
     }
 

@@ -35,6 +35,10 @@ interface SudokuBoardProps {
   /** Cells (coordKey) a "Show next step" hint's reasoning refers to — outlined gold
    *  while its explanation is showing (see HintExplanation). */
   focusCells?: Set<string>
+  /** Cells (coordKey) a "Show next step" hint is waiting for the player to fill in. */
+  targetCells?: Set<string>
+  /** Cells (coordKey) flagged as wrong by "Check my work" or a hint. */
+  flaggedCells?: Set<string>
   /** Cells (coordKey) belonging to a row/col/box that a direct digit placement just
    *  completed, mapped to their outward-stagger delay from the placed cell. */
   completedUnitCells?: Map<string, number>
@@ -113,6 +117,8 @@ export function SudokuBoard({
   onRetractEnd,
   hintedCells,
   focusCells,
+  targetCells,
+  flaggedCells,
   onHintPulseEnd,
   completedUnitCells,
   onUnitCompleteEnd,
@@ -152,6 +158,8 @@ export function SudokuBoard({
                 onRetractEnd={() => onRetractEnd?.(key)}
                 hinted={!!hintedCells?.has(key)}
                 focused={!!focusCells?.has(key)}
+                target={!!targetCells?.has(key)}
+                flagged={!!flaggedCells?.has(key)}
                 onHintPulseEnd={() => onHintPulseEnd?.(key)}
                 unitCompleteDelayMs={completedUnitCells?.get(key)}
                 onUnitCompleteEnd={() => onUnitCompleteEnd?.(key)}

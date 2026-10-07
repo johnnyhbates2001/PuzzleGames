@@ -35,6 +35,8 @@ import { PatchesBoard } from '../components/PatchesBoard'
 import { PatchesControls } from '../components/PatchesControls'
 import { GameHeader } from '../components/GameHeader'
 import { HintSheet, type HintOption } from '../components/HintSheet'
+import { HintExplanation } from '../components/HintExplanation'
+import { stillWrong, useHintExplanation } from '../hooks/useHintExplanation'
 import { FailSheet } from '../components/FailSheet'
 import { formatElapsed } from '../components/Timer'
 import { BossGateSheet, buildBossAssists, TIME_FREEZE_BONUS_MS, type BossAssist } from '../components/BossGateSheet'
@@ -42,7 +44,7 @@ import { LevelContext } from '../components/LevelContext'
 import { BoltIcon, FlagIcon, SparkleIcon } from '../components/icons'
 
 const HINT_OPTIONS: HintOption[] = [
-  { id: 'check', icon: <FlagIcon />, title: 'Check my work', desc: 'Flags any placed patch with the wrong size.', price: 40 },
+  { id: 'check', icon: <FlagIcon />, title: 'Check my work', desc: 'Circles any placed patch with the wrong size.', price: 40 },
   { id: 'reveal-clue', icon: <SparkleIcon />, title: 'Reveal a patch', desc: "Places one clue's correct rectangle.", price: 120 },
 ]
 
@@ -103,6 +105,7 @@ export default function PatchesGamePage({ freePlay = false }: { freePlay?: boole
   const { playSound, buzz } = useAudio()
 
   const [state, dispatch] = useReducer(patchesReducer, PLACEHOLDER_LEVEL, (level) => createInitialState(level))
+  const { explanation, show: showHint, dismiss: dismissHint } = useHintExplanation(state)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [coins, setCoins] = useState(0)
@@ -406,8 +409,14 @@ export default function PatchesGamePage({ freePlay = false }: { freePlay?: boole
 
       if (id === 'check') {
         const wrong = getWrongCells(state)
-        setCheckMessage(wrong.size === 0 ? 'Looking good — nothing wrong yet!' : 'A placed patch has the wrong size for its clue.')
         dispatch({ type: 'HINT_CHECK' })
+        if (wrong.size === 0) {
+          setCheckMessage('Looking good — nothing wrong yet!')
+          return
+        }
+        setCheckMessage(null)
+        setHintsOpen(false)
+        showHint({ label: 'Check my work', message: "Circled patches don't match the size of their clue.", tone: 'fix', pending: stillWrong(wrong, getWrongCells) })
         return
       }
 
@@ -418,7 +427,7 @@ export default function PatchesGamePage({ freePlay = false }: { freePlay?: boole
       }
       setHintsOpen(false)
     },
-    [state, playSound],
+    [state, playSound, showHint],
   )
 
   // Context chips for FailSheet — only meaningful while `failed` is set (a boss-
@@ -493,6 +502,7 @@ export default function PatchesGamePage({ freePlay = false }: { freePlay?: boole
               onRetractEnd={(id) => setRetractedRects((prev) => prev.filter((g) => g.id !== id))}
               hintedCells={hintedCells}
               onHintPulseEnd={(key) => setHintedCells((prev) => removeKey(prev, key))}
+              flaggedCells={explanation?.targets}
             />
             <div className="flex gap-4">
               {SHAPE_LEGEND.map(({ shape, label, className }) => (
@@ -521,6 +531,16 @@ export default function PatchesGamePage({ freePlay = false }: { freePlay?: boole
           hintPrice={HINT_OPTIONS[0].price}
           hintsDisabled={modifiers?.noHints}
         />
+
+        {explanation && (
+          <HintExplanation
+            label={explanation.label}
+            message={explanation.message}
+            tone={explanation.tone}
+            remaining={explanation.targets.size}
+            onDismiss={dismissHint}
+          />
+        )}
       </div>
 
       <HintSheet

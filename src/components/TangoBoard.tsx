@@ -2,6 +2,7 @@ import { memo } from 'react'
 import { EMPTY, type EdgeClue, type TangoGrid, type TangoValue } from '../engine/tango/types'
 import { TangoSymbol } from './TangoSymbol'
 import { HINT_FOCUS_RING } from './hintFocus'
+import { HintOverlay } from './HintOverlay'
 
 const SWEEP_STEP_MS = 42
 
@@ -20,6 +21,10 @@ interface TangoBoardProps {
   /** Cells (coordKey) a "Show next step" hint's reasoning refers to — outlined gold
    *  while its explanation is showing (see HintExplanation). */
   focusCells?: Set<string>
+  /** Cells (coordKey) a "Show next step" hint is waiting for the player to fill in. */
+  targetCells?: Set<string>
+  /** Cells (coordKey) flagged as wrong by "Check my work" or a hint. */
+  flaggedCells?: Set<string>
   className?: string
 }
 
@@ -30,7 +35,7 @@ const SIGN_SIZE_CLASS: Record<string, string> = {
   compact: 'size-[min(4vw,16px)] text-[min(3vw,12px)]',
 }
 
-export function TangoBoard({ grid, givens, edges, conflicts, solved, onCellClick, hintedCells, onHintPulseEnd, focusCells, className }: TangoBoardProps) {
+export function TangoBoard({ grid, givens, edges, conflicts, solved, onCellClick, hintedCells, onHintPulseEnd, focusCells, targetCells, flaggedCells, className }: TangoBoardProps) {
   const n = grid.length
   const signSize = SIGN_SIZE_CLASS[n > 6 ? 'compact' : 'regular']
   return (
@@ -55,6 +60,8 @@ export function TangoBoard({ grid, givens, edges, conflicts, solved, onCellClick
                 sweepDelayMs={solved ? (r + c) * SWEEP_STEP_MS : undefined}
                 hinted={!!hintedCells?.has(key)}
                 focused={!!focusCells?.has(key)}
+                target={!!targetCells?.has(key)}
+                flagged={!!flaggedCells?.has(key)}
                 onHintPulseEnd={() => onHintPulseEnd?.(key)}
                 onClick={onCellClick}
               />
@@ -93,10 +100,12 @@ interface TangoCellProps {
   hinted: boolean
   onHintPulseEnd: () => void
   focused: boolean
+  target: boolean
+  flagged: boolean
   onClick: (row: number, col: number) => void
 }
 
-const TangoCell = memo(function TangoCell({ row, col, size, value, given, conflict, sweepDelayMs, hinted, onHintPulseEnd, focused, onClick }: TangoCellProps) {
+const TangoCell = memo(function TangoCell({ row, col, size, value, given, conflict, sweepDelayMs, hinted, onHintPulseEnd, focused, target, flagged, onClick }: TangoCellProps) {
   const borders = [col === size - 1 ? '' : 'border-r border-r-grid-gap', row === size - 1 ? '' : 'border-b border-b-grid-gap'].join(' ')
 
   return (
@@ -121,6 +130,7 @@ const TangoCell = memo(function TangoCell({ row, col, size, value, given, confli
       style={{ animationDelay: sweepDelayMs !== undefined ? `${sweepDelayMs}ms` : undefined }}
       onAnimationEnd={hinted ? (e) => e.animationName === 'hint-pulse' && onHintPulseEnd() : undefined}
     >
+      <HintOverlay target={target} flagged={flagged} />
       {value !== EMPTY && <TangoSymbol key={value} value={value} className={`${size > 6 ? 'size-[52%]' : 'size-[58%]'} ${given ? '' : 'anim-pop-in'}`} />}
     </button>
   )

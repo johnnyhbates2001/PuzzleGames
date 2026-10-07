@@ -33,6 +33,10 @@ interface NonogramBoardProps {
   /** Cells (coordKey) a "Show next step" hint's reasoning refers to — outlined gold
    *  while its explanation is showing (see HintExplanation). */
   focusCells?: Set<string>
+  /** Cells (coordKey) a "Show next step" hint is waiting for the player to fill in. */
+  targetCells?: Set<string>
+  /** Cells (coordKey) flagged as wrong by "Check my work" or a hint. */
+  flaggedCells?: Set<string>
   className?: string
 }
 
@@ -66,6 +70,8 @@ export function NonogramBoard({
   hintedCells,
   onHintPulseEnd,
   focusCells,
+  targetCells,
+  flaggedCells,
   className,
 }: NonogramBoardProps) {
   const { size, rowClues, colClues } = level
@@ -171,6 +177,8 @@ export function NonogramBoard({
           onRetractEnd={() => onRetractEnd?.(key)}
           hinted={!!hintedCells?.has(key)}
           focused={!!focusCells?.has(key)}
+          target={!!targetCells?.has(key)}
+          flagged={!!flaggedCells?.has(key)}
           onHintPulseEnd={() => onHintPulseEnd?.(key)}
           onClick={onCellClick}
         />,

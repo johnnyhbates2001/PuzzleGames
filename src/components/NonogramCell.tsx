@@ -2,6 +2,7 @@ import { memo, type CSSProperties } from 'react'
 import type { Mark } from '../engine/nonogram/validator'
 import { useEquippedCosmetic } from '../hooks/useCosmetics'
 import { HINT_FOCUS_RING } from './hintFocus'
+import { HintOverlay } from './HintOverlay'
 
 interface NonogramCellProps {
   row: number
@@ -27,6 +28,10 @@ interface NonogramCellProps {
   onHintPulseEnd?: () => void
   /** Outlined gold while a "Show next step" explanation refers to this square. */
   focused?: boolean
+  /** Square a "Show next step" hint is waiting for the player to fill in. */
+  target?: boolean
+  /** Square flagged as wrong by "Check my work" or a hint, until the player changes it. */
+  flagged?: boolean
   onClick: (row: number, col: number) => void
 }
 
@@ -71,6 +76,8 @@ function NonogramCellImpl({
   hinted,
   onHintPulseEnd,
   focused,
+  target,
+  flagged,
   onClick,
 }: NonogramCellProps) {
   const showGhost = !!retractGhostMark && mark === 'empty'
@@ -95,6 +102,7 @@ function NonogramCellImpl({
       style={{ animationDelay: sweepDelayMs !== undefined ? `${sweepDelayMs}ms` : undefined }}
       onAnimationEnd={hinted ? handleAnimationEnd : undefined}
     >
+      <HintOverlay target={target} flagged={flagged} />
       {mark === 'filled' && (
         <span
           className={`absolute inset-[12%] rounded-[3px] bg-accent ${dragging ? '' : 'anim-pop-in'}`}

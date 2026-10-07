@@ -28,6 +28,8 @@ interface ZipBoardProps {
   /** Cells (coordKey) a reveal-hint just appended — pulses once, gold. */
   hintedCells?: Set<string>
   onHintPulseEnd?: (key: string) => void
+  /** Cells (coordKey) flagged as wrong by "Check my work". */
+  flaggedCells?: Set<string>
   className?: string
 }
 
@@ -73,6 +75,7 @@ export function ZipBoard({
   onRetractEnd,
   hintedCells,
   onHintPulseEnd,
+  flaggedCells,
   className,
 }: ZipBoardProps) {
   // Every cell the pointer passes over (starting with the initial press) is routed
@@ -143,6 +146,7 @@ export function ZipBoard({
           onRetractEnd={() => onRetractEnd?.(key)}
           hinted={!!hintedCells?.has(key)}
           onHintPulseEnd={() => onHintPulseEnd?.(key)}
+          flagged={!!flaggedCells?.has(key)}
         />,
       )
     }
