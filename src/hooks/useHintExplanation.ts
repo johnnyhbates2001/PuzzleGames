@@ -19,7 +19,12 @@ export interface ShowHintArgs<S> {
   focus?: Coord[]
   /** coordKeys of the squares the player still has to change for this hint to be
    *  done, given the current game state. The card stays up until this is empty. */
-  pending: (state: S) => Iterable<string>
+  pending?: (state: S) => Iterable<string>
+  /** For a step with nothing to place (e.g. "these squares can't be 5"): the squares
+   *  to highlight. The card then stays until the player taps "Got it". */
+  targets?: Coord[]
+  /** Replaces the card's usual "your turn" line. */
+  footer?: string
 }
 
 interface Shown<S> {
@@ -27,7 +32,9 @@ interface Shown<S> {
   message: string
   tone: HintTone
   focus: Set<string>
-  pending: (state: S) => Iterable<string>
+  pending?: (state: S) => Iterable<string>
+  targets: Set<string>
+  footer?: string
 }
 
 export interface HintExplanationView {
@@ -36,26 +43,31 @@ export interface HintExplanationView {
   tone: HintTone
   /** Squares the reasoning refers to (minus the targets) — outlined gold. */
   focus: Set<string>
-  /** Squares the player still has to fill or fix. */
+  /** Squares the player still has to fill or fix (or, for an acknowledge-only step,
+   *  the squares it's about). */
   targets: Set<string>
+  footer?: string
+  /** No board change finishes this step — the player taps "Got it". */
+  acknowledge: boolean
 }
 
 /** State for the hint card (see HintExplanation). Hints never change the board
  *  themselves: the card explains the move, highlights the squares to fill (or fix), and
  *  stays until the player has made it — each target drops off as it's done, and the
- *  card goes away once none are left (or on "Hide"). */
+ *  card goes away once none are left (or on "Hide"). A step with nothing to place
+ *  (an elimination) stays until "Got it". */
 export function useHintExplanation<S>(state: S) {
   const [shown, setShown] = useState<Shown<S> | null>(null)
 
-  const targets = useMemo(() => (shown ? new Set(shown.pending(state)) : null), [shown, state])
+  const targets = useMemo(() => (shown ? (shown.pending ? new Set(shown.pending(state)) : shown.targets) : null), [shown, state])
   // Adjusting state during render (React's documented alternative to an effect for
   // this): the player just finished the hint's move.
-  if (shown && targets && targets.size === 0) setShown(null)
+  if (shown?.pending && targets && targets.size === 0) setShown(null)
 
   const explanation = useMemo<HintExplanationView | null>(() => {
-    if (!shown || !targets || targets.size === 0) return null
+    if (!shown || !targets || (shown.pending && targets.size === 0)) return null
     const focus = new Set([...shown.focus].filter((k) => !targets.has(k)))
-    return { label: shown.label, message: shown.message, tone: shown.tone, focus, targets }
+    return { label: shown.label, message: shown.message, tone: shown.tone, focus, targets, footer: shown.footer, acknowledge: !shown.pending }
   }, [shown, targets])
 
   const show = useCallback((args: ShowHintArgs<S>) => {
@@ -65,6 +77,8 @@ export function useHintExplanation<S>(state: S) {
       tone: args.tone,
       focus: new Set((args.focus ?? []).map((p) => `${p.row},${p.col}`)),
       pending: args.pending,
+      targets: new Set((args.targets ?? []).map((p) => `${p.row},${p.col}`)),
+      footer: args.footer,
     })
   }, [])
   const dismiss = useCallback(() => setShown(null), [])

@@ -4,12 +4,15 @@ import type { HintTone } from '../hooks/useHintExplanation'
 /** The card for a hint or "Check my work" result — sits under the controls (so the
  *  board never shifts when it appears) while the squares it refers to stay highlighted
  *  on the board. It doesn't fill anything in: it stays until the player has made the
- *  move (or fixed the flagged squares) themselves, or taps "Hide". */
+ *  move (or fixed the flagged squares) themselves, or taps "Hide" — or, for a step
+ *  with nothing to place (an elimination), until they tap "Got it". */
 export function HintExplanation({
   label,
   message,
   tone,
   remaining,
+  footer: footerOverride,
+  acknowledge,
   onDismiss,
 }: {
   label: string
@@ -17,16 +20,20 @@ export function HintExplanation({
   tone: HintTone
   /** How many highlighted squares are still to fill/fix. */
   remaining: number
+  footer?: string
+  /** Nothing on the board finishes this step, so the button reads "Got it". */
+  acknowledge?: boolean
   onDismiss: () => void
 }) {
   const footer =
-    tone === 'step'
+    footerOverride ??
+    (tone === 'step'
       ? remaining === 1
         ? 'Your turn — complete the highlighted square.'
         : `Your turn — complete the ${remaining} highlighted squares.`
       : remaining === 1
         ? 'Circled in red until you change it.'
-        : 'Circled in red until you change them.'
+        : 'Circled in red until you change them.')
   return (
     <div role="status" className="anim-rise flex w-full items-start gap-3 rounded-[20px] bg-surface p-3.5 shadow-card">
       <span
@@ -42,7 +49,7 @@ export function HintExplanation({
         <p className="mt-1 text-[12px] leading-snug font-semibold text-ink-muted">{footer}</p>
       </div>
       <button type="button" onClick={onDismiss} className="shrink-0 self-center rounded-full bg-accent-tint px-3 py-1.5 text-[12.5px] font-bold text-accent">
-        Hide
+        {acknowledge ? 'Got it' : 'Hide'}
       </button>
     </div>
   )
