@@ -3,7 +3,7 @@ import { useLocation, useParams } from 'react-router-dom'
 import { useAppNavigate as useNavigate } from '../hooks/useAppNavigate'
 import { SUDOKU_SIZE, boxIndex, coordKey, type Coord, type Difficulty } from '../engine/sudoku/types'
 import { createInitialState, getWrongCells } from '../state/sudokuReducer'
-import { findSudokuHint } from '../engine/sudoku/hints'
+import { addExclusions, findSudokuHint } from '../engine/sudoku/hints'
 import { boardValues, digitCounts, type SudokuCellState } from '../state/sudokuTypes'
 import {
   consumeConsumables,
@@ -140,6 +140,10 @@ export default function SudokuGamePage({ freePlay = false, variant: variantId = 
   const [coins, setCoins] = useState(0)
   const [hintsOpen, setHintsOpen] = useState(false)
   const [checkMessage, setCheckMessage] = useState<string | null>(null)
+  // Digits "Show next step" has already ruled out (see addExclusions), so the next hint
+  // builds on them — tied to the level they were worked out for.
+  const [taught, setTaught] = useState<{ level: unknown; excluded: number[][] } | null>(null)
+  const excluded = taught?.level === state.level ? taught.excluded : undefined
   const [ripple, setRipple] = useState<{ row: number; col: number; seq: number } | null>(null)
   const [modifiers, setModifiers] = useState<LevelModifiers | null>(null)
   const [levelIndex, setLevelIndex] = useState<number | null>(null)
@@ -463,19 +467,33 @@ export default function SudokuGamePage({ freePlay = false, variant: variantId = 
   const handleUseHint = useCallback(
     async (id: string, price: number) => {
       if (id === 'next-step') {
-        const hint = findSudokuHint({ values: boardValues(state.board), solution: state.level.solution, cages: state.level.cages })
+        const hint = findSudokuHint({ values: boardValues(state.board), solution: state.level.solution, cages: state.level.cages, excluded })
         if (!hint || !(await spendCoins(price))) return
         setCoins((c) => c - price)
         playSound('hint')
         setCheckMessage(null)
         setHintsOpen(false)
-        // The hint explains the move and highlights the square; the player fills it in.
-        const { cell } = hint
+        // The hint explains one step and highlights its squares; the player makes it.
         if (hint.kind === 'mistake') {
+          const { cell } = hint
           const wrongValue = state.board[cell.row][cell.col].value
           showHint({ label: 'Fix this', message: hint.message, tone: 'fix', focus: hint.focus, pending: (s) => keysWhere([cell], (p) => s.board[p.row][p.col].value === wrongValue) })
+        } else if (hint.kind === 'eliminate') {
+          // Nothing to place yet — just options to cross off. Remember them so the next
+          // hint carries on from here.
+          setTaught({ level: state.level, excluded: addExclusions(excluded, hint) })
+          const digits = hint.digits.length === 1 ? String(hint.digits[0]) : `${hint.digits.slice(0, -1).join(', ')} and ${hint.digits[hint.digits.length - 1]}`
+          showHint({
+            label: 'Next step',
+            message: hint.message,
+            tone: 'step',
+            focus: hint.focus,
+            targets: hint.cells,
+            footer: `Cross ${digits} off as an option in the highlighted square${hint.cells.length === 1 ? '' : 's'} — remove ${hint.digits.length === 1 ? 'it' : 'them'} from your notes there if you're using them.`,
+          })
         } else {
-          showHint({ label: 'Next step', message: hint.message, tone: 'step', focus: hint.focus, pending: (s) => keysWhere([cell], (p) => s.board[p.row][p.col].value !== hint.digit) })
+          const { cell, digit } = hint
+          showHint({ label: 'Next step', message: hint.message, tone: 'step', focus: hint.focus, pending: (s) => keysWhere([cell], (p) => s.board[p.row][p.col].value !== digit) })
         }
         dispatch({ type: 'HINT_CHECK' })
         return
@@ -511,7 +529,7 @@ export default function SudokuGamePage({ freePlay = false, variant: variantId = 
       }
       setHintsOpen(false)
     },
-    [state, playSound, showHint],
+    [state, playSound, showHint, excluded],
   )
 
   useEffect(() => {
@@ -641,6 +659,8 @@ export default function SudokuGamePage({ freePlay = false, variant: variantId = 
             message={explanation.message}
             tone={explanation.tone}
             remaining={explanation.targets.size}
+            footer={explanation.footer}
+            acknowledge={explanation.acknowledge}
             onDismiss={dismissHint}
           />
         )}
